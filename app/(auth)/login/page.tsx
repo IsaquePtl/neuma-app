@@ -1,12 +1,8 @@
+import Image from "next/image";
+
 import { login } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -18,14 +14,17 @@ export default async function LoginPage({
   const { error } = await searchParams;
 
   return (
-    <Card className="w-full max-w-sm">
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl tracking-tight">Neuma</CardTitle>
-        <CardDescription>
-          Entra na tua conta para continuar o teu percurso.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <div className="flex w-full max-w-sm flex-col items-center">
+      <Image
+        src="/brand/mark-white.png"
+        alt="Neuma"
+        width={72}
+        height={72}
+        priority
+        className="mb-8 animate-float"
+      />
+
+      <Card className="w-full animate-fade-up p-6">
         <form action={login} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
@@ -34,7 +33,6 @@ export default async function LoginPage({
               name="email"
               type="email"
               autoComplete="email"
-              placeholder="tu@exemplo.com"
               required
             />
           </div>
@@ -53,11 +51,14 @@ export default async function LoginPage({
               {error}
             </p>
           ) : null}
-          <Button type="submit" className="w-full">
+          <Button
+            type="submit"
+            className="w-full bg-white/12 text-foreground hover:bg-white/18"
+          >
             Entrar
           </Button>
         </form>
-      </CardContent>
-    </Card>
+      </Card>
+    </div>
   );
 }

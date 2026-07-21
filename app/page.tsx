@@ -19,7 +19,7 @@ export default async function Home() {
     .single();
 
   if (profile?.role === "mentor") {
-    redirect("/dashboard");
+    redirect("/studio");
   }
 
   if (!profile?.onboarding_completed) {

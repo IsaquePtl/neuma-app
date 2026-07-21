@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { AppHeader } from "@/components/app-header";
+import { AppShell } from "@/components/app-shell";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function StudentLayout({
@@ -11,26 +11,25 @@ export default async function StudentLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect("/login");
-  }
+  if (!user) redirect("/login");
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, full_name")
+    .select("role, full_name, email, onboarding_completed")
     .eq("id", user.id)
     .single();
 
-  if (profile?.role !== "student") {
-    redirect("/");
-  }
+  if (profile?.role === "mentor") redirect("/studio");
+  if (profile?.role !== "student") redirect("/");
+  if (!profile.onboarding_completed) redirect("/onboarding");
 
   return (
-    <div className="flex min-h-dvh flex-col">
-      <AppHeader name={profile.full_name} subtitle="O teu percurso" />
-      <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-8">
-        {children}
-      </main>
-    </div>
+    <AppShell
+      role="student"
+      name={profile.full_name}
+      email={profile.email ?? user.email ?? ""}
+    >
+      {children}
+    </AppShell>
   );
 }

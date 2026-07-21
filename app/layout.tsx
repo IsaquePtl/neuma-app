@@ -1,8 +1,10 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import { Toaster } from "@/components/ui/sonner";
+import { AppBackground } from "@/components/app-background";
+import { AccentProvider } from "@/components/accent-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,6 +21,13 @@ export const metadata: Metadata = {
   description: "Mentoria 1:1 premium de transformacao musical.",
 };
 
+export const viewport: Viewport = {
+  themeColor: "#0b0b0f",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -30,7 +39,8 @@ export default function RootLayout({
       className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        {children}
+        <AppBackground />
+        <AccentProvider>{children}</AccentProvider>
         <Toaster />
       </body>
     </html>

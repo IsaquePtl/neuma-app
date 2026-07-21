@@ -40,3 +40,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# branding source files (too large / not for web - kept local only)
+/branding/*.pdf
+/branding/**/*.ai

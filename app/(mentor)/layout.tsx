@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { AppHeader } from "@/components/app-header";
+import { AppShell } from "@/components/app-shell";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function MentorLayout({
@@ -11,26 +11,23 @@ export default async function MentorLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect("/login");
-  }
+  if (!user) redirect("/login");
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, full_name")
+    .select("role, full_name, email")
     .eq("id", user.id)
     .single();
 
-  if (profile?.role !== "mentor") {
-    redirect("/");
-  }
+  if (profile?.role !== "mentor") redirect("/");
 
   return (
-    <div className="flex min-h-dvh flex-col">
-      <AppHeader name={profile.full_name} subtitle="Painel do Mentor" />
-      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">
-        {children}
-      </main>
-    </div>
+    <AppShell
+      role="mentor"
+      name={profile.full_name}
+      email={profile.email ?? user.email ?? ""}
+    >
+      {children}
+    </AppShell>
   );
 }

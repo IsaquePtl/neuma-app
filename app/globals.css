@@ -72,7 +72,7 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
+  --radius: 0.9rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -84,24 +84,24 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
+  --background: oklch(0.14 0.012 265);
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
+  --card: oklch(0.22 0.012 265 / 55%);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
+  --popover: oklch(0.17 0.012 265);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
+  --primary: oklch(0.64 0.2 25);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(1 0 0 / 7%);
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
+  --muted: oklch(1 0 0 / 5%);
+  --muted-foreground: oklch(0.72 0.02 265);
+  --accent: oklch(1 0 0 / 8%);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.64 0.2 25);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -117,14 +117,225 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+:root {
+  /* App usa Geist (moderno). As fontes de branding ficam para uso externo. */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    sans-serif;
+  --font-heading: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --neuma-red: #ff2f04;
+  --neuma-coral: #fa4f33;
+  --neuma-orange: #f8aa66;
+  --neuma-lavender: #c9b2ec;
+  --neuma-periwinkle: #7b89f0;
+  --neuma-blue: #2364cb;
+  --neuma-gradient: linear-gradient(
+    100deg,
+    var(--neuma-red) 0%,
+    var(--neuma-orange) 28%,
+    var(--neuma-lavender) 55%,
+    var(--neuma-periwinkle) 74%,
+    var(--neuma-blue) 100%
+  );
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
   }
   html {
     @apply font-sans;
   }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-heading);
+    font-optical-sizing: auto;
+  }
+}
+
+@layer components {
+  .neuma-gradient {
+    background-image: var(--neuma-gradient);
+  }
+  .neuma-text-gradient {
+    background-image: var(--neuma-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .neuma-hairline {
+    height: 2px;
+    background-image: var(--neuma-gradient);
+  }
+
+  /* ---- Glass ---- */
+  .glass {
+    background: color-mix(in oklch, var(--card) 100%, transparent);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid oklch(1 0 0 / 10%);
+    box-shadow:
+      0 1px 0 0 oklch(1 0 0 / 6%) inset,
+      0 20px 40px -24px oklch(0 0 0 / 70%);
+  }
+  .glass-panel {
+    background: oklch(0.2 0.012 265 / 70%);
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    border: 1px solid oklch(1 0 0 / 10%);
+    box-shadow:
+      0 1px 0 0 oklch(1 0 0 / 6%) inset,
+      0 24px 60px -30px oklch(0 0 0 / 80%);
+  }
+  .glass-nav {
+    background: oklch(0.17 0.012 265 / 72%);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    border: 1px solid oklch(1 0 0 / 12%);
+    box-shadow:
+      0 1px 0 0 oklch(1 0 0 / 8%) inset,
+      0 20px 50px -20px oklch(0 0 0 / 80%);
+  }
+}
+
+/* ---- Camadas de fundo (gradientes + textura neumas) ---- */
+.neuma-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  pointer-events: none;
+  background-color: var(--background);
+}
+.neuma-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      60% 50% at 12% 0%,
+      color-mix(in oklch, var(--neuma-coral) 26%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      55% 45% at 100% 20%,
+      color-mix(in oklch, var(--neuma-blue) 30%, transparent) 0%,
+      transparent 55%
+    ),
+    radial-gradient(
+      70% 60% at 50% 120%,
+      color-mix(in oklch, var(--neuma-periwinkle) 22%, transparent) 0%,
+      transparent 60%
+    );
+}
+.neuma-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("/brand/neumas-white.png");
+  background-repeat: repeat;
+  background-size: 520px;
+  opacity: 0.035;
+  mix-blend-mode: screen;
+}
+
+/* barra fina de gradiente no topo de superficies premium */
+.neuma-accent-top {
+  position: relative;
+}
+.neuma-accent-top::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  border-radius: inherit;
+  background-image: var(--neuma-gradient);
+  opacity: 0.9;
+}
+
+/* safe-area para bottom nav flutuante em iOS */
+.pb-safe {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+}
+.bottom-safe {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
+}
+
+/* Menubar mobile estilo Instagram — inset igual em baixo / lados */
+.mobile-menubar {
+  --menubar-inset: 12px;
+  left: calc(env(safe-area-inset-left, 0px) + var(--menubar-inset));
+  right: calc(env(safe-area-inset-right, 0px) + var(--menubar-inset));
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--menubar-inset));
+  transform-origin: bottom center;
+}
+
+/* ---- Animacoes ---- */
+@keyframes neuma-splash-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes neuma-fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes neuma-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+@keyframes neuma-pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 12px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.animate-splash {
+  animation: neuma-splash-in 2.2s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.animate-fade-up {
+  animation: neuma-fade-up 1.4s ease-out both;
+}
+.animate-float {
+  animation: neuma-float 4s ease-in-out infinite;
+}
+.animate-pulse-ring {
+  animation: neuma-pulse-ring 2s ease-out infinite;
+}
+.delay-1 {
+  animation-delay: 0.25s;
+}
+.delay-2 {
+  animation-delay: 0.6s;
+}
+.delay-3 {
+  animation-delay: 0.9s;
 }
