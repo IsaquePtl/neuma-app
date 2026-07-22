@@ -2,12 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { Pencil, Plus } from "lucide-react";
+import { toast } from "sonner";
 
 import { createNode, updateNode } from "@/lib/actions/nodes";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -16,13 +18,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { NodeKind, NodeStatus } from "@/lib/types/database.types";
 
 type NodeData = {
@@ -33,6 +28,14 @@ type NodeData = {
   kind: NodeKind;
   status: NodeStatus;
   due_date: string | null;
+  resource_url?: string | null;
+};
+
+const KIND_HINTS: Record<NodeKind, string> = {
+  practice: "Pratica / tarefa com check-in",
+  call: "Chamada 1:1 (Cal.com)",
+  milestone: "Marco / avaliacao",
+  resource: "Material para estudar",
 };
 
 export function NodeDialog({
@@ -44,20 +47,32 @@ export function NodeDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [kind, setKind] = useState<NodeKind>(node?.kind ?? "practice");
   const isEdit = Boolean(node);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     startTransition(async () => {
-      if (isEdit) await updateNode(fd);
-      else await createNode(fd);
-      setOpen(false);
+      try {
+        if (isEdit) await updateNode(fd);
+        else await createNode(fd);
+        toast.success(isEdit ? "Bloco atualizado" : "Bloco adicionado");
+        setOpen(false);
+      } catch {
+        toast.error("Nao foi possivel guardar o bloco");
+      }
     });
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) setKind(node?.kind ?? "practice");
+      }}
+    >
       {isEdit ? (
         <DialogTrigger
           render={
@@ -71,41 +86,78 @@ export function NodeDialog({
           <Plus className="size-4" /> Adicionar bloco
         </DialogTrigger>
       )}
-      <DialogContent>
+      <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Editar bloco" : "Novo bloco"}</DialogTitle>
+          <DialogDescription>
+            Cada bloco e um passo do percurso — pratica, chamada, marco ou
+            recurso.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
           <input type="hidden" name="path_id" value={pathId} />
           {node ? <input type="hidden" name="id" value={node.id} /> : null}
 
           <div className="space-y-2">
-            <Label htmlFor="title">Titulo</Label>
+            <Label htmlFor="node-title">Titulo</Label>
             <Input
-              id="title"
+              id="node-title"
               name="title"
               defaultValue={node?.title ?? ""}
-              placeholder="Ex: Semana 1 - Acordes maiores"
+              placeholder="Ex: Semana 1 — Acordes maiores"
               required
+              autoFocus
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Descricao / objetivo do bloco</Label>
+            <Label htmlFor="node-description">Objetivo do bloco</Label>
             <Textarea
-              id="description"
+              id="node-description"
               name="description"
               defaultValue={node?.description ?? ""}
-              placeholder="O que o aluno deve dominar neste bloco..."
-              rows={3}
+              placeholder="O que o aluno deve dominar / entregar neste bloco..."
+              rows={4}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="node-kind">Tipo</Label>
+            <select
+              id="node-kind"
+              name="kind"
+              value={kind}
+              onChange={(e) => setKind(e.target.value as NodeKind)}
+              className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+            >
+              <option value="practice">Pratica</option>
+              <option value="call">Chamada</option>
+              <option value="milestone">Marco</option>
+              <option value="resource">Recurso</option>
+            </select>
+            <p className="text-xs text-muted-foreground">{KIND_HINTS[kind]}</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="node-resource">
+              {kind === "call"
+                ? "Link da chamada (opcional)"
+                : "Link do recurso (opcional)"}
+            </Label>
+            <Input
+              id="node-resource"
+              name="resource_url"
+              type="url"
+              defaultValue={node?.resource_url ?? ""}
+              placeholder="https://..."
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="week_number">Semana</Label>
+              <Label htmlFor="node-week">Semana nº</Label>
               <Input
-                id="week_number"
+                id="node-week"
                 name="week_number"
                 type="number"
                 min={1}
@@ -114,9 +166,9 @@ export function NodeDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="due_date">Data limite</Label>
+              <Label htmlFor="node-due">Data limite</Label>
               <Input
-                id="due_date"
+                id="node-due"
                 name="due_date"
                 type="date"
                 defaultValue={node?.due_date ?? ""}
@@ -124,41 +176,25 @@ export function NodeDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          {isEdit ? (
             <div className="space-y-2">
-              <Label>Tipo</Label>
-              <Select name="kind" defaultValue={node?.kind ?? "practice"}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="practice">Pratica</SelectItem>
-                  <SelectItem value="call">Chamada</SelectItem>
-                  <SelectItem value="milestone">Marco</SelectItem>
-                  <SelectItem value="resource">Recurso</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label htmlFor="node-status">Estado</Label>
+              <select
+                id="node-status"
+                name="status"
+                defaultValue={node?.status ?? "locked"}
+                className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+              >
+                <option value="locked">Bloqueado</option>
+                <option value="active">Ativo (aluno ve agora)</option>
+                <option value="completed">Concluido</option>
+              </select>
             </div>
-            {isEdit ? (
-              <div className="space-y-2">
-                <Label>Estado</Label>
-                <Select name="status" defaultValue={node?.status ?? "locked"}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="locked">Bloqueado</SelectItem>
-                    <SelectItem value="active">Ativo</SelectItem>
-                    <SelectItem value="completed">Concluido</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
-          </div>
+          ) : null}
 
           <DialogFooter>
-            <Button type="submit" disabled={pending}>
-              {pending ? "A guardar..." : "Guardar"}
+            <Button type="submit" disabled={pending} className="w-full sm:w-auto">
+              {pending ? "A guardar..." : isEdit ? "Guardar" : "Adicionar bloco"}
             </Button>
           </DialogFooter>
         </form>

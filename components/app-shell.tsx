@@ -58,11 +58,13 @@ export function AppShell({
   name,
   email,
   children,
+  badgeCounts,
 }: {
   role: "mentor" | "student";
   name: string | null | undefined;
   email: string;
   children: React.ReactNode;
+  badgeCounts?: { checkins?: number };
 }) {
   const pathname = usePathname();
   const nav = role === "mentor" ? mentorNav : studentNav;
@@ -73,22 +75,29 @@ export function AppShell({
   const [navCompact, setNavCompact] = useState(false);
 
   const mobileItems = useMemo<MobileNavItem[]>(() => {
-    const items: MobileNavItem[] = nav
-      .filter((item) => !item.href.endsWith("/tools"))
-      .map((item) => ({
-        label: item.label,
-        href: item.href,
-        icon: item.icon,
-        match: item.match,
-      }));
-    items.push({
+    const items: MobileNavItem[] = nav.map((item) => ({
+      label: item.label,
+      href: item.href,
+      icon: item.icon,
+      match: item.match,
+      badge:
+        item.href.includes("checkins") && badgeCounts?.checkins
+          ? badgeCounts.checkins
+          : undefined,
+    }));
+    // Mentor: Tools fica no desktop; no mobile priorizamos perfil no lugar do Tools
+    const filtered =
+      role === "mentor"
+        ? items.filter((item) => !item.href.endsWith("/tools"))
+        : items;
+    filtered.push({
       label: "Perfil e definicoes",
       href: settingsHref,
       match: (p) => p === settingsHref,
       profileInitials: initials(name, email),
     });
-    return items;
-  }, [nav, settingsHref, name, email]);
+    return filtered;
+  }, [nav, settingsHref, name, email, role, badgeCounts]);
 
   useEffect(() => {
     scrollToTop();
@@ -100,16 +109,28 @@ export function AppShell({
     let lastY = window.scrollY;
 
     const onScroll = () => {
-      const y = window.scrollY;
+      // Clamp evita deltas falsos do rubber-band (iOS) fora de [0, max].
+      const maxY = Math.max(
+        0,
+        document.documentElement.scrollHeight - window.innerHeight,
+      );
+      const y = Math.min(Math.max(0, window.scrollY), maxY);
+      const delta = y - lastY;
+
       if (y < 8) {
         setHeaderHidden(false);
         setNavCompact(false);
-      } else if (y > lastY + 6) {
+      } else if (delta > 6) {
         setHeaderHidden(true);
         setNavCompact(true);
-      } else if (y < lastY - 6) {
-        setHeaderHidden(false);
-        setNavCompact(false);
+      } else if (delta < -6) {
+        // No fundo, o bounce do iPhone parece scroll inverso — nao expandir.
+        // So aumenta a menubar quando o scroll sobe de verdade (fora do limite).
+        const nearBottom = y >= maxY - 48;
+        if (!nearBottom) {
+          setHeaderHidden(false);
+          setNavCompact(false);
+        }
       }
       lastY = y;
     };
@@ -138,6 +159,10 @@ export function AppShell({
             {nav.map((item) => {
               const active = item.match(pathname);
               const Icon = item.icon;
+              const badge =
+                item.href.includes("checkins") && badgeCounts?.checkins
+                  ? badgeCounts.checkins
+                  : 0;
               return (
                 <Link
                   key={item.href}
@@ -153,7 +178,14 @@ export function AppShell({
                   {active ? (
                     <span className="neuma-gradient absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full" />
                   ) : null}
-                  <Icon className="size-[18px]" />
+                  <span className="relative">
+                    <Icon className="size-[18px]" />
+                    {badge > 0 ? (
+                      <span className="absolute -right-2 -top-1.5 grid min-w-4 place-items-center rounded-full bg-[var(--neuma-coral)] px-1 text-[9px] font-semibold text-white">
+                        {badge > 9 ? "9+" : badge}
+                      </span>
+                    ) : null}
+                  </span>
                   {item.label}
                 </Link>
               );

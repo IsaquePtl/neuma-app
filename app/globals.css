@@ -142,12 +142,18 @@
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground;
-    font-family: var(--font-sans);
-  }
   html {
     @apply font-sans;
+    /* Mesma base do app — evita “faixa preta” no overscroll / chrome iOS */
+    background-color: var(--background);
+    min-height: 100%;
+    min-height: 100dvh;
+  }
+  body {
+    @apply bg-transparent text-foreground;
+    font-family: var(--font-sans);
+    min-height: 100%;
+    min-height: 100dvh;
   }
   h1,
   h2,
@@ -205,9 +211,13 @@
 /* ---- Camadas de fundo (gradientes + textura neumas) ---- */
 .neuma-bg {
   position: fixed;
-  inset: 0;
   z-index: -10;
   pointer-events: none;
+  /* Estende para alem do viewport: rubber-band + barra do Chrome a crescer no topo */
+  top: -50vh;
+  right: -20vw;
+  bottom: -50vh;
+  left: -20vw;
   background-color: var(--background);
 }
 .neuma-bg::before {
@@ -216,17 +226,17 @@
   inset: 0;
   background:
     radial-gradient(
-      60% 50% at 12% 0%,
+      60% 50% at 12% 18%,
       color-mix(in oklch, var(--neuma-coral) 26%, transparent) 0%,
       transparent 60%
     ),
     radial-gradient(
-      55% 45% at 100% 20%,
+      55% 45% at 100% 28%,
       color-mix(in oklch, var(--neuma-blue) 30%, transparent) 0%,
       transparent 55%
     ),
     radial-gradient(
-      70% 60% at 50% 120%,
+      70% 60% at 50% 110%,
       color-mix(in oklch, var(--neuma-periwinkle) 22%, transparent) 0%,
       transparent 60%
     );

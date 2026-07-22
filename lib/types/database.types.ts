@@ -13,6 +13,7 @@ export type FormQuestionType =
   | "single_choice"
   | "multi_choice"
   | "scale";
+export type FeedbackDraftStatus = "pending_review" | "published" | "rejected";
 
 export type Json =
   | string
@@ -33,6 +34,9 @@ export interface Database {
           email: string | null;
           avatar_url: string | null;
           onboarding_completed: boolean;
+          cal_username: string | null;
+          mentor_style_notes: string | null;
+          internal_notes: string | null;
           created_at: string;
         };
         Insert: {
@@ -42,6 +46,9 @@ export interface Database {
           email?: string | null;
           avatar_url?: string | null;
           onboarding_completed?: boolean;
+          cal_username?: string | null;
+          mentor_style_notes?: string | null;
+          internal_notes?: string | null;
           created_at?: string;
         };
         Update: {
@@ -51,6 +58,9 @@ export interface Database {
           email?: string | null;
           avatar_url?: string | null;
           onboarding_completed?: boolean;
+          cal_username?: string | null;
+          mentor_style_notes?: string | null;
+          internal_notes?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -123,6 +133,7 @@ export interface Database {
           week_number: number | null;
           kind: NodeKind;
           due_date: string | null;
+          resource_url: string | null;
           created_at: string;
         };
         Insert: {
@@ -135,6 +146,7 @@ export interface Database {
           week_number?: number | null;
           kind?: NodeKind;
           due_date?: string | null;
+          resource_url?: string | null;
           created_at?: string;
         };
         Update: {
@@ -147,6 +159,7 @@ export interface Database {
           week_number?: number | null;
           kind?: NodeKind;
           due_date?: string | null;
+          resource_url?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -405,6 +418,53 @@ export interface Database {
           },
         ];
       };
+      feedback_drafts: {
+        Row: {
+          id: string;
+          check_in_id: string;
+          mentor_id: string | null;
+          status: FeedbackDraftStatus;
+          body_notes: string | null;
+          body_next_steps: string | null;
+          model: string | null;
+          prompt_version: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          check_in_id: string;
+          mentor_id?: string | null;
+          status?: FeedbackDraftStatus;
+          body_notes?: string | null;
+          body_next_steps?: string | null;
+          model?: string | null;
+          prompt_version?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          check_in_id?: string;
+          mentor_id?: string | null;
+          status?: FeedbackDraftStatus;
+          body_notes?: string | null;
+          body_next_steps?: string | null;
+          model?: string | null;
+          prompt_version?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "feedback_drafts_check_in_id_fkey";
+            columns: ["check_in_id"];
+            isOneToOne: true;
+            referencedRelation: "check_ins";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     Functions: {
@@ -421,6 +481,7 @@ export interface Database {
       node_kind: NodeKind;
       check_in_kind: CheckInKind;
       form_question_type: FormQuestionType;
+      feedback_draft_status: FeedbackDraftStatus;
     };
   };
 }

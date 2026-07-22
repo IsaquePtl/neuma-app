@@ -1,7 +1,9 @@
-import { Video, ExternalLink, MessageSquare } from "lucide-react";
+import Link from "next/link";
+import { Video, ExternalLink, MessageSquare, RefreshCw } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { CheckInStatusBadge } from "@/components/status-badges";
 import { checkInKindLabel, formatDateTime } from "@/lib/labels";
 
@@ -14,7 +16,7 @@ export default async function StudentCheckinsPage() {
   const { data: checkIns } = await supabase
     .from("check_ins")
     .select(
-      "id, status, kind, video_url, notes, created_at, node:nodes(title), feedback:feedbacks(notes, next_steps, video_url, approved, created_at)",
+      "id, status, kind, video_url, notes, created_at, node_id, node:nodes(title), feedback:feedbacks(notes, next_steps, video_url, approved, created_at)",
     )
     .eq("student_id", user!.id)
     .order("created_at", { ascending: false });
@@ -32,8 +34,13 @@ export default async function StudentCheckinsPage() {
       </header>
 
       {!checkIns || checkIns.length === 0 ? (
-        <Card className="p-8 text-center text-muted-foreground">
-          Ainda nao fizeste check-ins. Vai ao teu percurso para comecar.
+        <Card className="space-y-4 p-8 text-center">
+          <p className="text-muted-foreground">
+            Ainda nao fizeste check-ins.
+          </p>
+          <Button render={<Link href="/path" />} nativeButton={false}>
+            Ir ao percurso
+          </Button>
         </Card>
       ) : (
         <div className="space-y-4">
@@ -46,7 +53,12 @@ export default async function StudentCheckinsPage() {
               <Card key={c.id} className="space-y-4 p-6">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-medium">{node?.title ?? "Bloco"}</p>
+                    <Link
+                      href={`/checkins/${c.id}`}
+                      className="font-medium hover:underline"
+                    >
+                      {node?.title ?? "Bloco"}
+                    </Link>
                     <p className="text-xs text-muted-foreground">
                       {checkInKindLabel[c.kind]} - {formatDateTime(c.created_at)}
                     </p>
@@ -110,6 +122,19 @@ export default async function StudentCheckinsPage() {
                     A aguardar feedback do mentor.
                   </p>
                 )}
+
+                {c.status === "needs_revision" && c.node_id ? (
+                  <Button
+                    render={
+                      <Link href={`/checkins/new?node=${c.node_id}`} />
+                    }
+                    nativeButton={false}
+                    variant="secondary"
+                    className="gap-2"
+                  >
+                    <RefreshCw className="size-4" /> Reenviar check-in
+                  </Button>
+                ) : null}
               </Card>
             );
           })}

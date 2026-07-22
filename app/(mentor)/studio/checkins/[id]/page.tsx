@@ -4,12 +4,8 @@ import { ArrowLeft, Video, ExternalLink } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { CheckInStatusBadge } from "@/components/status-badges";
-import { submitFeedback } from "@/lib/actions/feedbacks";
+import { MentorFeedbackPanel } from "@/components/mentor-feedback-panel";
 import { checkInKindLabel, formatDateTime } from "@/lib/labels";
 
 export default async function CheckinDetail({
@@ -36,10 +32,18 @@ export default async function CheckinDetail({
     .eq("check_in_id", id)
     .maybeSingle();
 
+  const { data: draft } = await supabase
+    .from("feedback_drafts")
+    .select("id, body_notes, body_next_steps, status")
+    .eq("check_in_id", id)
+    .eq("status", "pending_review")
+    .maybeSingle();
+
   const student = Array.isArray(checkIn.student)
     ? checkIn.student[0]
     : checkIn.student;
   const node = Array.isArray(checkIn.node) ? checkIn.node[0] : checkIn.node;
+  const studentName = student?.full_name ?? student?.email ?? "o aluno";
 
   return (
     <div className="space-y-8">
@@ -52,9 +56,7 @@ export default async function CheckinDetail({
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm text-muted-foreground">
-            {student?.full_name ?? student?.email}
-          </p>
+          <p className="text-sm text-muted-foreground">{studentName}</p>
           <h1 className="text-2xl font-semibold tracking-tight">
             {node?.title ?? "Bloco"}
           </h1>
@@ -65,7 +67,6 @@ export default async function CheckinDetail({
         <CheckInStatusBadge status={checkIn.status} />
       </header>
 
-      {/* Submissao do aluno */}
       <Card className="space-y-4 p-6">
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
           Submissao do aluno
@@ -91,67 +92,19 @@ export default async function CheckinDetail({
         {checkIn.ai_summary ? (
           <div className="rounded-lg bg-secondary/60 p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Resumo IA
+              Resumo para ti
             </p>
             <p className="mt-1 text-sm">{checkIn.ai_summary}</p>
           </div>
         ) : null}
       </Card>
 
-      {/* Feedback do mentor */}
-      <Card className="neuma-accent-top space-y-4 p-6">
-        <h2 className="text-lg font-semibold">O teu feedback</h2>
-        <form action={submitFeedback} className="space-y-4">
-          <input type="hidden" name="check_in_id" value={checkIn.id} />
-
-          <div className="space-y-2">
-            <Label htmlFor="video_url">Link do teu video de resposta</Label>
-            <Input
-              id="video_url"
-              name="video_url"
-              type="url"
-              placeholder="https://loom.com/..."
-              defaultValue={feedback?.video_url ?? ""}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notas / avaliacao</Label>
-            <Textarea
-              id="notes"
-              name="notes"
-              rows={4}
-              placeholder="O que correu bem, o que ajustar..."
-              defaultValue={feedback?.notes ?? ""}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="next_steps">Proximos passos</Label>
-            <Textarea
-              id="next_steps"
-              name="next_steps"
-              rows={3}
-              placeholder="Indicacoes concretas para a proxima etapa..."
-              defaultValue={feedback?.next_steps ?? ""}
-            />
-          </div>
-
-          <label className="flex items-center gap-3 rounded-lg border p-4">
-            <input
-              type="checkbox"
-              name="approved"
-              defaultChecked={feedback?.approved ?? false}
-              className="size-4 accent-[var(--neuma-coral)]"
-            />
-            <span className="text-sm">
-              Aprovar e avancar o aluno para o bloco seguinte
-            </span>
-          </label>
-
-          <Button type="submit">Enviar feedback</Button>
-        </form>
-      </Card>
+      <MentorFeedbackPanel
+        checkInId={checkIn.id}
+        studentName={studentName}
+        existing={feedback}
+        draft={draft}
+      />
     </div>
   );
 }

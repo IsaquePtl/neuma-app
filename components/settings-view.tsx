@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { Check, LogOut, Palette, User2, BadgeCheck } from "lucide-react";
+import { Check, LogOut, Palette, User2, BadgeCheck, Link2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { updateProfile } from "@/lib/actions/profile";
@@ -11,16 +11,21 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 export function SettingsView({
   name,
   email,
   role,
+  calUsername,
+  mentorStyleNotes,
 }: {
   name: string | null;
   email: string;
   role: "mentor" | "student";
+  calUsername?: string | null;
+  mentorStyleNotes?: string | null;
 }) {
   const { accent, setAccent } = useAccent();
   const [pending, startTransition] = useTransition();
@@ -43,7 +48,6 @@ export function SettingsView({
         <h1 className="text-3xl font-semibold tracking-tight">Definicoes</h1>
       </header>
 
-      {/* Cartao de perfil */}
       <Card className="neuma-accent-top overflow-hidden p-0">
         <div className="relative flex items-center gap-4 p-6">
           <div
@@ -68,7 +72,6 @@ export function SettingsView({
         </div>
       </Card>
 
-      {/* Editar perfil */}
       <Card className="space-y-4 p-6">
         <h2 className="flex items-center gap-2 font-semibold">
           <User2 className="size-4" /> Perfil
@@ -87,13 +90,47 @@ export function SettingsView({
             <Label>Email</Label>
             <Input value={email} disabled />
           </div>
+
+          {role === "mentor" ? (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="cal_username" className="flex items-center gap-2">
+                  <Link2 className="size-3.5" /> Username Cal.com
+                </Label>
+                <Input
+                  id="cal_username"
+                  name="cal_username"
+                  defaultValue={calUsername ?? ""}
+                  placeholder="teu-username"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label
+                  htmlFor="mentor_style_notes"
+                  className="flex items-center gap-2"
+                >
+                  <Sparkles className="size-3.5" /> Estilo para o assistente IA
+                </Label>
+                <Textarea
+                  id="mentor_style_notes"
+                  name="mentor_style_notes"
+                  rows={4}
+                  defaultValue={mentorStyleNotes ?? ""}
+                  placeholder="Ex: tom direto, usa 'fixe', foca ritmo e musicalidade..."
+                />
+                <p className="text-xs text-muted-foreground">
+                  O agent usa isto para rascunhar feedbacks na tua voz.
+                </p>
+              </div>
+            </>
+          ) : null}
+
           <Button type="submit" disabled={pending}>
             {pending ? "A guardar..." : "Guardar"}
           </Button>
         </form>
       </Card>
 
-      {/* Personalizacao (accent) */}
       <Card className="space-y-4 p-6">
         <h2 className="flex items-center gap-2 font-semibold">
           <Palette className="size-4" /> Cor de destaque
@@ -110,9 +147,7 @@ export function SettingsView({
                 key={key}
                 type="button"
                 onClick={() => setAccent(key)}
-                className={cn(
-                  "flex flex-col items-center gap-1.5 rounded-xl p-1 transition-transform hover:scale-105",
-                )}
+                className="flex flex-col items-center gap-1.5 rounded-xl p-1 transition-transform hover:scale-105"
                 aria-label={a.label}
               >
                 <span
@@ -122,9 +157,7 @@ export function SettingsView({
                   )}
                   style={{ backgroundColor: a.hex }}
                 >
-                  {isActive ? (
-                    <Check className="size-5 text-white" />
-                  ) : null}
+                  {isActive ? <Check className="size-5 text-white" /> : null}
                 </span>
                 <span className="text-xs text-muted-foreground">{a.label}</span>
               </button>
@@ -133,7 +166,18 @@ export function SettingsView({
         </div>
       </Card>
 
-      {/* Sair */}
+      {role === "student" ? (
+        <Card className="p-5">
+          <p className="text-sm text-muted-foreground">
+            Precisas do metrónomo? Abre{" "}
+            <a href="/tools" className="underline-offset-4 hover:underline">
+              Tools
+            </a>
+            .
+          </p>
+        </Card>
+      ) : null}
+
       <form action={logout}>
         <Button
           type="submit"

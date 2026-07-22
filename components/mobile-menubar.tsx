@@ -13,6 +13,7 @@ export type MobileNavItem = {
   match: (path: string) => boolean;
   icon?: LucideIcon;
   profileInitials?: string;
+  badge?: number;
 };
 
 type MobileMenubarProps = {
@@ -97,7 +98,14 @@ export function MobileMenubar({
                   {item.profileInitials}
                 </span>
               ) : Icon ? (
-                <Icon className="size-6" />
+                <span className="relative">
+                  <Icon className="size-6" />
+                  {item.badge && item.badge > 0 ? (
+                    <span className="absolute -right-2 -top-1 grid min-w-4 place-items-center rounded-full bg-[var(--neuma-coral)] px-1 text-[10px] font-semibold text-white">
+                      {item.badge > 9 ? "9+" : item.badge}
+                    </span>
+                  ) : null}
+                </span>
               ) : null}
             </Link>
           );

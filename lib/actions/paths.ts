@@ -29,6 +29,7 @@ export async function upsertPath(formData: FormData) {
     student_id: studentId,
     created_by: user.id,
     title: (formData.get("title") as string)?.trim() || "Percurso",
+    description: ((formData.get("description") as string) || "").trim() || null,
     goal: ((formData.get("goal") as string) || "").trim() || null,
     duration_label: ((formData.get("duration_label") as string) || "").trim() || null,
     start_date: (formData.get("start_date") as string) || null,

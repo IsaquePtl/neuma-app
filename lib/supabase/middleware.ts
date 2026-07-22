@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import type { Database } from "@/lib/types/database.types";
 
-const PUBLIC_PATHS = ["/", "/login"];
+const PUBLIC_PATHS = ["/", "/login", "/login/forgot", "/login/update-password"];
 
 export async function updateSession(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -42,7 +42,10 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PATHS.includes(path);
+  const isPublic =
+    PUBLIC_PATHS.includes(path) ||
+    path.startsWith("/login/") ||
+    path.startsWith("/auth/");
 
   if (!user && !isPublic) {
     const redirectUrl = request.nextUrl.clone();

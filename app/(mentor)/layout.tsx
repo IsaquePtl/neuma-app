@@ -21,11 +21,17 @@ export default async function MentorLayout({
 
   if (profile?.role !== "mentor") redirect("/");
 
+  const { count } = await supabase
+    .from("check_ins")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pending");
+
   return (
     <AppShell
       role="mentor"
       name={profile.full_name}
       email={profile.email ?? user.email ?? ""}
+      badgeCounts={{ checkins: count ?? 0 }}
     >
       {children}
     </AppShell>

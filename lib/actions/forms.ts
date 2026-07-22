@@ -98,6 +98,78 @@ export async function deleteQuestion(formData: FormData) {
   revalidatePath(`/studio/forms/${formId}`);
 }
 
+export async function moveQuestion(formData: FormData) {
+  const { supabase } = await mentorClient();
+  const id = formData.get("id") as string;
+  const formId = formData.get("form_id") as string;
+  const direction = formData.get("direction") as "up" | "down";
+
+  const { data: questions } = await supabase
+    .from("form_questions")
+    .select("id, order_index")
+    .eq("form_id", formId)
+    .order("order_index", { ascending: true });
+
+  if (!questions?.length) return;
+
+  const index = questions.findIndex((q) => q.id === id);
+  if (index < 0) return;
+  const swapWith = direction === "up" ? index - 1 : index + 1;
+  if (swapWith < 0 || swapWith >= questions.length) return;
+
+  const a = questions[index];
+  const b = questions[swapWith];
+
+  await Promise.all([
+    supabase
+      .from("form_questions")
+      .update({ order_index: b.order_index })
+      .eq("id", a.id),
+    supabase
+      .from("form_questions")
+      .update({ order_index: a.order_index })
+      .eq("id", b.id),
+  ]);
+
+  revalidatePath(`/studio/forms/${formId}`);
+}
+
+export async function updateQuestion(formData: FormData) {
+  const { supabase } = await mentorClient();
+  const id = formData.get("id") as string;
+  const formId = formData.get("form_id") as string;
+  const type = (formData.get("type") as FormQuestionType) || "short_text";
+  const rawOptions = ((formData.get("options") as string) || "").trim();
+  const options: Json | null =
+    (type === "single_choice" || type === "multi_choice") && rawOptions
+      ? rawOptions
+          .split("\n")
+          .map((o) => o.trim())
+          .filter(Boolean)
+      : null;
+
+  await supabase
+    .from("form_questions")
+    .update({
+      label: (formData.get("label") as string)?.trim() || "Pergunta",
+      help_text: ((formData.get("help_text") as string) || "").trim() || null,
+      type,
+      options,
+      required: formData.get("required") === "on",
+    })
+    .eq("id", id);
+
+  revalidatePath(`/studio/forms/${formId}`);
+}
+
+export async function deleteForm(formData: FormData) {
+  const { supabase } = await mentorClient();
+  const id = formData.get("id") as string;
+  await supabase.from("forms").delete().eq("id", id);
+  revalidatePath("/studio/forms");
+  redirect("/studio/forms");
+}
+
 export async function submitFormResponse(formData: FormData) {
   const supabase = await createClient();
   const {

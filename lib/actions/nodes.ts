@@ -58,6 +58,7 @@ export async function createNode(formData: FormData) {
       : null,
     kind: ((formData.get("kind") as NodeKind) || "practice"),
     due_date: (formData.get("due_date") as string) || null,
+    resource_url: ((formData.get("resource_url") as string) || "").trim() || null,
     order_index: nextIndex,
     status,
   });
@@ -82,6 +83,7 @@ export async function updateNode(formData: FormData) {
       kind: ((formData.get("kind") as NodeKind) || "practice"),
       status: ((formData.get("status") as NodeStatus) || "locked"),
       due_date: (formData.get("due_date") as string) || null,
+      resource_url: ((formData.get("resource_url") as string) || "").trim() || null,
     })
     .eq("id", id);
 

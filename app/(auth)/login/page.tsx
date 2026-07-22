@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 
 import { login } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,15 @@ export default async function LoginPage({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="password">Password</Label>
+              <Link
+                href="/login/forgot"
+                className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+              >
+                Esqueceste-te?
+              </Link>
+            </div>
             <Input
               id="password"
               name="password"
