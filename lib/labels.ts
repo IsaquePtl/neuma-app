@@ -1,16 +1,20 @@
 import type {
   CheckInKind,
   CheckInStatus,
+  LibraryAssetKind,
+  MentorCalendarEventKind,
   NodeKind,
   NodeStatus,
   PathStatus,
+  PathTemplateStatus,
 } from "@/lib/types/database.types";
 
 export const nodeKindLabel: Record<NodeKind, string> = {
   practice: "Pratica",
   call: "Chamada",
   milestone: "Marco",
-  resource: "Recurso",
+  lesson: "Aula",
+  resource: "Aula",
 };
 
 export const nodeStatusLabel: Record<NodeStatus, string> = {
@@ -26,6 +30,20 @@ export const pathStatusLabel: Record<PathStatus, string> = {
   paused: "Em pausa",
 };
 
+export const pathTemplateStatusLabel: Record<PathTemplateStatus, string> = {
+  draft: "Rascunho",
+  ready: "Pronto",
+  archived: "Arquivado",
+};
+
+export const libraryAssetKindLabel: Record<LibraryAssetKind, string> = {
+  video: "Vídeo",
+  text: "Texto",
+  image: "Imagem",
+  file: "Ficheiro",
+  link: "Link",
+};
+
 export const checkInStatusLabel: Record<CheckInStatus, string> = {
   pending: "Por rever",
   approved: "Aprovado",
@@ -38,6 +56,16 @@ export const checkInKindLabel: Record<CheckInKind, string> = {
   call: "Chamada",
 };
 
+export const mentorCalendarEventKindLabel: Record<
+  MentorCalendarEventKind,
+  string
+> = {
+  reminder: "Lembrete",
+  meeting: "Reunião",
+  event: "Evento",
+  misc: "Diversos",
+};
+
 export function formatDate(value: string | null | undefined): string {
   if (!value) return "";
   const d = new Date(value);
@@ -47,6 +75,20 @@ export function formatDate(value: string | null | undefined): string {
     month: "short",
     year: "numeric",
   });
+}
+
+/** Ha quanto tempo, em PT curto: "2 d", "5 h", "agora". */
+export function formatWaiting(value: string | null | undefined): string {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const minutes = Math.max(0, Math.round((Date.now() - d.getTime()) / 60000));
+  if (minutes < 60) return minutes < 2 ? "agora" : `${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h`;
+  const days = Math.round(hours / 24);
+  if (days < 14) return `${days} d`;
+  return `${Math.round(days / 7)} sem`;
 }
 
 export function formatDateTime(value: string | null | undefined): string {

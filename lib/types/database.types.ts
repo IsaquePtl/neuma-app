@@ -5,7 +5,7 @@ export type UserRole = "mentor" | "student";
 export type NodeStatus = "locked" | "active" | "completed";
 export type CheckInStatus = "pending" | "approved" | "needs_revision";
 export type PathStatus = "draft" | "active" | "completed" | "paused";
-export type NodeKind = "practice" | "call" | "milestone" | "resource";
+export type NodeKind = "practice" | "call" | "milestone" | "lesson" | "resource";
 export type CheckInKind = "video" | "text" | "call";
 export type FormQuestionType =
   | "short_text"
@@ -14,6 +14,27 @@ export type FormQuestionType =
   | "multi_choice"
   | "scale";
 export type FeedbackDraftStatus = "pending_review" | "published" | "rejected";
+export type TallySubmissionKind = "onboarding" | "checkin" | "unknown";
+export type TallySubmissionStatus =
+  | "pending"
+  | "linked"
+  | "processed"
+  | "failed"
+  | "archived";
+export type CalBookingStatus =
+  | "accepted"
+  | "cancelled"
+  | "rescheduled"
+  | "pending"
+  | "rejected";
+export type MentorCalendarEventKind =
+  | "reminder"
+  | "meeting"
+  | "event"
+  | "misc";
+export type LibraryAssetKind = "video" | "text" | "image" | "file" | "link";
+export type LibraryAssetUsage = "practice" | "lesson";
+export type PathTemplateStatus = "draft" | "ready" | "archived";
 
 export type Json =
   | string
@@ -33,6 +54,7 @@ export interface Database {
           full_name: string | null;
           email: string | null;
           avatar_url: string | null;
+          bio: string | null;
           onboarding_completed: boolean;
           cal_username: string | null;
           mentor_style_notes: string | null;
@@ -45,6 +67,7 @@ export interface Database {
           full_name?: string | null;
           email?: string | null;
           avatar_url?: string | null;
+          bio?: string | null;
           onboarding_completed?: boolean;
           cal_username?: string | null;
           mentor_style_notes?: string | null;
@@ -57,6 +80,7 @@ export interface Database {
           full_name?: string | null;
           email?: string | null;
           avatar_url?: string | null;
+          bio?: string | null;
           onboarding_completed?: boolean;
           cal_username?: string | null;
           mentor_style_notes?: string | null;
@@ -77,6 +101,7 @@ export interface Database {
           end_date: string | null;
           duration_label: string | null;
           status: PathStatus;
+          source_template_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -90,6 +115,7 @@ export interface Database {
           end_date?: string | null;
           duration_label?: string | null;
           status?: PathStatus;
+          source_template_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -103,6 +129,7 @@ export interface Database {
           end_date?: string | null;
           duration_label?: string | null;
           status?: PathStatus;
+          source_template_id?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -120,6 +147,13 @@ export interface Database {
             referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
+          {
+            foreignKeyName: "paths_source_template_id_fkey";
+            columns: ["source_template_id"];
+            isOneToOne: false;
+            referencedRelation: "path_templates";
+            referencedColumns: ["id"];
+          },
         ];
       };
       nodes: {
@@ -134,6 +168,7 @@ export interface Database {
           kind: NodeKind;
           due_date: string | null;
           resource_url: string | null;
+          content_body: string | null;
           created_at: string;
         };
         Insert: {
@@ -146,6 +181,7 @@ export interface Database {
           week_number?: number | null;
           kind?: NodeKind;
           due_date?: string | null;
+          content_body?: string | null;
           resource_url?: string | null;
           created_at?: string;
         };
@@ -160,6 +196,7 @@ export interface Database {
           kind?: NodeKind;
           due_date?: string | null;
           resource_url?: string | null;
+          content_body?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -267,6 +304,44 @@ export interface Database {
             columns: ["mentor_id"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      level_feedbacks: {
+        Row: {
+          id: string;
+          node_id: string;
+          mentor_id: string;
+          notes: string | null;
+          video_url: string | null;
+          file_url: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          node_id: string;
+          mentor_id: string;
+          notes?: string | null;
+          video_url?: string | null;
+          file_url?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          node_id?: string;
+          mentor_id?: string;
+          notes?: string | null;
+          video_url?: string | null;
+          file_url?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "level_feedbacks_node_id_fkey";
+            columns: ["node_id"];
+            isOneToOne: false;
+            referencedRelation: "nodes";
             referencedColumns: ["id"];
           },
         ];
@@ -465,6 +540,456 @@ export interface Database {
           },
         ];
       };
+      tally_submissions: {
+        Row: {
+          id: string;
+          source: string;
+          source_event_id: string | null;
+          source_response_id: string | null;
+          source_submission_id: string | null;
+          source_form_id: string;
+          source_form_name: string | null;
+          submission_kind: TallySubmissionKind;
+          status: TallySubmissionStatus;
+          respondent_name: string | null;
+          respondent_email: string | null;
+          student_id: string | null;
+          node_id: string | null;
+          check_in_id: string | null;
+          notes: string | null;
+          video_url: string | null;
+          answers: Json;
+          payload: Json;
+          created_at: string;
+          processed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          source?: string;
+          source_event_id?: string | null;
+          source_response_id?: string | null;
+          source_submission_id?: string | null;
+          source_form_id: string;
+          source_form_name?: string | null;
+          submission_kind?: TallySubmissionKind;
+          status?: TallySubmissionStatus;
+          respondent_name?: string | null;
+          respondent_email?: string | null;
+          student_id?: string | null;
+          node_id?: string | null;
+          check_in_id?: string | null;
+          notes?: string | null;
+          video_url?: string | null;
+          answers?: Json;
+          payload: Json;
+          created_at?: string;
+          processed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          source?: string;
+          source_event_id?: string | null;
+          source_response_id?: string | null;
+          source_submission_id?: string | null;
+          source_form_id?: string;
+          source_form_name?: string | null;
+          submission_kind?: TallySubmissionKind;
+          status?: TallySubmissionStatus;
+          respondent_name?: string | null;
+          respondent_email?: string | null;
+          student_id?: string | null;
+          node_id?: string | null;
+          check_in_id?: string | null;
+          notes?: string | null;
+          video_url?: string | null;
+          answers?: Json;
+          payload?: Json;
+          created_at?: string;
+          processed_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tally_submissions_check_in_id_fkey";
+            columns: ["check_in_id"];
+            isOneToOne: false;
+            referencedRelation: "check_ins";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tally_submissions_node_id_fkey";
+            columns: ["node_id"];
+            isOneToOne: false;
+            referencedRelation: "nodes";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tally_submissions_student_id_fkey";
+            columns: ["student_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      cal_bookings: {
+        Row: {
+          id: string;
+          cal_booking_uid: string;
+          cal_booking_id: number | null;
+          trigger_event: string;
+          status: CalBookingStatus;
+          title: string | null;
+          event_type_slug: string | null;
+          start_time: string;
+          end_time: string;
+          timezone: string | null;
+          meet_url: string | null;
+          organizer_email: string | null;
+          organizer_name: string | null;
+          attendee_email: string | null;
+          attendee_name: string | null;
+          student_id: string | null;
+          notes: string | null;
+          payload: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          cal_booking_uid: string;
+          cal_booking_id?: number | null;
+          trigger_event: string;
+          status?: CalBookingStatus;
+          title?: string | null;
+          event_type_slug?: string | null;
+          start_time: string;
+          end_time: string;
+          timezone?: string | null;
+          meet_url?: string | null;
+          organizer_email?: string | null;
+          organizer_name?: string | null;
+          attendee_email?: string | null;
+          attendee_name?: string | null;
+          student_id?: string | null;
+          notes?: string | null;
+          payload?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          cal_booking_uid?: string;
+          cal_booking_id?: number | null;
+          trigger_event?: string;
+          status?: CalBookingStatus;
+          title?: string | null;
+          event_type_slug?: string | null;
+          start_time?: string;
+          end_time?: string;
+          timezone?: string | null;
+          meet_url?: string | null;
+          organizer_email?: string | null;
+          organizer_name?: string | null;
+          attendee_email?: string | null;
+          attendee_name?: string | null;
+          student_id?: string | null;
+          notes?: string | null;
+          payload?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "cal_bookings_student_id_fkey";
+            columns: ["student_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      mentor_calendar_events: {
+        Row: {
+          id: string;
+          mentor_id: string;
+          title: string;
+          kind: MentorCalendarEventKind;
+          starts_at: string;
+          notes: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          mentor_id: string;
+          title: string;
+          kind: MentorCalendarEventKind;
+          starts_at: string;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          mentor_id?: string;
+          title?: string;
+          kind?: MentorCalendarEventKind;
+          starts_at?: string;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "mentor_calendar_events_mentor_id_fkey";
+            columns: ["mentor_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      library_assets: {
+        Row: {
+          id: string;
+          title: string;
+          summary: string | null;
+          kind: LibraryAssetKind;
+          usage: LibraryAssetUsage;
+          topic_id: string | null;
+          body: string | null;
+          url: string | null;
+          storage_path: string | null;
+          tags: string[];
+          cover_url: string | null;
+          duration_label: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+          archived_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          summary?: string | null;
+          kind?: LibraryAssetKind;
+          usage?: LibraryAssetUsage;
+          topic_id?: string | null;
+          body?: string | null;
+          url?: string | null;
+          storage_path?: string | null;
+          tags?: string[];
+          cover_url?: string | null;
+          duration_label?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          archived_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          summary?: string | null;
+          kind?: LibraryAssetKind;
+          usage?: LibraryAssetUsage;
+          topic_id?: string | null;
+          body?: string | null;
+          url?: string | null;
+          storage_path?: string | null;
+          tags?: string[];
+          cover_url?: string | null;
+          duration_label?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          archived_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "library_assets_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "library_assets_topic_id_fkey";
+            columns: ["topic_id"];
+            isOneToOne: false;
+            referencedRelation: "library_topics";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      library_categories: {
+        Row: {
+          id: string;
+          name: string;
+          slug: string;
+          sort_index: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          slug: string;
+          sort_index?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          slug?: string;
+          sort_index?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      library_topics: {
+        Row: {
+          id: string;
+          category_id: string;
+          name: string;
+          slug: string;
+          sort_index: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          category_id: string;
+          name: string;
+          slug: string;
+          sort_index?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          category_id?: string;
+          name?: string;
+          slug?: string;
+          sort_index?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "library_topics_category_id_fkey";
+            columns: ["category_id"];
+            isOneToOne: false;
+            referencedRelation: "library_categories";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      path_templates: {
+        Row: {
+          id: string;
+          title: string;
+          description: string | null;
+          goal: string | null;
+          duration_label: string | null;
+          suggested_node_count: number | null;
+          status: PathTemplateStatus;
+          start_date: string | null;
+          end_date: string | null;
+          period_months: number | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          description?: string | null;
+          goal?: string | null;
+          duration_label?: string | null;
+          suggested_node_count?: number | null;
+          status?: PathTemplateStatus;
+          start_date?: string | null;
+          end_date?: string | null;
+          period_months?: number | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          description?: string | null;
+          goal?: string | null;
+          duration_label?: string | null;
+          suggested_node_count?: number | null;
+          status?: PathTemplateStatus;
+          start_date?: string | null;
+          end_date?: string | null;
+          period_months?: number | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "path_templates_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      path_template_nodes: {
+        Row: {
+          id: string;
+          template_id: string;
+          order_index: number;
+          title: string;
+          description: string | null;
+          kind: NodeKind;
+          week_number: number | null;
+          duration_weeks: number | null;
+          default_resource_url: string | null;
+          library_asset_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          template_id: string;
+          order_index: number;
+          title: string;
+          description?: string | null;
+          kind?: NodeKind;
+          week_number?: number | null;
+          duration_weeks?: number | null;
+          default_resource_url?: string | null;
+          library_asset_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          template_id?: string;
+          order_index?: number;
+          title?: string;
+          description?: string | null;
+          kind?: NodeKind;
+          week_number?: number | null;
+          duration_weeks?: number | null;
+          default_resource_url?: string | null;
+          library_asset_id?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "path_template_nodes_template_id_fkey";
+            columns: ["template_id"];
+            isOneToOne: false;
+            referencedRelation: "path_templates";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "path_template_nodes_library_asset_id_fkey";
+            columns: ["library_asset_id"];
+            isOneToOne: false;
+            referencedRelation: "library_assets";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     Functions: {
@@ -482,6 +1007,9 @@ export interface Database {
       check_in_kind: CheckInKind;
       form_question_type: FormQuestionType;
       feedback_draft_status: FeedbackDraftStatus;
+      library_asset_kind: LibraryAssetKind;
+      library_asset_usage: LibraryAssetUsage;
+      path_template_status: PathTemplateStatus;
     };
   };
 }

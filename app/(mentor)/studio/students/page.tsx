@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { InviteStudentForm } from "@/components/invite-student-form";
 import { PageHero } from "@/components/page-hero";
 import { PathStatusBadge } from "@/components/status-badges";
+import { UserAvatar } from "@/components/user-avatar";
 import { Card } from "@/components/ui/card";
 import type { PathStatus } from "@/lib/types/database.types";
 
@@ -15,7 +16,7 @@ export default async function StudentsPage() {
     await Promise.all([
       supabase
         .from("profiles")
-        .select("id, full_name, email, onboarding_completed, created_at")
+        .select("id, full_name, email, avatar_url, onboarding_completed, created_at")
         .eq("role", "student")
         .order("created_at", { ascending: true }),
       supabase.from("paths").select("student_id, status, title"),
@@ -47,67 +48,80 @@ export default async function StudentsPage() {
       <PageHero
         eyebrow="Studio"
         title="Os teus alunos"
-        subtitle="Abre o perfil de cada aluno para ver percurso, check-ins, forms e notas."
+        subtitle="Abre cada aluno para ver percurso, check-ins e notas."
       >
         <InviteStudentForm />
       </PageHero>
 
       {!students || students.length === 0 ? (
-        <Card className="space-y-4 p-10 text-center">
-          <p className="font-medium">Ainda nao tens alunos</p>
+        <Card className="space-y-3 p-10 text-center">
+          <p className="font-medium">Ainda não tens alunos</p>
           <p className="text-sm text-muted-foreground">
-            Usa &quot;Convidar aluno&quot; para criar a primeira conta.
+            Usa o botão &quot;Convidar aluno&quot; em cima para criar a primeira
+            conta.
           </p>
-          <div className="flex justify-center">
-            <InviteStudentForm />
-          </div>
         </Card>
       ) : (
-        <div className="grid gap-3">
-          {students.map((s) => {
-            const path = pathByStudent.get(s.id);
-            const waiting = pendingByStudent.get(s.id) ?? 0;
-            const initial = (s.full_name ?? s.email ?? "?")
-              .slice(0, 1)
-              .toUpperCase();
-            return (
-              <Link key={s.id} href={`/studio/students/${s.id}`}>
-                <Card className="flex items-center justify-between gap-3 p-4 transition-colors hover:bg-card/80 sm:p-5">
-                  <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-                    <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[var(--neuma-coral)]/80 to-[var(--neuma-blue)]/80 text-base font-semibold text-white">
-                      {initial}
-                    </div>
-                    <div className="min-w-0 space-y-0.5">
+        <Card className="overflow-hidden p-0">
+          <div className="hidden grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_7rem_2rem] gap-3 border-b border-white/10 px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground desktop:grid">
+            <span>Aluno</span>
+            <span>Percurso</span>
+            <span>Estado</span>
+            <span />
+          </div>
+          <div className="divide-y divide-white/5">
+            {students.map((s) => {
+              const path = pathByStudent.get(s.id);
+              const waiting = pendingByStudent.get(s.id) ?? 0;
+              return (
+                <Link
+                  key={s.id}
+                  href={`/studio/students/${s.id}`}
+                  className="flex items-center justify-between gap-3 px-4 py-3.5 transition-colors hover:bg-white/[0.03] desktop:grid desktop:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_7rem_2rem]"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <UserAvatar
+                      name={s.full_name}
+                      email={s.email}
+                      avatarUrl={s.avatar_url}
+                      size="lg"
+                      rounded="xl"
+                    />
+                    <div className="min-w-0">
                       <p className="truncate font-medium">
                         {s.full_name ?? s.email}
                       </p>
-                      <p className="truncate text-sm text-muted-foreground">
-                        {path ? path.title : "Sem percurso definido"}
+                      <p className="truncate text-xs text-muted-foreground desktop:hidden">
+                        {path ? path.title : "Sem percurso"}
+                        {waiting > 0
+                          ? ` · ${waiting} por rever`
+                          : !s.onboarding_completed
+                            ? " · onboarding pendente"
+                            : ""}
                       </p>
-                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                        {!s.onboarding_completed ? (
-                          <span>Onboarding pendente</span>
-                        ) : null}
-                        {waiting > 0 ? (
-                          <span className="text-[var(--neuma-coral)]">
-                            {waiting} check-in{waiting > 1 ? "s" : ""} por
-                            rever
-                          </span>
-                        ) : null}
-                      </div>
+                      {waiting > 0 ? (
+                        <p className="hidden text-xs text-[var(--neuma-coral)] desktop:block">
+                          {waiting} por rever
+                        </p>
+                      ) : !s.onboarding_completed ? (
+                        <p className="hidden text-xs text-muted-foreground desktop:block">
+                          Onboarding pendente
+                        </p>
+                      ) : null}
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-                    {path ? (
-                      <PathStatusBadge status={path.status} />
-                    ) : null}
-                    <ArrowRight className="size-4 text-muted-foreground" />
+                  <p className="hidden truncate text-sm text-muted-foreground desktop:block">
+                    {path ? path.title : "Sem percurso definido"}
+                  </p>
+                  <div className="hidden desktop:block">
+                    {path ? <PathStatusBadge status={path.status} /> : null}
                   </div>
-                </Card>
-              </Link>
-            );
-          })}
-        </div>
+                  <ArrowRight className="size-4 shrink-0 justify-self-end text-muted-foreground" />
+                </Link>
+              );
+            })}
+          </div>
+        </Card>
       )}
     </div>
   );

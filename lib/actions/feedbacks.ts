@@ -32,6 +32,14 @@ export async function submitFeedback(formData: FormData) {
   const videoUrl = ((formData.get("video_url") as string) || "").trim() || null;
   const notes = ((formData.get("notes") as string) || "").trim() || null;
   const nextSteps = ((formData.get("next_steps") as string) || "").trim() || null;
+  const returnTo = (formData.get("return_to") as string) || "";
+
+  const { data: checkInRow } = await supabase
+    .from("check_ins")
+    .select("student_id")
+    .eq("id", checkInId)
+    .maybeSingle();
+  const studentId = checkInRow?.student_id ?? null;
 
   await supabase
     .from("feedbacks")
@@ -133,9 +141,37 @@ export async function submitFeedback(formData: FormData) {
     }
   });
 
-  revalidatePath("/studio/checkins");
+  revalidatePath("/studio/journeys");
+  revalidatePath("/studio/journeys/checkins");
+  revalidatePath("/studio/journeys/onboardings");
   revalidatePath("/studio");
-  revalidatePath("/path");
+  revalidatePath(`/studio/checkins/${checkInId}`);
+  revalidatePath("/home");
+  revalidatePath("/session");
   revalidatePath("/checkins");
-  redirect("/studio/checkins");
+  if (studentId) {
+    revalidatePath(`/studio/students/${studentId}`);
+  }
+
+  if (
+    returnTo.startsWith("/studio/students/") ||
+    returnTo.startsWith("/studio/journeys/")
+  ) {
+    redirect(returnTo);
+  }
+
+  const { data: nextPending } = await supabase
+    .from("check_ins")
+    .select("id")
+    .eq("status", "pending")
+    .neq("id", checkInId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (nextPending?.id) {
+    redirect(`/studio/checkins/${nextPending.id}`);
+  }
+
+  redirect("/studio/journeys/checkins");
 }

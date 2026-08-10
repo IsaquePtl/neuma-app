@@ -6,12 +6,14 @@ export function PageHero({
   subtitle,
   children,
   className,
+  centerActions = false,
 }: {
   eyebrow?: string;
   title: string;
   subtitle?: string;
   children?: React.ReactNode;
   className?: string;
+  centerActions?: boolean;
 }) {
   return (
     <div
@@ -36,7 +38,14 @@ export function PageHero({
           backgroundSize: "360px",
         }}
       />
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div
+        className={cn(
+          "flex gap-4",
+          centerActions
+            ? "flex-col items-center text-center"
+            : "flex-wrap items-end justify-between",
+        )}
+      >
         <div className="space-y-1.5">
           {eyebrow ? (
             <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
@@ -47,10 +56,25 @@ export function PageHero({
             {title}
           </h1>
           {subtitle ? (
-            <p className="max-w-xl text-sm text-muted-foreground">{subtitle}</p>
+            <p
+              className={cn(
+                "max-w-xl text-sm text-muted-foreground",
+                centerActions && "mx-auto",
+              )}
+            >
+              {subtitle}
+            </p>
           ) : null}
         </div>
-        {children ? <div className="shrink-0">{children}</div> : null}
+        {children ? (
+          <div
+            className={cn(
+              centerActions ? "flex w-full justify-center" : "shrink-0",
+            )}
+          >
+            {children}
+          </div>
+        ) : null}
       </div>
     </div>
   );

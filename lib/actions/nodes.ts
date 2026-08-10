@@ -59,12 +59,21 @@ export async function createNode(formData: FormData) {
     kind: ((formData.get("kind") as NodeKind) || "practice"),
     due_date: (formData.get("due_date") as string) || null,
     resource_url: ((formData.get("resource_url") as string) || "").trim() || null,
+    content_body:
+      ((formData.get("content_body") as string) || "").trim() || null,
     order_index: nextIndex,
     status,
   });
 
   const studentId = await studentIdOfPath(supabase, pathId);
-  if (studentId) revalidatePath(`/studio/students/${studentId}`);
+  if (studentId) {
+    revalidatePath(`/studio/students/${studentId}`);
+    revalidatePath("/home");
+    revalidatePath("/path");
+    revalidatePath("/session");
+  }
+  revalidatePath(`/studio/journeys/${pathId}`);
+  revalidatePath("/studio/journeys");
 }
 
 export async function updateNode(formData: FormData) {
@@ -84,11 +93,20 @@ export async function updateNode(formData: FormData) {
       status: ((formData.get("status") as NodeStatus) || "locked"),
       due_date: (formData.get("due_date") as string) || null,
       resource_url: ((formData.get("resource_url") as string) || "").trim() || null,
+      content_body:
+        ((formData.get("content_body") as string) || "").trim() || null,
     })
     .eq("id", id);
 
   const studentId = await studentIdOfPath(supabase, pathId);
-  if (studentId) revalidatePath(`/studio/students/${studentId}`);
+  if (studentId) {
+    revalidatePath(`/studio/students/${studentId}`);
+    revalidatePath("/home");
+    revalidatePath("/path");
+    revalidatePath("/session");
+  }
+  revalidatePath(`/studio/journeys/${pathId}`);
+  revalidatePath("/studio/journeys");
 }
 
 export async function deleteNode(formData: FormData) {
@@ -97,7 +115,14 @@ export async function deleteNode(formData: FormData) {
   const pathId = formData.get("path_id") as string;
   await supabase.from("nodes").delete().eq("id", id);
   const studentId = await studentIdOfPath(supabase, pathId);
-  if (studentId) revalidatePath(`/studio/students/${studentId}`);
+  if (studentId) {
+    revalidatePath(`/studio/students/${studentId}`);
+    revalidatePath("/home");
+    revalidatePath("/path");
+    revalidatePath("/session");
+  }
+  revalidatePath(`/studio/journeys/${pathId}`);
+  revalidatePath("/studio/journeys");
 }
 
 export async function moveNode(formData: FormData) {
@@ -126,5 +151,42 @@ export async function moveNode(formData: FormData) {
   await supabase.from("nodes").update({ order_index: b.order_index }).eq("id", a.id);
 
   const studentId = await studentIdOfPath(supabase, pathId);
-  if (studentId) revalidatePath(`/studio/students/${studentId}`);
+  if (studentId) {
+    revalidatePath(`/studio/students/${studentId}`);
+  }
+  revalidatePath(`/studio/journeys/${pathId}`);
+  revalidatePath("/studio/journeys");
+}
+
+export async function activateNode(formData: FormData) {
+  const supabase = await mentorClient();
+  const id = formData.get("id") as string;
+  const pathId = formData.get("path_id") as string;
+
+  const { data: nodes } = await supabase
+    .from("nodes")
+    .select("id, status")
+    .eq("path_id", pathId);
+
+  if (!nodes?.length) return;
+
+  for (const n of nodes) {
+    if (n.id === id) {
+      await supabase.from("nodes").update({ status: "active" }).eq("id", n.id);
+    } else if (n.status !== "completed") {
+      await supabase.from("nodes").update({ status: "locked" }).eq("id", n.id);
+    }
+  }
+
+  await supabase.from("paths").update({ status: "active" }).eq("id", pathId);
+
+  const studentId = await studentIdOfPath(supabase, pathId);
+  if (studentId) {
+    revalidatePath(`/studio/students/${studentId}`);
+    revalidatePath("/home");
+    revalidatePath("/path");
+    revalidatePath("/session");
+  }
+  revalidatePath(`/studio/journeys/${pathId}`);
+  revalidatePath("/studio/journeys");
 }

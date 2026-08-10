@@ -44,4 +44,31 @@ export async function upsertPath(formData: FormData) {
   }
 
   revalidatePath(`/studio/students/${studentId}`);
+  revalidatePath("/home");
+  revalidatePath("/session");
+}
+
+export async function deletePath(formData: FormData) {
+  const { supabase } = await requireMentor();
+  const id = formData.get("id") as string;
+  const studentId = formData.get("student_id") as string;
+
+  await supabase.from("paths").delete().eq("id", id);
+
+  revalidatePath(`/studio/students/${studentId}`);
+  revalidatePath("/home");
+  revalidatePath("/session");
+}
+
+export async function setPathStatus(formData: FormData) {
+  const { supabase } = await requireMentor();
+  const id = formData.get("id") as string;
+  const studentId = formData.get("student_id") as string;
+  const status = (formData.get("status") as PathStatus) || "draft";
+
+  await supabase.from("paths").update({ status }).eq("id", id);
+
+  revalidatePath(`/studio/students/${studentId}`);
+  revalidatePath("/home");
+  revalidatePath("/session");
 }

@@ -23,10 +23,10 @@ export function CheckInForm({
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <Link
-        href="/path"
+        href="/home"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="size-4" /> O meu percurso
+        <ArrowLeft className="size-4" /> Geral
       </Link>
 
       <div className="space-y-1">

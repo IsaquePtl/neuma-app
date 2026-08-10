@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Sparkles } from "lucide-react";
+import { useFormStatus } from "react-dom";
+import { Check, RotateCcw, Sparkles } from "lucide-react";
 
 import { submitFeedback } from "@/lib/actions/feedbacks";
 import { rejectFeedbackDraft } from "@/lib/actions/ai-drafts";
@@ -17,11 +18,41 @@ type Draft = {
   body_next_steps: string | null;
 };
 
+function SubmitButtons() {
+  const { pending } = useFormStatus();
+  return (
+    <div className="flex flex-col gap-2 pt-1">
+      <Button
+        type="submit"
+        name="approved"
+        value="on"
+        disabled={pending}
+        className="gap-2"
+      >
+        <Check className="size-4" />
+        {pending ? "A enviar…" : "Aprovar e avançar nível"}
+      </Button>
+      <Button
+        type="submit"
+        variant="secondary"
+        disabled={pending}
+        className="gap-2"
+      >
+        <RotateCcw className="size-4" /> Pedir revisão
+      </Button>
+      <p className="text-xs text-muted-foreground">
+        Pedir revisão mantém o aluno no mesmo bloco.
+      </p>
+    </div>
+  );
+}
+
 export function MentorFeedbackPanel({
   checkInId,
   studentName,
   existing,
   draft,
+  returnTo,
 }: {
   checkInId: string;
   studentName: string;
@@ -32,6 +63,7 @@ export function MentorFeedbackPanel({
     approved: boolean;
   } | null;
   draft?: Draft | null;
+  returnTo?: string;
 }) {
   const [notes, setNotes] = useState(
     draft?.body_notes ?? existing?.notes ?? "",
@@ -39,13 +71,13 @@ export function MentorFeedbackPanel({
   const [nextSteps, setNextSteps] = useState(
     draft?.body_next_steps ?? existing?.next_steps ?? "",
   );
-  const [pending, startTransition] = useTransition();
+  const [pendingDiscard, startTransition] = useTransition();
   const [showDraftBanner, setShowDraftBanner] = useState(Boolean(draft));
 
   function discardDraft() {
     if (!draft) return;
     startTransition(async () => {
-      await rejectFeedbackDraft(draft.id);
+      await rejectFeedbackDraft(draft.id, checkInId);
       setShowDraftBanner(false);
       setNotes("");
       setNextSteps("");
@@ -58,10 +90,10 @@ export function MentorFeedbackPanel({
         <Card className="space-y-3 border-[var(--neuma-coral)]/30 p-5">
           <p className="flex items-center gap-2 text-sm font-medium">
             <Sparkles className="size-4 text-[var(--neuma-coral)]" />
-            Ola — {studentName} fez check-in. Posso responder isto?
+            Olá — {studentName} fez check-in. Posso responder isto?
           </p>
           <p className="text-sm text-muted-foreground">
-            Rascunho gerado para ti. Edita o que quiseres e envia — o aluno ve
+            Rascunho gerado para ti. Edita o que quiseres e envia — o aluno vê
             sempre o teu nome.
           </p>
           <div className="flex flex-wrap gap-2">
@@ -69,7 +101,7 @@ export function MentorFeedbackPanel({
               type="button"
               size="sm"
               variant="ghost"
-              disabled={pending}
+              disabled={pendingDiscard}
               onClick={discardDraft}
             >
               Descartar e escrever do zero
@@ -83,9 +115,12 @@ export function MentorFeedbackPanel({
         <form action={submitFeedback} className="space-y-4">
           <input type="hidden" name="check_in_id" value={checkInId} />
           {draft ? <input type="hidden" name="draft_id" value={draft.id} /> : null}
+          {returnTo ? (
+            <input type="hidden" name="return_to" value={returnTo} />
+          ) : null}
 
           <div className="space-y-2">
-            <Label htmlFor="video_url">Link do teu video de resposta</Label>
+            <Label htmlFor="video_url">Link do teu vídeo de resposta</Label>
             <Input
               id="video_url"
               name="video_url"
@@ -96,7 +131,7 @@ export function MentorFeedbackPanel({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="notes">Notas / avaliacao</Label>
+            <Label htmlFor="notes">Notas / avaliação</Label>
             <Textarea
               id="notes"
               name="notes"
@@ -108,30 +143,18 @@ export function MentorFeedbackPanel({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="next_steps">Proximos passos</Label>
+            <Label htmlFor="next_steps">Próximos passos</Label>
             <Textarea
               id="next_steps"
               name="next_steps"
               rows={3}
-              placeholder="Indicacoes concretas para a proxima etapa..."
+              placeholder="Indicações concretas para a próxima etapa..."
               value={nextSteps}
               onChange={(e) => setNextSteps(e.target.value)}
             />
           </div>
 
-          <label className="flex items-center gap-3 rounded-lg border p-4">
-            <input
-              type="checkbox"
-              name="approved"
-              defaultChecked={existing?.approved ?? true}
-              className="size-4 accent-[var(--neuma-coral)]"
-            />
-            <span className="text-sm">
-              Aprovar e avancar o aluno para o bloco seguinte
-            </span>
-          </label>
-
-          <Button type="submit">Enviar feedback</Button>
+          <SubmitButtons />
         </form>
       </Card>
     </div>

@@ -22,9 +22,5 @@ export default async function Home() {
     redirect("/studio");
   }
 
-  if (!profile?.onboarding_completed) {
-    redirect("/onboarding");
-  }
-
-  redirect("/path");
+  redirect("/home");
 }

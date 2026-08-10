@@ -40,6 +40,6 @@ export function appUrl(path: string) {
     process.env.NEXT_PUBLIC_SITE_URL ??
     (process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
-      : "http://localhost:3000");
+      : "http://localhost:3001");
   return `${base.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
 }

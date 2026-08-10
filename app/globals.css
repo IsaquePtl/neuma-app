@@ -3,8 +3,10 @@
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant desktop (@media (min-width: 850px));
 
 @theme inline {
+  --breakpoint-lg: 53.125rem; /* 850px — sidebar / desktop shell */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
@@ -141,19 +143,28 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
   }
   html {
     @apply font-sans;
-    /* Mesma base do app — evita “faixa preta” no overscroll / chrome iOS */
     background-color: var(--background);
     min-height: 100%;
     min-height: 100dvh;
+    min-height: -webkit-fill-available;
   }
   body {
     @apply bg-transparent text-foreground;
     font-family: var(--font-sans);
     min-height: 100%;
     min-height: 100dvh;
+    min-height: -webkit-fill-available;
+    overscroll-behavior-y: none;
   }
   h1,
   h2,
@@ -206,18 +217,97 @@
       0 1px 0 0 oklch(1 0 0 / 8%) inset,
       0 20px 50px -20px oklch(0 0 0 / 80%);
   }
+
+  /* Drawer mobile: mais opaco + blur forte para o texto dos itens não competir com o fundo */
+  .mentor-mobile-drawer-panel {
+    background: oklch(0.16 0.012 265 / 92%);
+    backdrop-filter: blur(48px) saturate(180%);
+    -webkit-backdrop-filter: blur(48px) saturate(180%);
+    border: 1px solid oklch(1 0 0 / 12%);
+    box-shadow:
+      0 1px 0 0 oklch(1 0 0 / 6%) inset,
+      0 24px 60px -30px oklch(0 0 0 / 85%);
+  }
+
+  /* Percurso do aluno — mapa de níveis (não cards genéricos) */
+  .student-path-step {
+    border-radius: 1.25rem;
+    padding: 0.85rem 1rem;
+    transition:
+      background-color 200ms ease,
+      box-shadow 200ms ease,
+      transform 200ms ease;
+  }
+  .student-path-step--active {
+    background:
+      linear-gradient(
+        135deg,
+        color-mix(in oklch, var(--neuma-coral) 18%, transparent),
+        color-mix(in oklch, var(--neuma-blue) 14%, transparent)
+      ),
+      oklch(0.18 0.012 265 / 55%);
+    border: 1px solid oklch(1 0 0 / 12%);
+    box-shadow:
+      0 1px 0 0 oklch(1 0 0 / 6%) inset,
+      0 18px 40px -28px oklch(0 0 0 / 70%);
+  }
+  a:hover .student-path-step--active {
+    transform: translateY(-1px);
+    box-shadow:
+      0 1px 0 0 oklch(1 0 0 / 8%) inset,
+      0 22px 48px -24px color-mix(in oklch, var(--neuma-coral) 35%, transparent);
+  }
+  .student-path-step--done {
+    background:
+      linear-gradient(
+        135deg,
+        color-mix(in oklch, var(--neuma-coral) 8%, transparent),
+        color-mix(in oklch, var(--neuma-blue) 5%, transparent)
+      ),
+      oklch(0.18 0.012 265 / 28%);
+    border: 1px solid oklch(1 0 0 / 6%);
+    opacity: 0.75;
+  }
+  a:hover .student-path-step--done {
+    opacity: 0.92;
+    border-color: oklch(1 0 0 / 10%);
+  }
+  .student-path-step--locked {
+    background: transparent;
+    border: 1px dashed oklch(1 0 0 / 8%);
+  }
+  .student-path-marker {
+    flex-shrink: 0;
+  }
 }
 
 /* ---- Camadas de fundo (gradientes + textura neumas) ---- */
+/* Cal.com embed: dark; altura gerida pelo Cal (não forçar height) */
+cal-modal-box,
+.cal-modal-box,
+cal-inline,
+.cal-inline,
+.cal-embed-frame {
+  color-scheme: dark;
+}
+cal-modal-box iframe,
+.cal-modal-box iframe,
+cal-inline iframe,
+.cal-inline iframe,
+.cal-embed-frame iframe {
+  color-scheme: dark !important;
+  background: transparent !important;
+}
+
 .neuma-bg {
   position: fixed;
-  z-index: -10;
+  z-index: 0;
   pointer-events: none;
-  /* Estende para alem do viewport: rubber-band + barra do Chrome a crescer no topo */
-  top: -50vh;
-  right: -20vw;
-  bottom: -50vh;
-  left: -20vw;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
   background-color: var(--background);
 }
 .neuma-bg::before {
@@ -266,21 +356,34 @@
   opacity: 0.9;
 }
 
-/* safe-area para bottom nav flutuante em iOS */
+/* safe-area helpers (conteúdo / sheets — não a menubar flutuante) */
 .pb-safe {
   padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
 }
 .bottom-safe {
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
+  /* Mesma lógica da menubar: gap fixo ao fundo físico */
+  bottom: 0.5rem;
 }
 
-/* Menubar mobile estilo Instagram — inset igual em baixo / lados */
+/*
+ * Menubar flutuante — gap FIXO ao limite físico do ecrã.
+ *
+ * Não somamos safe-area-inset-bottom ao bottom: no iPhone isso criava um
+ * “vão” enorme (~34px home indicator + 8px) vs desktop/Cursor (~8px).
+ * O pill fica 8px acima da borda inferior real em qualquer device.
+ * Lados: safe-area horizontal (landscape / notch lateral) + o mesmo gap.
+ */
 .mobile-menubar {
-  --menubar-inset: 12px;
-  left: calc(env(safe-area-inset-left, 0px) + var(--menubar-inset));
-  right: calc(env(safe-area-inset-right, 0px) + var(--menubar-inset));
-  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--menubar-inset));
+  --menubar-gap: 14px;
+  position: fixed;
+  z-index: 40;
+  left: calc(env(safe-area-inset-left, 0px) + var(--menubar-gap));
+  right: calc(env(safe-area-inset-right, 0px) + var(--menubar-gap));
+  bottom: var(--menubar-gap);
+  width: auto;
+  margin: 0;
   transform-origin: bottom center;
+  padding: 0;
 }
 
 /* ---- Animacoes ---- */
@@ -348,4 +451,24 @@
 }
 .delay-3 {
   animation-delay: 0.9s;
+}
+
+/* Cal.com embed — viewport compacto */
+.cal-embed-frame--compact {
+  height: min(52dvh, 26rem);
+  max-height: 52dvh;
+}
+@media (min-width: 850px) {
+  .cal-embed-frame--compact {
+    height: min(56dvh, 32rem);
+    max-height: 56dvh;
+  }
+}
+.cal-embed-frame--compact .cal-inline-container,
+.cal-embed-frame--compact cal-inline,
+.cal-embed-frame--compact iframe {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 100% !important;
+  min-height: 100%;
 }

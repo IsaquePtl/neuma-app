@@ -24,10 +24,11 @@ export function SplashScreen() {
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex items-center justify-center bg-background transition-opacity duration-[1200ms] ${
-        leaving ? "opacity-0" : "opacity-100"
+      className={`fixed inset-0 z-[100] flex h-dvh max-h-dvh w-full items-center justify-center overflow-hidden bg-background transition-opacity duration-[1200ms] ${
+        leaving ? "pointer-events-none opacity-0" : "opacity-100"
       }`}
     >
+      {/* Mesmo fundo da app — absolute para não escapar do stacking do splash */}
       <div aria-hidden className="neuma-bg !absolute !inset-0 !z-0" />
       <div className="relative z-10 flex flex-col items-center gap-6">
         <Image

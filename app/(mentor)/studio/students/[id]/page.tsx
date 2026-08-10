@@ -1,7 +1,20 @@
-import { notFound } from "next/navigation";
-
 import { createClient } from "@/lib/supabase/server";
-import { StudentHub } from "@/components/student-hub";
+
+import { StudentPanorama } from "@/components/student-panorama";
+import { StudentShell } from "@/components/student-shell";
+import {
+  formatTallyAnswerText,
+  resolveTallyAnswers,
+} from "@/components/tally-answers";
+import {
+  loadStudentCounts,
+  loadStudentOrThrow,
+  loadStudentPath,
+  mapPath,
+  type StudentCheckIn,
+  type StudentFormBlock,
+  type StudentNode,
+} from "@/lib/students/queries";
 
 export default async function StudentDetailPage({
   params,
@@ -9,58 +22,108 @@ export default async function StudentDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const student = await loadStudentOrThrow(id);
+  const rawPath = await loadStudentPath(id);
+  const path = rawPath ? mapPath(rawPath) : null;
+  const counts = await loadStudentCounts(id, path?.id ?? null);
   const supabase = await createClient();
 
-  const [
-    { data: student },
-    { data: path },
-    { data: checkIns },
-    { data: formResponses },
-    { count: pendingCount },
-  ] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select(
-        "id, full_name, email, onboarding_completed, internal_notes, created_at",
-      )
-      .eq("id", id)
-      .single(),
-    supabase
-      .from("paths")
-      .select("*")
-      .eq("student_id", id)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("check_ins")
-      .select("id, status, kind, created_at, notes, node:nodes(title)")
-      .eq("student_id", id)
-      .order("created_at", { ascending: false })
-      .limit(40),
-    supabase
-      .from("form_responses")
-      .select(
-        "id, answers, created_at, form:forms(title, is_onboarding), form_id",
-      )
-      .eq("student_id", id)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("check_ins")
-      .select("id", { count: "exact", head: true })
-      .eq("student_id", id)
-      .eq("status", "pending"),
-  ]);
+  const [{ data: nodes }, { data: checkIns }, { data: formResponses }, { data: drafts }, { data: tallyRows }, { data: readyTemplatesRaw }, { data: libraryAssets }, { data: libraryCategories }, { data: libraryTopics }] =
+    await Promise.all([
+      path
+        ? supabase
+            .from("nodes")
+            .select("*")
+            .eq("path_id", path.id)
+            .order("order_index", { ascending: true })
+        : Promise.resolve({ data: [] as never[] }),
+      supabase
+        .from("check_ins")
+        .select(
+          "id, status, kind, created_at, notes, video_url, ai_summary, node:nodes(title), feedback:feedbacks(approved, notes, next_steps)",
+        )
+        .eq("student_id", id)
+        .order("created_at", { ascending: false })
+        .limit(60),
+      supabase
+        .from("form_responses")
+        .select(
+          "id, answers, created_at, form_id, form:forms(title, description, is_onboarding)",
+        )
+        .eq("student_id", id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("feedback_drafts")
+        .select("check_in_id, status")
+        .eq("status", "pending_review"),
+      supabase
+        .from("tally_submissions")
+        .select(
+          "id, submission_kind, source_form_name, created_at, answers, payload, status",
+        )
+        .eq("student_id", id)
+        .order("created_at", { ascending: false })
+        .limit(40),
+      supabase
+        .from("path_templates")
+        .select(
+          "id, title, description, goal, duration_label, path_template_nodes(count)",
+        )
+        .eq("status", "ready")
+        .order("title", { ascending: true }),
+      supabase
+        .from("library_assets")
+        .select("id, title, kind, usage, topic_id, url, body, tags")
+        .is("archived_at", null)
+        .order("title", { ascending: true }),
+      supabase
+        .from("library_categories")
+        .select("id, name")
+        .order("sort_index", { ascending: true }),
+      supabase
+        .from("library_topics")
+        .select("id, category_id, name")
+        .order("sort_index", { ascending: true }),
+    ]);
 
-  if (!student) notFound();
+  const checkInIdsForDrafts = (checkIns ?? []).map((c) => c.id);
+  const draftCheckIns = new Set(
+    (drafts ?? [])
+      .filter((d) => checkInIdsForDrafts.includes(d.check_in_id))
+      .map((d) => d.check_in_id),
+  );
 
-  const { data: nodes } = path
-    ? await supabase
-        .from("nodes")
-        .select("*")
-        .eq("path_id", path.id)
-        .order("order_index", { ascending: true })
-    : { data: null };
+  const mappedNodes: StudentNode[] = (nodes ?? []).map((n) => ({
+    id: n.id,
+    title: n.title,
+    description: n.description,
+    week_number: n.week_number,
+    kind: n.kind,
+    status: n.status,
+    due_date: n.due_date,
+    resource_url: n.resource_url,
+    content_body: n.content_body ?? null,
+    order_index: n.order_index,
+  }));
+
+  const mappedCheckIns: StudentCheckIn[] = (checkIns ?? []).map((c) => {
+    const node = Array.isArray(c.node) ? c.node[0] : c.node;
+    const feedback = Array.isArray(c.feedback) ? c.feedback[0] : c.feedback;
+    return {
+      id: c.id,
+      status: c.status,
+      kind: c.kind,
+      created_at: c.created_at,
+      notes: c.notes,
+      video_url: c.video_url,
+      ai_summary: c.ai_summary,
+      node_title: node?.title ?? null,
+      feedback_approved: feedback?.approved ?? null,
+      feedback_notes: feedback?.notes ?? null,
+      feedback_next_steps: feedback?.next_steps ?? null,
+      has_draft: draftCheckIns.has(c.id),
+    };
+  });
 
   const formIds = [
     ...new Set((formResponses ?? []).map((r) => r.form_id).filter(Boolean)),
@@ -81,7 +144,7 @@ export default async function StudentDetailPage({
     questionsByForm.set(q.form_id, list);
   });
 
-  const formBlocks = (formResponses ?? []).map((r) => {
+  const formBlocks: StudentFormBlock[] = (formResponses ?? []).map((r) => {
     const form = Array.isArray(r.form) ? r.form[0] : r.form;
     const qs = questionsByForm.get(r.form_id) ?? [];
     const answers =
@@ -90,7 +153,9 @@ export default async function StudentDetailPage({
         : {};
     return {
       id: r.id,
-      form_title: form?.title ?? "Formulario",
+      form_id: r.form_id,
+      form_title: form?.title ?? "Formulário",
+      form_description: form?.description ?? null,
       is_onboarding: Boolean(form?.is_onboarding),
       created_at: r.created_at,
       pairs: qs.map((q) => {
@@ -103,54 +168,71 @@ export default async function StudentDetailPage({
     };
   });
 
+  const tallyBlocks: StudentFormBlock[] = (tallyRows ?? []).map((row) => {
+    const answers = resolveTallyAnswers(row.answers, row.payload);
+    return {
+      id: row.id,
+      form_id: row.id,
+      form_title: row.source_form_name ?? "Submissão",
+      form_description: null,
+      is_onboarding: row.submission_kind === "onboarding",
+      created_at: row.created_at,
+      pairs: answers.map((answer) => ({
+        label: answer.label ?? answer.key ?? "Campo",
+        value: formatTallyAnswerText(answer),
+      })),
+    };
+  });
+
+  const mergedBlocks = [...tallyBlocks, ...formBlocks].sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+
+  const readyTemplates = (readyTemplatesRaw ?? []).map((t) => {
+    const countRaw = t.path_template_nodes;
+    const node_count = Array.isArray(countRaw)
+      ? (countRaw[0] as { count?: number })?.count ?? 0
+      : ((countRaw as { count?: number } | null)?.count ?? 0);
+    return {
+      id: t.id,
+      title: t.title,
+      description: t.description,
+      goal: t.goal,
+      duration_label: t.duration_label,
+      node_count,
+    };
+  });
+
+  const pickerAssets = (libraryAssets ?? []).map((a) => ({
+    id: a.id,
+    title: a.title,
+    kind: a.kind,
+    usage: a.usage,
+    topic_id: a.topic_id,
+    url: a.url,
+    tags: a.tags ?? [],
+  }));
+
   return (
-    <StudentHub
-      student={{
-        id: student.id,
-        full_name: student.full_name,
-        email: student.email,
-        onboarding_completed: student.onboarding_completed,
-        internal_notes: student.internal_notes,
-        created_at: student.created_at,
-      }}
-      path={
-        path
-          ? {
-              id: path.id,
-              title: path.title,
-              description: path.description,
-              goal: path.goal,
-              duration_label: path.duration_label,
-              start_date: path.start_date,
-              end_date: path.end_date,
-              status: path.status,
-            }
-          : null
-      }
-      nodes={(nodes ?? []).map((n) => ({
-        id: n.id,
-        title: n.title,
-        description: n.description,
-        week_number: n.week_number,
-        kind: n.kind,
-        status: n.status,
-        due_date: n.due_date,
-        resource_url: n.resource_url,
-        order_index: n.order_index,
-      }))}
-      checkIns={(checkIns ?? []).map((c) => {
-        const node = Array.isArray(c.node) ? c.node[0] : c.node;
-        return {
-          id: c.id,
-          status: c.status,
-          kind: c.kind,
-          created_at: c.created_at,
-          notes: c.notes,
-          node_title: node?.title ?? null,
-        };
-      })}
-      formBlocks={formBlocks}
-      pendingCount={pendingCount ?? 0}
-    />
+    <StudentShell
+      student={student}
+      counts={counts}
+      pathTitle={path?.title}
+      pathStatus={path?.status}
+    >
+      <StudentPanorama
+        student={student}
+        path={path}
+        nodes={mappedNodes}
+        checkIns={mappedCheckIns}
+        formBlocks={mergedBlocks}
+        pendingCount={counts.pendingCheckIns}
+        readyTemplates={readyTemplates}
+        libraryCategories={libraryCategories ?? []}
+        libraryTopics={libraryTopics ?? []}
+        libraryAssets={pickerAssets}
+      />
+    </StudentShell>
   );
 }

@@ -8,7 +8,7 @@ export default async function StudentSettingsPage() {
   } = await supabase.auth.getUser();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, email")
+    .select("full_name, email, avatar_url, bio")
     .eq("id", user!.id)
     .single();
 
@@ -17,6 +17,8 @@ export default async function StudentSettingsPage() {
       name={profile?.full_name ?? null}
       email={profile?.email ?? user!.email ?? ""}
       role="student"
+      avatarUrl={profile?.avatar_url}
+      bio={profile?.bio}
     />
   );
 }

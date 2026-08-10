@@ -19,7 +19,10 @@ async function mentorClient() {
   return supabase;
 }
 
-export async function rejectFeedbackDraft(draftId: string) {
+export async function rejectFeedbackDraft(
+  draftId: string,
+  checkInId?: string,
+) {
   const supabase = await mentorClient();
   await supabase
     .from("feedback_drafts")
@@ -28,5 +31,10 @@ export async function rejectFeedbackDraft(draftId: string) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", draftId);
-  revalidatePath("/studio/checkins");
+
+  revalidatePath("/studio/journeys");
+  revalidatePath("/studio/journeys/checkins");
+  revalidatePath("/studio/journeys/onboardings");
+  revalidatePath("/studio");
+  if (checkInId) revalidatePath(`/studio/checkins/${checkInId}`);
 }

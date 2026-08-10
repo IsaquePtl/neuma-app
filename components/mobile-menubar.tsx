@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { usePathname } from "next/navigation";
 
+import { UserAvatar } from "@/components/user-avatar";
 import { cn } from "@/lib/utils";
 
 export type MobileNavItem = {
@@ -12,14 +13,19 @@ export type MobileNavItem = {
   href: string;
   match: (path: string) => boolean;
   icon?: LucideIcon;
-  profileInitials?: string;
+  profileAvatarUrl?: string | null;
+  profileName?: string | null;
+  profileEmail?: string | null;
   badge?: number;
 };
 
 type MobileMenubarProps = {
   items: MobileNavItem[];
-  onNavigate: () => void;
+  onNavigate: (href?: string) => void;
   compact: boolean;
+  pending?: boolean;
+  /** Quando true, a barra desliza para baixo e sai (ex.: drawer aberto). */
+  hidden?: boolean;
 };
 
 /** Padding interno do track (p-2 = 8px). */
@@ -32,10 +38,20 @@ function indexFromPath(items: MobileNavItem[], pathname: string) {
   return i >= 0 ? i : 0;
 }
 
+function isProfileItem(item: MobileNavItem) {
+  return Boolean(
+    item.profileAvatarUrl !== undefined ||
+      item.profileName !== undefined ||
+      item.profileEmail !== undefined,
+  );
+}
+
 export function MobileMenubar({
   items,
   onNavigate,
   compact,
+  pending = false,
+  hidden = false,
 }: MobileMenubarProps) {
   const pathname = usePathname();
   const count = Math.max(items.length, 1);
@@ -50,10 +66,16 @@ export function MobileMenubar({
   return (
     <nav
       aria-label="Navegacao principal"
+      aria-busy={pending || undefined}
+      aria-hidden={hidden || undefined}
       className={cn(
-        "mobile-menubar fixed z-40 lg:hidden",
-        "origin-bottom transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform",
-        compact ? "scale-[0.86]" : "scale-100",
+        "mobile-menubar desktop:hidden",
+        "transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform",
+        hidden
+          ? "pointer-events-none translate-y-[calc(100%+1.5rem)] scale-95 opacity-0"
+          : compact
+            ? "translate-y-0 scale-[0.86] opacity-100"
+            : "translate-y-0 scale-100 opacity-100",
       )}
     >
       <div className="glass-nav relative flex w-full items-center rounded-full p-2">
@@ -61,7 +83,6 @@ export function MobileMenubar({
           aria-hidden
           className="pointer-events-none absolute top-2 bottom-2 rounded-full neuma-gradient shadow-lg transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
           style={{
-            // Inset simétrico: metade à esquerda, metade à direita do slot
             left: PAD + PILL_INSET / 2,
             width: `calc((100% - ${PAD * 2}px) / ${count} - ${PILL_INSET}px)`,
             transform: `translate3d(calc(${activeIndex} * (100% + ${PILL_INSET}px)), 0, 0)`,
@@ -71,32 +92,32 @@ export function MobileMenubar({
         {items.map((item, i) => {
           const active = i === activeIndex;
           const Icon = item.icon;
+          const profile = isProfileItem(item);
           return (
             <Link
               key={item.href}
               href={item.href}
+              prefetch
               aria-label={item.label}
               aria-current={active ? "page" : undefined}
-              onClick={() => {
+              onClick={(e) => {
+                e.preventDefault();
                 setActiveIndex(i);
-                onNavigate();
+                onNavigate(item.href);
               }}
               className={cn(
                 "relative z-10 grid h-14 min-w-0 flex-1 place-items-center rounded-full transition-colors duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
                 active ? "text-white" : "text-muted-foreground",
               )}
             >
-              {item.profileInitials ? (
-                <span
-                  className={cn(
-                    "grid size-8 place-items-center rounded-full text-xs font-semibold",
-                    active
-                      ? "bg-white/20 text-white"
-                      : "bg-gradient-to-br from-[var(--neuma-coral)] to-[var(--neuma-blue)] text-white",
-                  )}
-                >
-                  {item.profileInitials}
-                </span>
+              {profile ? (
+                <UserAvatar
+                  name={item.profileName}
+                  email={item.profileEmail}
+                  avatarUrl={item.profileAvatarUrl}
+                  size="sm"
+                  className={cn(active && "ring-2 ring-white/35")}
+                />
               ) : Icon ? (
                 <span className="relative">
                   <Icon className="size-6" />

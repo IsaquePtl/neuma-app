@@ -1,5 +1,6 @@
 import "server-only";
 
+import { revalidatePath } from "next/cache";
 import { generateObject, generateText } from "ai";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
@@ -103,6 +104,12 @@ Gera um rascunho de resposta e um resumo curto para o mentor.`,
       },
       { onConflict: "check_in_id" },
     );
+
+    revalidatePath("/studio/journeys");
+  revalidatePath("/studio/journeys/checkins");
+  revalidatePath("/studio/journeys/onboardings");
+    revalidatePath(`/studio/checkins/${checkInId}`);
+    revalidatePath("/studio");
   } catch (err) {
     console.error("[ai:draft]", err);
     // Fallback minimo sem schema se generateObject falhar
@@ -115,6 +122,11 @@ Gera um rascunho de resposta e um resumo curto para o mentor.`,
         .from("check_ins")
         .update({ ai_summary: text })
         .eq("id", checkInId);
+      revalidatePath("/studio/journeys");
+  revalidatePath("/studio/journeys/checkins");
+  revalidatePath("/studio/journeys/onboardings");
+      revalidatePath(`/studio/checkins/${checkInId}`);
+      revalidatePath("/studio");
     } catch {
       /* ignore */
     }

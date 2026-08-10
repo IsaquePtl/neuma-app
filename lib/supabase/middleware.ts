@@ -3,7 +3,14 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import type { Database } from "@/lib/types/database.types";
 
-const PUBLIC_PATHS = ["/", "/login", "/login/forgot", "/login/update-password"];
+const PUBLIC_PATHS = [
+  "/",
+  "/login",
+  "/login/forgot",
+  "/login/update-password",
+  "/api/tally/webhook",
+  "/api/cal/webhook",
+];
 
 export async function updateSession(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -44,6 +51,7 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isPublic =
     PUBLIC_PATHS.includes(path) ||
+    path.startsWith("/api/tally/") ||
     path.startsWith("/login/") ||
     path.startsWith("/auth/");
 

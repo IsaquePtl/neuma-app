@@ -53,6 +53,7 @@ function trimBuffer(
 
 export function Metronome() {
   const [bpm, setBpm] = useState(90);
+  const [bpmDraft, setBpmDraft] = useState("90");
   const [beats, setBeats] = useState(4);
   const [playing, setPlaying] = useState(false);
   const [currentBeat, setCurrentBeat] = useState(-1);
@@ -75,6 +76,7 @@ export function Metronome() {
 
   useEffect(() => {
     bpmRef.current = bpm;
+    setBpmDraft(String(bpm));
   }, [bpm]);
   useEffect(() => {
     beatsRef.current = beats;
@@ -211,11 +213,29 @@ export function Metronome() {
   }
 
   const clampBpm = (v: number) => Math.min(MAX_BPM, Math.max(MIN_BPM, v));
+
+  function updateBpm(next: number) {
+    setBpm(clampBpm(next));
+  }
+
+  function onBpmDraftChange(raw: string) {
+    const digits = raw.replace(/\D/g, "").slice(0, 3);
+    setBpmDraft(digits);
+  }
+
+  function commitBpmDraft() {
+    if (!bpmDraft) {
+      setBpmDraft(String(bpm));
+      return;
+    }
+    updateBpm(Number(bpmDraft));
+  }
+
   const timeSignature =
     TIME_SIGNATURES.find((ts) => ts.beats === beats) ?? TIME_SIGNATURES[2];
 
   return (
-    <div className="mx-auto flex max-w-md flex-col items-center gap-8 rounded-2xl border bg-card p-8">
+    <div className="flex w-full flex-col items-center gap-8 rounded-2xl border bg-card p-8">
       {/* Indicador de batidas */}
       <div className="flex items-center gap-3">
         {Array.from({ length: beats }).map((_, i) => (
@@ -239,15 +259,27 @@ export function Metronome() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => setBpm((v) => clampBpm(v - 1))}
+            onClick={() => updateBpm(bpm - 1)}
             aria-label="Diminuir BPM"
           >
             <Minus className="size-4" />
           </Button>
           <div className="flex flex-col items-center">
-            <span className="font-heading text-6xl font-semibold tabular-nums">
-              {bpm}
-            </span>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              aria-label="BPM"
+              value={bpmDraft}
+              onChange={(e) => onBpmDraftChange(e.target.value)}
+              onBlur={commitBpmDraft}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.currentTarget.blur();
+                }
+              }}
+              className="font-heading min-w-[3.2ch] max-w-[4.5ch] bg-transparent text-center text-6xl font-semibold tabular-nums outline-none selection:bg-white/20"
+            />
             <span className="text-xs uppercase tracking-widest text-muted-foreground">
               BPM
             </span>
@@ -255,7 +287,7 @@ export function Metronome() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => setBpm((v) => clampBpm(v + 1))}
+            onClick={() => updateBpm(bpm + 1)}
             aria-label="Aumentar BPM"
           >
             <Plus className="size-4" />
@@ -268,19 +300,23 @@ export function Metronome() {
         min={MIN_BPM}
         max={MAX_BPM}
         step={1}
-        onValueChange={(v) => setBpm(Array.isArray(v) ? v[0] : v)}
+        onValueChange={(v) => updateBpm(Array.isArray(v) ? v[0] : v)}
         className="w-full"
       />
 
       <div className="flex w-full items-center justify-center gap-3">
         <Select
           value={timeSignature.label}
+          disabled={!accentEnabled}
           onValueChange={(v) => {
             const next = TIME_SIGNATURES.find((ts) => ts.label === v);
             if (next) setBeats(next.beats);
           }}
         >
-          <SelectTrigger className="size-14 justify-center rounded-full p-0 *:data-[slot=select-value]:justify-center *:data-[slot=select-value]:text-center [&_svg]:hidden">
+          <SelectTrigger
+            disabled={!accentEnabled}
+            className="size-14 justify-center rounded-full p-0 *:data-[slot=select-value]:justify-center *:data-[slot=select-value]:text-center [&_svg]:hidden"
+          >
             <SelectValue>{timeSignature.label}</SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -296,7 +332,7 @@ export function Metronome() {
           type="button"
           onClick={() => setAccentEnabled((v) => !v)}
           aria-label={
-            accentEnabled ? "Desligar acentuacao" : "Ligar acentuacao"
+            accentEnabled ? "Desligar acentuação" : "Ligar acentuação"
           }
           aria-pressed={accentEnabled}
           className={cn(

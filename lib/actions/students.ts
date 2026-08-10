@@ -19,10 +19,17 @@ async function requireMentor() {
   return supabase;
 }
 
+function revalidateStudentHub(studentId: string) {
+  revalidatePath(`/studio/students/${studentId}`);
+  revalidatePath(`/studio/students/${studentId}/checkins`);
+  revalidatePath("/studio/students");
+}
+
 export async function updateStudentNotes(formData: FormData) {
   const supabase = await requireMentor();
   const studentId = formData.get("student_id") as string;
-  const notes = ((formData.get("internal_notes") as string) || "").trim() || null;
+  const notes =
+    ((formData.get("internal_notes") as string) || "").trim() || null;
 
   await supabase
     .from("profiles")
@@ -30,13 +37,14 @@ export async function updateStudentNotes(formData: FormData) {
     .eq("id", studentId)
     .eq("role", "student");
 
-  revalidatePath(`/studio/students/${studentId}`);
+  revalidateStudentHub(studentId);
 }
 
 export async function updateStudentProfile(formData: FormData) {
   const supabase = await requireMentor();
   const studentId = formData.get("student_id") as string;
-  const fullName = ((formData.get("full_name") as string) || "").trim() || null;
+  const fullName =
+    ((formData.get("full_name") as string) || "").trim() || null;
 
   await supabase
     .from("profiles")
@@ -44,6 +52,19 @@ export async function updateStudentProfile(formData: FormData) {
     .eq("id", studentId)
     .eq("role", "student");
 
-  revalidatePath(`/studio/students/${studentId}`);
-  revalidatePath("/studio/students");
+  revalidateStudentHub(studentId);
+}
+
+export async function setStudentOnboarding(formData: FormData) {
+  const supabase = await requireMentor();
+  const studentId = formData.get("student_id") as string;
+  const completed = formData.get("onboarding_completed") === "on";
+
+  await supabase
+    .from("profiles")
+    .update({ onboarding_completed: completed })
+    .eq("id", studentId)
+    .eq("role", "student");
+
+  revalidateStudentHub(studentId);
 }

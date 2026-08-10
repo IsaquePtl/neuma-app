@@ -1,192 +1,271 @@
 "use client";
 
-import { useTransition } from "react";
-import { Check, LogOut, Palette, User2, BadgeCheck, Link2, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import Image from "next/image";
+import { Camera, LogOut } from "lucide-react";
 import { toast } from "sonner";
 
-import { updateProfile } from "@/lib/actions/profile";
+import {
+  updateProfile,
+  uploadAvatar,
+  requestEmailChange,
+} from "@/lib/actions/profile";
 import { logout } from "@/lib/actions/auth";
-import { ACCENTS, type AccentKey, useAccent } from "@/components/accent-provider";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { profileInitials } from "@/components/user-avatar";
 
 export function SettingsView({
   name,
   email,
   role,
-  calUsername,
-  mentorStyleNotes,
+  avatarUrl,
+  bio,
 }: {
   name: string | null;
   email: string;
   role: "mentor" | "student";
-  calUsername?: string | null;
-  mentorStyleNotes?: string | null;
+  avatarUrl?: string | null;
+  bio?: string | null;
 }) {
-  const { accent, setAccent } = useAccent();
   const [pending, startTransition] = useTransition();
+  const [avatarPending, startAvatarTransition] = useTransition();
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [savedBio, setSavedBio] = useState(bio ?? "");
+  const [draftBio, setDraftBio] = useState(bio ?? "");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function onSave(e: React.FormEvent<HTMLFormElement>) {
+  const displayAvatar = previewUrl ?? avatarUrl;
+  const initials = profileInitials(name, email);
+  const bioDirty = draftBio.trim() !== savedBio.trim();
+
+  function showStatus(message: string) {
+    setStatus(message);
+    if (statusTimer.current) clearTimeout(statusTimer.current);
+    statusTimer.current = setTimeout(() => setStatus(null), 2800);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (statusTimer.current) clearTimeout(statusTimer.current);
+    };
+  }, []);
+
+  function onSaveBio(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!bioDirty) return;
     const fd = new FormData(e.currentTarget);
     startTransition(async () => {
-      await updateProfile(fd);
-      toast.success("Perfil atualizado");
+      try {
+        await updateProfile(fd);
+        const next = draftBio.trim();
+        setSavedBio(next);
+        setDraftBio(next);
+        showStatus("Perfil atualizado!");
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Não foi possível guardar",
+        );
+      }
     });
   }
 
-  const initials = (name ?? email).slice(0, 2).toUpperCase();
+  function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const local = URL.createObjectURL(file);
+    setPreviewUrl(local);
+    const fd = new FormData();
+    fd.set("avatar", file);
+    startAvatarTransition(async () => {
+      try {
+        await uploadAvatar(fd);
+        showStatus("Foto atualizada");
+      } catch (err) {
+        setPreviewUrl(null);
+        toast.error(
+          err instanceof Error ? err.message : "Não foi possível carregar a foto",
+        );
+      }
+    });
+  }
+
+  function onChangeEmail(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startTransition(async () => {
+      try {
+        const msg = await requestEmailChange(fd);
+        showStatus(msg);
+        setEmailOpen(false);
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Não foi possível alterar o email",
+        );
+      }
+    });
+  }
 
   return (
-    <div className="space-y-8">
-      <header className="space-y-2">
-        <p className="text-sm text-muted-foreground">Conta</p>
-        <h1 className="text-3xl font-semibold tracking-tight">Definicoes</h1>
+    <div className="mx-auto max-w-md space-y-8 pb-4">
+      <header className="space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight">Perfil</h1>
+        <p className="text-sm text-muted-foreground">
+          {role === "mentor" ? "A tua conta de mentor" : "A tua conta"}
+        </p>
       </header>
 
-      <Card className="neuma-accent-top overflow-hidden p-0">
-        <div className="relative flex items-center gap-4 p-6">
-          <div
-            aria-hidden
-            className="absolute inset-0 -z-10 opacity-40"
-            style={{
-              background:
-                "radial-gradient(120% 100% at 0% 0%, color-mix(in oklch, var(--primary) 30%, transparent), transparent 60%)",
-            }}
-          />
-          <span className="grid size-16 place-items-center rounded-2xl bg-gradient-to-br from-[var(--neuma-coral)] to-[var(--neuma-blue)] text-xl font-semibold text-white">
-            {initials}
+      <div className="space-y-5">
+      <div className="flex flex-col items-center gap-3">
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={avatarPending}
+          className="group relative"
+          aria-label="Alterar fotografia de perfil"
+        >
+          <span
+            className={cn(
+              "relative grid size-28 place-items-center overflow-hidden rounded-full",
+              "bg-gradient-to-br from-[var(--neuma-coral)] to-[var(--neuma-blue)]",
+              "ring-2 ring-white/10 transition-opacity group-hover:opacity-90",
+            )}
+          >
+            {displayAvatar ? (
+              <Image
+                src={displayAvatar}
+                alt=""
+                fill
+                className="object-cover"
+                sizes="112px"
+                unoptimized
+              />
+            ) : (
+              <span className="text-3xl font-semibold text-white">
+                {initials}
+              </span>
+            )}
           </span>
-          <div>
-            <p className="text-lg font-semibold">{name ?? "Sem nome"}</p>
-            <p className="text-sm text-muted-foreground">{email}</p>
-            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-white/8 px-2 py-0.5 text-xs">
-              <BadgeCheck className="size-3.5 text-primary" />
-              {role === "mentor" ? "Mentor" : "Aluno"}
-            </span>
-          </div>
-        </div>
-      </Card>
+          <span className="absolute bottom-0.5 right-0.5 grid size-9 place-items-center rounded-full bg-background/90 text-foreground ring-1 ring-white/15 backdrop-blur-sm">
+            <Camera className="size-4" />
+          </span>
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="sr-only"
+          onChange={onPickPhoto}
+        />
+        <p className="text-xs text-muted-foreground">
+          {avatarPending ? "A carregar foto…" : "Toca para alterar a fotografia"}
+        </p>
 
-      <Card className="space-y-4 p-6">
-        <h2 className="flex items-center gap-2 font-semibold">
-          <User2 className="size-4" /> Perfil
-        </h2>
-        <form onSubmit={onSave} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="full_name">Nome</Label>
-            <Input
-              id="full_name"
-              name="full_name"
-              defaultValue={name ?? ""}
-              placeholder="O teu nome"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Email</Label>
-            <Input value={email} disabled />
-          </div>
-
-          {role === "mentor" ? (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="cal_username" className="flex items-center gap-2">
-                  <Link2 className="size-3.5" /> Username Cal.com
-                </Label>
-                <Input
-                  id="cal_username"
-                  name="cal_username"
-                  defaultValue={calUsername ?? ""}
-                  placeholder="teu-username"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label
-                  htmlFor="mentor_style_notes"
-                  className="flex items-center gap-2"
-                >
-                  <Sparkles className="size-3.5" /> Estilo para o assistente IA
-                </Label>
-                <Textarea
-                  id="mentor_style_notes"
-                  name="mentor_style_notes"
-                  rows={4}
-                  defaultValue={mentorStyleNotes ?? ""}
-                  placeholder="Ex: tom direto, usa 'fixe', foca ritmo e musicalidade..."
-                />
-                <p className="text-xs text-muted-foreground">
-                  O agent usa isto para rascunhar feedbacks na tua voz.
-                </p>
-              </div>
-            </>
+        <div className="text-center">
+          <p className="text-xl font-semibold tracking-tight">
+            {name ?? "Sem nome"}
+          </p>
+          {status ? (
+            <p
+              aria-live="polite"
+              className="mt-1 text-[11px] leading-tight text-emerald-400/90"
+            >
+              {status}
+            </p>
           ) : null}
+        </div>
+      </div>
 
-          <Button type="submit" disabled={pending}>
-            {pending ? "A guardar..." : "Guardar"}
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <div className="flex items-end justify-between gap-2">
+            <Label htmlFor="email-display">Email</Label>
+            <button
+              type="button"
+              onClick={() => setEmailOpen((v) => !v)}
+              className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              Alterar email
+            </button>
+          </div>
+          <Input id="email-display" value={email} disabled readOnly />
+          {emailOpen ? (
+            <form
+              onSubmit={onChangeEmail}
+              className="space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-3"
+            >
+              <p className="text-xs text-muted-foreground">
+                Enviamos um link de confirmação para o novo endereço.
+              </p>
+              <Input
+                name="email"
+                type="email"
+                placeholder="novo@email.com"
+                required
+                autoComplete="email"
+              />
+              <div className="flex gap-2">
+                <Button type="submit" size="sm" disabled={pending}>
+                  Confirmar
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setEmailOpen(false)}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </form>
+          ) : null}
+        </div>
+
+        <form onSubmit={onSaveBio} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="bio">Bio</Label>
+            <Textarea
+              id="bio"
+              name="bio"
+              rows={4}
+              value={draftBio}
+              onChange={(e) => setDraftBio(e.target.value)}
+              placeholder="Uma linha sobre ti…"
+              maxLength={280}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Máx. 280 caracteres
+            </p>
+          </div>
+          <Button
+            type="submit"
+            disabled={pending || !bioDirty}
+            className="w-full sm:w-auto"
+          >
+            {pending ? "A guardar…" : "Guardar"}
           </Button>
         </form>
-      </Card>
+      </div>
+      </div>
 
-      <Card className="space-y-4 p-6">
-        <h2 className="flex items-center gap-2 font-semibold">
-          <Palette className="size-4" /> Cor de destaque
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Personaliza a tua Neuma. Fica guardado neste dispositivo.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          {(Object.keys(ACCENTS) as AccentKey[]).map((key) => {
-            const a = ACCENTS[key];
-            const isActive = accent === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setAccent(key)}
-                className="flex flex-col items-center gap-1.5 rounded-xl p-1 transition-transform hover:scale-105"
-                aria-label={a.label}
-              >
-                <span
-                  className={cn(
-                    "grid size-11 place-items-center rounded-full ring-2 ring-offset-2 ring-offset-background transition-all",
-                    isActive ? "ring-white/80" : "ring-transparent",
-                  )}
-                  style={{ backgroundColor: a.hex }}
-                >
-                  {isActive ? <Check className="size-5 text-white" /> : null}
-                </span>
-                <span className="text-xs text-muted-foreground">{a.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </Card>
-
-      {role === "student" ? (
-        <Card className="p-5">
-          <p className="text-sm text-muted-foreground">
-            Precisas do metrónomo? Abre{" "}
-            <a href="/tools" className="underline-offset-4 hover:underline">
-              Tools
-            </a>
-            .
-          </p>
-        </Card>
-      ) : null}
-
-      <form action={logout}>
-        <Button
-          type="submit"
-          variant="destructive"
-          className="w-full gap-2 sm:w-auto"
-        >
-          <LogOut className="size-4" /> Terminar sessao
-        </Button>
-      </form>
+      <div className="border-t border-white/10 pt-6">
+        <form action={logout}>
+          <Button
+            type="submit"
+            variant="ghost"
+            size="sm"
+            className="gap-2 text-muted-foreground hover:text-destructive"
+          >
+            <LogOut className="size-4" /> Terminar sessão
+          </Button>
+        </form>
+      </div>
     </div>
   );
 }

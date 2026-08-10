@@ -8,7 +8,7 @@ export default async function MentorSettingsPage() {
   } = await supabase.auth.getUser();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, email, cal_username, mentor_style_notes")
+    .select("full_name, email, avatar_url, bio")
     .eq("id", user!.id)
     .single();
 
@@ -17,8 +17,8 @@ export default async function MentorSettingsPage() {
       name={profile?.full_name ?? null}
       email={profile?.email ?? user!.email ?? ""}
       role="mentor"
-      calUsername={profile?.cal_username}
-      mentorStyleNotes={profile?.mentor_style_notes}
+      avatarUrl={profile?.avatar_url}
+      bio={profile?.bio}
     />
   );
 }

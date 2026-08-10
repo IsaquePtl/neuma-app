@@ -5,6 +5,12 @@ import { Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { createNode, updateNode } from "@/lib/actions/nodes";
+import {
+  LibraryAssetPicker,
+  type PickerAsset,
+  type PickerCategory,
+  type PickerTopic,
+} from "@/components/library-asset-picker";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,30 +35,58 @@ type NodeData = {
   status: NodeStatus;
   due_date: string | null;
   resource_url?: string | null;
+  content_body?: string | null;
 };
 
 const KIND_HINTS: Record<NodeKind, string> = {
-  practice: "Pratica / tarefa com check-in",
-  call: "Chamada 1:1 (Cal.com)",
-  milestone: "Marco / avaliacao",
-  resource: "Material para estudar",
+  practice: "Tarefa prática com check-in — só materiais de prática",
+  call: "Chamada 1:1 — aluno agenda no Cal.com",
+  milestone: "Marco / avaliação",
+  lesson: "Aula da biblioteca — categoria → tópico → aula",
+  resource: "Aula (legado)",
 };
+
+function normalizeKind(kind: NodeKind): NodeKind {
+  return kind === "resource" ? "lesson" : kind;
+}
 
 export function NodeDialog({
   pathId,
   node,
+  categories = [],
+  topics = [],
+  assets = [],
 }: {
   pathId: string;
   node?: NodeData;
+  categories?: PickerCategory[];
+  topics?: PickerTopic[];
+  assets?: PickerAsset[];
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [kind, setKind] = useState<NodeKind>(node?.kind ?? "practice");
+  const [kind, setKind] = useState<NodeKind>(
+    normalizeKind(node?.kind ?? "practice"),
+  );
+  const [title, setTitle] = useState(node?.title ?? "");
+  const [resourceUrl, setResourceUrl] = useState(node?.resource_url ?? "");
+  const [contentBody, setContentBody] = useState(node?.content_body ?? "");
+  const [pickedAssetId, setPickedAssetId] = useState("");
   const isEdit = Boolean(node);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    fd.set("kind", kind);
+    fd.set("title", title);
+    fd.set(
+      "resource_url",
+      kind === "lesson" || kind === "practice" ? resourceUrl : "",
+    );
+    fd.set(
+      "content_body",
+      kind === "lesson" || kind === "practice" ? contentBody : "",
+    );
     startTransition(async () => {
       try {
         if (isEdit) await updateNode(fd);
@@ -70,7 +104,13 @@ export function NodeDialog({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (next) setKind(node?.kind ?? "practice");
+        if (next) {
+          setKind(normalizeKind(node?.kind ?? "practice"));
+          setTitle(node?.title ?? "");
+          setResourceUrl(node?.resource_url ?? "");
+          setContentBody(node?.content_body ?? "");
+          setPickedAssetId("");
+        }
       }}
     >
       {isEdit ? (
@@ -83,15 +123,14 @@ export function NodeDialog({
         </DialogTrigger>
       ) : (
         <DialogTrigger render={<Button size="sm" className="gap-2" />}>
-          <Plus className="size-4" /> Adicionar bloco
+          <Plus className="size-4" /> Criar novo nível
         </DialogTrigger>
       )}
       <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Editar bloco" : "Novo bloco"}</DialogTitle>
           <DialogDescription>
-            Cada bloco e um passo do percurso — pratica, chamada, marco ou
-            recurso.
+            O tipo filtra o que podes ligar da biblioteca.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
@@ -99,12 +138,53 @@ export function NodeDialog({
           {node ? <input type="hidden" name="id" value={node.id} /> : null}
 
           <div className="space-y-2">
+            <Label htmlFor="node-kind">Tipo</Label>
+            <select
+              id="node-kind"
+              value={kind}
+              onChange={(e) => {
+                const next = e.target.value as NodeKind;
+                setKind(next);
+                setPickedAssetId("");
+                if (next === "call" || next === "milestone") {
+                  setResourceUrl("");
+                  setContentBody("");
+                }
+              }}
+              className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+            >
+              <option value="practice">Prática</option>
+              <option value="call">Chamada</option>
+              <option value="milestone">Marco</option>
+              <option value="lesson">Aula</option>
+            </select>
+            <p className="text-xs text-muted-foreground">{KIND_HINTS[kind]}</p>
+          </div>
+
+          <LibraryAssetPicker
+            nodeKind={kind}
+            categories={categories}
+            topics={topics}
+            assets={assets}
+            value={pickedAssetId}
+            onChange={(sel) => {
+              if (!sel) {
+                setPickedAssetId("");
+                return;
+              }
+              setPickedAssetId(sel.assetId);
+              if (sel.url) setResourceUrl(sel.url);
+              setContentBody(sel.body ?? "");
+              if (!title.trim()) setTitle(sel.title);
+            }}
+          />
+
+          <div className="space-y-2">
             <Label htmlFor="node-title">Titulo</Label>
             <Input
               id="node-title"
-              name="title"
-              defaultValue={node?.title ?? ""}
-              placeholder="Ex: Semana 1 — Acordes maiores"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
               required
               autoFocus
             />
@@ -116,42 +196,15 @@ export function NodeDialog({
               id="node-description"
               name="description"
               defaultValue={node?.description ?? ""}
-              placeholder="O que o aluno deve dominar / entregar neste bloco..."
               rows={4}
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="node-kind">Tipo</Label>
-            <select
-              id="node-kind"
-              name="kind"
-              value={kind}
-              onChange={(e) => setKind(e.target.value as NodeKind)}
-              className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
-            >
-              <option value="practice">Pratica</option>
-              <option value="call">Chamada</option>
-              <option value="milestone">Marco</option>
-              <option value="resource">Recurso</option>
-            </select>
-            <p className="text-xs text-muted-foreground">{KIND_HINTS[kind]}</p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="node-resource">
-              {kind === "call"
-                ? "Link da chamada (opcional)"
-                : "Link do recurso (opcional)"}
-            </Label>
-            <Input
-              id="node-resource"
-              name="resource_url"
-              type="url"
-              defaultValue={node?.resource_url ?? ""}
-              placeholder="https://..."
-            />
-          </div>
+          {(kind === "lesson" || kind === "practice") && resourceUrl ? (
+            <p className="truncate text-xs text-muted-foreground">
+              Link: {resourceUrl}
+            </p>
+          ) : null}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
@@ -162,7 +215,6 @@ export function NodeDialog({
                 type="number"
                 min={1}
                 defaultValue={node?.week_number ?? ""}
-                placeholder="1"
               />
             </div>
             <div className="space-y-2">
@@ -194,7 +246,7 @@ export function NodeDialog({
 
           <DialogFooter>
             <Button type="submit" disabled={pending} className="w-full sm:w-auto">
-              {pending ? "A guardar..." : isEdit ? "Guardar" : "Adicionar bloco"}
+              {pending ? "A guardar..." : isEdit ? "Guardar" : "Criar nível"}
             </Button>
           </DialogFooter>
         </form>
