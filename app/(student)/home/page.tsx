@@ -74,6 +74,10 @@ function todoTagLabel(key: string) {
   return "TAREFA";
 }
 
+/** Viewport sem scroll: header mobile + main pt + main pb (menubar). */
+const HOME_VIEWPORT =
+  "flex h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px)-1rem-5.75rem-14px)] flex-col gap-3 overflow-hidden desktop:h-auto desktop:min-h-0 desktop:overflow-visible desktop:pb-4";
+
 export default async function StudentHomePage() {
   const supabase = await createClient();
   const {
@@ -148,25 +152,25 @@ export default async function StudentHomePage() {
 
   if (!path) {
     return (
-      <div className="space-y-6 pb-4">
-        <div className="space-y-1">
+      <div className={HOME_VIEWPORT}>
+        <div className="shrink-0 space-y-0.5">
           <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
             Geral
           </p>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
             Bem vindo, {studentName}
           </h1>
         </div>
 
-        <Card className="neuma-accent-top space-y-3 rounded-3xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
-            O que tens a fazer
+        <Card className="neuma-accent-top flex min-h-0 flex-1 flex-col gap-2 rounded-3xl border border-white/10 bg-white/[0.03] p-3">
+          <p className="shrink-0 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+            To do list
           </p>
-          <ul className="space-y-2">
+          <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
             <li>
               <Link
                 href="/session#agenda"
-                className="group flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm font-medium hover:bg-card/80"
+                className="group flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-medium hover:bg-white/[0.06]"
               >
                 Agendar 1:1 com o mentor
                 <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5" />
@@ -175,7 +179,7 @@ export default async function StudentHomePage() {
             <li>
               <Link
                 href="/path"
-                className="group flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm font-medium hover:bg-card/80"
+                className="group flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-medium hover:bg-white/[0.06]"
               >
                 Abrir percurso
                 <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5" />
@@ -184,8 +188,8 @@ export default async function StudentHomePage() {
           </ul>
         </Card>
 
-        <Link href="/path" className="block">
-          <Card className="space-y-3 rounded-3xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
+        <Link href="/path" className="mt-auto block shrink-0">
+          <Card className="space-y-2 rounded-3xl border border-white/10 bg-white/[0.03] p-3">
             <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
               PERCURSO . SEM. —
             </p>
@@ -201,149 +205,139 @@ export default async function StudentHomePage() {
     );
   }
 
+  const todos: TodoItem[] = [];
+
+  if (activeContent) {
+    const week = weekNumberLabel(activeContent.week_number);
+    todos.push({
+      key: `content:${activeContent.id}`,
+      title: `Ver conteúdo da semana ${week}`,
+      href: `/path/${activeContent.id}`,
+    });
+  }
+
+  if (activeCall) {
+    const week = weekNumberLabel(activeCall.week_number);
+    todos.push({
+      key: `call:${activeCall.id}`,
+      title: `Agendar call da semana ${week}`,
+      href: `/path/${activeCall.id}`,
+    });
+  }
+
+  if (activeCheckin) {
+    const week = weekNumberLabel(activeCheckin.week_number);
+    todos.push({
+      key: `checkin:${activeCheckin.id}`,
+      title: `Fazer check-in da semana ${week}`,
+      href: `/path/${activeCheckin.id}`,
+    });
+  }
+
+  const feedbackItem = normalizedCheckIns.find((c) => Boolean(c.feedback?.notes));
+  if (feedbackItem) {
+    const week = weekNumberLabel(feedbackItem.node?.week_number);
+    todos.push({
+      key: `feedback:${feedbackItem.id}`,
+      title: `Ver feedback do ${mentorName} da semana ${week}`,
+      href: `/checkins/${feedbackItem.id}`,
+    });
+  }
+
+  const fallbackTodos: TodoItem[] = [
+    {
+      key: "session",
+      title: "Agendar chamada",
+      href: "/session#agenda",
+    },
+    {
+      key: "path",
+      title: "Abrir percurso",
+      href: "/path",
+    },
+  ];
+
+  const finalTodos = todos.length > 0 ? todos.slice(0, 6) : fallbackTodos;
+
   return (
-    <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-6 pb-4">
-      <div className="space-y-1">
+    <div className={HOME_VIEWPORT}>
+      <div className="shrink-0 space-y-0.5">
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
           Geral
         </p>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
           Bem vindo, {studentName}
         </h1>
       </div>
 
-      {/*
-        Card minimalista de notificações/tarefas.
-        Mantemos a lista pequena e orientada para ações imediatas.
-      */}
-      {(() => {
-        const todos: TodoItem[] = [];
-
-        if (activeContent) {
-          const week = weekNumberLabel(activeContent.week_number);
-          todos.push({
-            key: `content:${activeContent.id}`,
-            title: `Ver conteúdo da semana ${week}`,
-            href: `/path/${activeContent.id}`,
-          });
-        }
-
-        if (activeCall) {
-          const week = weekNumberLabel(activeCall.week_number);
-          todos.push({
-            key: `call:${activeCall.id}`,
-            title: `Agendar call da semana ${week}`,
-            href: `/path/${activeCall.id}`,
-          });
-        }
-
-        if (activeCheckin) {
-          const week = weekNumberLabel(activeCheckin.week_number);
-          todos.push({
-            key: `checkin:${activeCheckin.id}`,
-            title: `Fazer check-in da semana ${week}`,
-            href: `/path/${activeCheckin.id}`,
-          });
-        }
-
-        const feedbackItem = normalizedCheckIns.find((c) => Boolean(c.feedback?.notes));
-        if (feedbackItem) {
-          const week = weekNumberLabel(feedbackItem.node?.week_number);
-          todos.push({
-            key: `feedback:${feedbackItem.id}`,
-            title: `Ver feedback do ${mentorName} da semana ${week}`,
-            href: `/checkins/${feedbackItem.id}`,
-          });
-        }
-
-        const fallbackTodos: TodoItem[] = [
-          {
-            key: "session",
-            title: "Agendar chamada",
-            href: "/session#agenda",
-          },
-          {
-            key: "path",
-            title: "Abrir percurso",
-            href: "/path",
-          },
-        ];
-
-        const finalTodos = todos.length > 0 ? todos.slice(0, 6) : fallbackTodos;
-
-        return (
-          <Card className="neuma-accent-top flex h-[28rem] flex-col space-y-3 rounded-3xl border border-white/10 bg-white/[0.03] p-5 sm:h-[30rem] sm:p-6">
-            <p className="shrink-0 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
-              O que tens a fazer
-            </p>
-            <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
-              {finalTodos.map((t) => (
-                <li key={t.key}>
-                  <Link
-                    href={t.href}
-                    className="group block rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition-colors hover:bg-white/[0.06]"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--neuma-coral)]">
-                          {todoTagLabel(t.key)}
-                        </p>
-                        <p className="mt-1 truncate text-sm font-semibold tracking-tight">
-                          {t.title}
-                        </p>
-                      </div>
-                      <ArrowRight className="mt-1 size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5" />
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        );
-      })()}
-
-      {/* Só o card do nível activo — sem marker. Empurrado para baixo. */}
-      <div className="mt-auto pt-10 sm:pt-14">
-        <Link
-          href={activeNode ? `/path/${activeNode.id}` : "/path"}
-          prefetch
-          className="block min-w-0 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
-        >
-          <div className="student-path-step student-path-step--active">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--neuma-coral)]">
-                    {activeNode ? kindIconEl(activeNode.kind) : (
-                      <Video className="size-3" />
-                    )}
-                    {activeNode ? kindLabelTitle(activeNode.kind) : "Aula"}
-                    {activeNode?.week_number
-                      ? ` · Sem. ${activeNode.week_number}`
-                      : null}
-                  </span>
+      <Card className="neuma-accent-top flex min-h-0 flex-1 flex-col gap-2 rounded-3xl border border-white/10 bg-white/[0.03] p-3">
+        <p className="shrink-0 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+          To do list
+        </p>
+        <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
+          {finalTodos.map((t) => (
+            <li key={t.key}>
+              <Link
+                href={t.href}
+                className="group block rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 transition-colors hover:bg-white/[0.06]"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--neuma-coral)]">
+                      {todoTagLabel(t.key)}
+                    </p>
+                    <p className="mt-0.5 truncate text-sm font-semibold tracking-tight">
+                      {t.title}
+                    </p>
+                  </div>
+                  <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5" />
                 </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Card>
 
-                <p className="text-lg font-semibold tracking-tight sm:text-xl">
-                  {activeNode?.title ?? path.title}
-                </p>
-
-                {activeNode?.due_date ? (
-                  <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                    <CalendarClock className="size-3" />
-                    Até {formatDate(activeNode.due_date)}
-                  </p>
-                ) : null}
+      {/* Atalho do nível activo — fixo acima da menubar (gap = padding do main) */}
+      <Link
+        href={activeNode ? `/path/${activeNode.id}` : "/path"}
+        prefetch
+        className="mt-auto block min-w-0 shrink-0 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
+      >
+        <div className="student-path-step student-path-step--active !p-3 sm:!p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 space-y-0.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--neuma-coral)]">
+                  {activeNode ? kindIconEl(activeNode.kind) : (
+                    <Video className="size-3" />
+                  )}
+                  {activeNode ? kindLabelTitle(activeNode.kind) : "Aula"}
+                  {activeNode?.week_number
+                    ? ` · Sem. ${activeNode.week_number}`
+                    : null}
+                </span>
               </div>
 
-              <span className="mt-1 inline-flex size-8 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/10 text-xs font-medium text-white sm:size-auto sm:px-3 sm:py-1.5">
-                <Play className="size-3 fill-current" />
-                <span className="hidden sm:inline">Entrar</span>
-              </span>
+              <p className="truncate text-base font-semibold tracking-tight sm:text-lg">
+                {activeNode?.title ?? path.title}
+              </p>
+
+              {activeNode?.due_date ? (
+                <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <CalendarClock className="size-3" />
+                  Até {formatDate(activeNode.due_date)}
+                </p>
+              ) : null}
             </div>
+
+            <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/10 text-xs font-medium text-white sm:size-auto sm:px-3 sm:py-1.5">
+              <Play className="size-3 fill-current" />
+              <span className="hidden sm:inline">Entrar</span>
+            </span>
           </div>
-        </Link>
-      </div>
+        </div>
+      </Link>
     </div>
   );
 }
