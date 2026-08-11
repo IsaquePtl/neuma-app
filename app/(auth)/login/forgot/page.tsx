@@ -15,7 +15,7 @@ export default async function ForgotPasswordPage({
   const { error, ok } = await searchParams;
 
   return (
-    <div className="flex w-full max-w-md flex-col items-center">
+    <div className="flex w-full flex-col items-center">
       <Image
         src="/brand/mark-white.png"
         alt="Neuma"

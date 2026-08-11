@@ -476,8 +476,8 @@ export function AppShell({
           className={cn(
             "fixed inset-x-0 top-0 z-20 flex items-center bg-transparent desktop:hidden",
             /* Safe-area no header fixed (root já não faz pt) */
-            "h-[calc(3.5rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)]",
-            isRootPage ? "justify-center" : "justify-start px-1",
+            "h-[calc(4rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)]",
+            isRootPage ? "justify-center" : "justify-start px-2",
           )}
         >
           <MentorMobileDrawer
@@ -499,7 +499,7 @@ export function AppShell({
                 onNavClick(home);
               }}
             >
-              <NeumaLogo size={28} withWordmark={false} />
+              <NeumaLogo size={36} withWordmark={false} />
             </Link>
           ) : (
             <Link
@@ -510,21 +510,21 @@ export function AppShell({
                 e.preventDefault();
                 onNavClick(backHref);
               }}
-              className="grid size-10 place-items-center text-foreground"
+              className="ml-0.5 grid size-12 place-items-center rounded-full text-foreground transition-colors active:bg-white/10"
             >
-              <ChevronLeft className="size-7" strokeWidth={2} />
+              <ChevronLeft className="size-8" strokeWidth={2.25} />
             </Link>
           )}
         </header>
         {/* Spacer = altura do header fixed (barra + safe-top) */}
         <div
-          className="h-[calc(3.5rem+env(safe-area-inset-top,0px))] shrink-0 desktop:hidden"
+          className="h-[calc(4rem+env(safe-area-inset-top,0px))] shrink-0 desktop:hidden"
           aria-hidden
         />
 
         <main
           className={cn(
-            "mx-auto flex w-full flex-1 flex-col px-4 pt-4 pb-[calc(5.75rem+14px)] desktop:px-10 desktop:pb-14 desktop:pt-10",
+            "mx-auto flex w-full flex-1 flex-col px-4 pt-4 pb-[calc(5.75rem+8px)] desktop:px-10 desktop:pb-14 desktop:pt-10",
             role === "mentor" ? "max-w-7xl" : "max-w-5xl",
           )}
         >
@@ -542,9 +542,9 @@ export function AppShell({
                       e.preventDefault();
                       onNavClick(backHref);
                     }}
-                    className="-ml-2 inline-grid size-10 place-items-center text-muted-foreground transition-colors hover:text-foreground"
+                    className="-ml-2 inline-grid size-12 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
                   >
-                    <ChevronLeft className="size-7" strokeWidth={2} />
+                    <ChevronLeft className="size-8" strokeWidth={2.25} />
                   </Link>
                 </div>
               ) : null}

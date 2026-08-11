@@ -230,7 +230,7 @@
   /* Percurso do aluno — mapa de níveis (não cards genéricos) */
   .student-path-step {
     border-radius: 1.25rem;
-    padding: 0.85rem 1rem;
+    padding: 1rem 1.1rem;
     transition:
       background-color 200ms ease,
       box-shadow 200ms ease,
@@ -396,12 +396,12 @@ cal-modal-box::backdrop {
 
 /*
  * Viewport mobile das páginas centradas (Geral / Percurso / Mentor / …).
- * Altura = ecrã − header (3.5rem + safe-top) − main pt (1rem) − menubar reserve.
+ * Altura = ecrã − header (4rem + safe-top) − main pt (1rem) − menubar reserve.
  * Não subtrai safe-bottom (evita double-count; root já é full-bleed).
  */
 .neuma-mobile-viewport {
   height: calc(
-    100dvh - 3.5rem - env(safe-area-inset-top, 0px) - 1rem - 5.75rem - 14px
+    100dvh - 4rem - env(safe-area-inset-top, 0px) - 1rem - 5.75rem - 8px
   );
 }
 @media (min-width: 850px) {
@@ -412,15 +412,12 @@ cal-modal-box::backdrop {
 }
 
 /*
- * Menubar flutuante — gap FIXO ao limite físico do ecrã.
- *
- * Não somamos safe-area-inset-bottom ao bottom: no iPhone isso criava um
- * “vão” enorme (~34px home indicator + 8px) vs desktop/Cursor (~8px).
- * O pill fica 8px acima da borda inferior real em qualquer device.
- * Lados: safe-area horizontal (landscape / notch lateral) + o mesmo gap.
+ * Menubar flutuante — gap FIXO ao limite inferior do webview.
+ * Em Safari tab a toolbar da Apple fica fora do layout (não dá para cobrir).
+ * Em standalone o home indicator fica sob o pill; gap curto = o mais “fullscreen”.
  */
 .mobile-menubar {
-  --menubar-gap: 14px;
+  --menubar-gap: 8px;
   position: fixed;
   z-index: 40;
   left: calc(env(safe-area-inset-left, 0px) + var(--menubar-gap));

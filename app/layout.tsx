@@ -26,8 +26,11 @@ export const metadata: Metadata = {
     title: "Neuma",
   },
   icons: {
-    icon: [{ url: "/brand/app-icon.png", type: "image/png" }],
-    apple: [{ url: "/brand/app-icon.png", type: "image/png" }],
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/brand/app-icon.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [{ url: "/brand/app-icon.png", type: "image/png", sizes: "512x512" }],
   },
 };
 
@@ -39,6 +42,8 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
+  /* Teclado sobrepõe o conteúdo — o layout/fundo não encolhem nem sobem */
+  interactiveWidget: "overlays-content",
 };
 
 export default function RootLayout({

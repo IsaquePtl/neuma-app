@@ -111,13 +111,13 @@ export function MentorMobileDrawer({
           aria-expanded={false}
           onClick={() => onOpenChange(true)}
           className={cn(
-            "fixed left-3 z-[55] grid size-10 place-items-center rounded-full",
-            "top-[calc(env(safe-area-inset-top,0px)+0.5rem)]",
+            "fixed left-3 z-[55] grid size-12 place-items-center rounded-full",
+            "top-[calc(env(safe-area-inset-top,0px)+0.625rem)]",
             "bg-white/5 text-foreground transition-colors hover:bg-white/10",
             "desktop:hidden",
           )}
         >
-          <Menu className="size-5" />
+          <Menu className="size-6" />
         </button>
       ) : null}
 

@@ -28,16 +28,16 @@ export function StudentTodoList({ items }: { items: StudentTodoItem[] }) {
   return (
     <Card
       className={cn(
-        "neuma-accent-top flex shrink-0 flex-col gap-2.5 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] px-5 pb-3 pt-7",
+        "neuma-accent-top flex shrink-0 flex-col gap-3 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] px-5 pb-3.5 pt-7",
         // Mobile/tablet: altura fixa para 3 slots (+ setas se necessário)
         showArrows
-          ? "h-[calc(3.25rem+1.625rem+3*3.5rem+2*0.375rem+2.5rem)]"
-          : "h-[calc(3.25rem+1.625rem+3*3.5rem+2*0.375rem)]",
+          ? "h-[calc(3.5rem+1.75rem+3*4rem+2*0.5rem+2.75rem)]"
+          : "h-[calc(3.5rem+1.75rem+3*4rem+2*0.5rem)]",
         // Desktop: cresce com o conteúdo, sem setas
         "desktop:h-auto",
       )}
     >
-      <p className="mb-2 shrink-0 pl-1 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+      <p className="mb-1 shrink-0 pl-1 text-[0.8125rem] font-medium uppercase tracking-[0.2em] text-muted-foreground">
         To do list
       </p>
 
@@ -48,7 +48,7 @@ export function StudentTodoList({ items }: { items: StudentTodoItem[] }) {
           disabled={!canUp}
           onClick={() => setStart((s) => Math.max(0, s - 1))}
           className={cn(
-            "mx-auto grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors desktop:hidden",
+            "mx-auto grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors desktop:hidden",
             canUp
               ? "hover:bg-white/10 hover:text-foreground"
               : "pointer-events-none opacity-25",
@@ -61,7 +61,7 @@ export function StudentTodoList({ items }: { items: StudentTodoItem[] }) {
       {/* Mobile: só a página de 3; sem scroll por gesto */}
       <ul
         className={cn(
-          "min-h-0 space-y-1.5 overflow-hidden overscroll-none",
+          "min-h-0 space-y-2 overflow-hidden overscroll-none",
           "desktop:hidden",
         )}
       >
@@ -71,7 +71,7 @@ export function StudentTodoList({ items }: { items: StudentTodoItem[] }) {
       </ul>
 
       {/* Desktop: lista completa, sem paginação */}
-      <ul className="hidden space-y-1.5 desktop:block">
+      <ul className="hidden space-y-2 desktop:block">
         {items.map((t) => (
           <TodoRow key={t.key} item={t} />
         ))}
@@ -84,7 +84,7 @@ export function StudentTodoList({ items }: { items: StudentTodoItem[] }) {
           disabled={!canDown}
           onClick={() => setStart((s) => Math.min(maxStart, s + 1))}
           className={cn(
-            "mx-auto grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors desktop:hidden",
+            "mx-auto grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors desktop:hidden",
             canDown
               ? "hover:bg-white/10 hover:text-foreground"
               : "pointer-events-none opacity-25",
@@ -102,14 +102,14 @@ function TodoRow({ item }: { item: StudentTodoItem }) {
     <li>
       <Link
         href={item.href}
-        className="group block rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 transition-colors hover:bg-white/[0.06]"
+        className="group block rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3.5 transition-colors hover:bg-white/[0.06]"
       >
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--neuma-coral)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--neuma-coral)]">
               {item.tag}
             </p>
-            <p className="mt-0.5 truncate text-sm font-semibold tracking-tight">
+            <p className="mt-0.5 truncate text-[0.9375rem] font-semibold tracking-tight">
               {item.title}
             </p>
           </div>

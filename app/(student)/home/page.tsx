@@ -66,7 +66,7 @@ function todoTagLabel(key: string) {
  * Desktop: fluxo normal no topo.
  */
 const HOME_VIEWPORT =
-  "neuma-mobile-viewport flex flex-col justify-center gap-4 overflow-hidden pb-5 " +
+  "neuma-mobile-viewport flex flex-col justify-center gap-5 overflow-hidden pb-5 " +
   "desktop:h-auto desktop:min-h-0 desktop:justify-start desktop:gap-3 desktop:overflow-visible desktop:pb-4";
 
 export default async function StudentHomePage() {
@@ -160,11 +160,11 @@ export default async function StudentHomePage() {
 
     return (
       <div className={HOME_VIEWPORT}>
-        <div className="shrink-0 space-y-0.5">
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">
+        <div className="shrink-0 space-y-1">
+          <p className="text-[0.8125rem] font-medium uppercase tracking-[0.2em] text-muted-foreground">
             Geral
           </p>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          <h1 className="text-[1.75rem] font-semibold leading-tight tracking-tight sm:text-3xl">
             Bem vindo, {studentName}
           </h1>
         </div>
@@ -172,15 +172,15 @@ export default async function StudentHomePage() {
         <StudentTodoList items={emptyTodos} />
 
         <Link href="/path" className="block shrink-0">
-          <Card className="space-y-2 rounded-3xl border border-white/10 bg-white/[0.03] p-3">
+          <Card className="space-y-2.5 rounded-3xl border border-white/10 bg-white/[0.03] p-4">
             <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
               PERCURSO . SEM. —
             </p>
             <div className="flex items-center justify-between gap-3">
-              <p className="min-w-0 truncate text-base font-semibold">
+              <p className="min-w-0 truncate text-lg font-semibold">
                 Ainda sem percurso
               </p>
-              <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
+              <ArrowRight className="size-5 shrink-0 text-muted-foreground" />
             </div>
           </Card>
         </Link>
@@ -252,11 +252,11 @@ export default async function StudentHomePage() {
 
   return (
     <div className={HOME_VIEWPORT}>
-      <div className="shrink-0 space-y-0.5">
-        <p className="text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">
+      <div className="shrink-0 space-y-1">
+        <p className="text-[0.8125rem] font-medium uppercase tracking-[0.2em] text-muted-foreground">
           Geral
         </p>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+        <h1 className="text-[1.75rem] font-semibold leading-tight tracking-tight sm:text-3xl">
           Bem vindo, {studentName}
         </h1>
       </div>
@@ -268,11 +268,11 @@ export default async function StudentHomePage() {
         prefetch
         className="block min-w-0 shrink-0 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
       >
-        <div className="student-path-step student-path-step--active !p-3 sm:!p-4">
+        <div className="student-path-step student-path-step--active !p-4 sm:!p-5">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 space-y-0.5">
+            <div className="min-w-0 space-y-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--neuma-coral)]">
+                <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-[0.14em] text-[var(--neuma-coral)]">
                   {activeNode ? (
                     kindIconEl(activeNode.kind)
                   ) : (
@@ -285,20 +285,20 @@ export default async function StudentHomePage() {
                 </span>
               </div>
 
-              <p className="truncate text-base font-semibold tracking-tight sm:text-lg">
+              <p className="truncate text-lg font-semibold tracking-tight sm:text-xl">
                 {activeNode?.title ?? path.title}
               </p>
 
               {activeNode?.due_date ? (
-                <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                  <CalendarClock className="size-3" />
+                <p className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+                  <CalendarClock className="size-3.5" />
                   Até {formatDate(activeNode.due_date)}
                 </p>
               ) : null}
             </div>
 
-            <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/10 text-xs font-medium text-white sm:size-auto sm:px-3 sm:py-1.5">
-              <Play className="size-3 fill-current" />
+            <span className="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/10 text-xs font-medium text-white sm:size-auto sm:px-3 sm:py-1.5">
+              <Play className="size-3.5 fill-current" />
               <span className="hidden sm:inline">Entrar</span>
             </span>
           </div>

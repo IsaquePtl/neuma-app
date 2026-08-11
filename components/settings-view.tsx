@@ -119,15 +119,17 @@ export function SettingsView({
         "desktop:h-auto desktop:min-h-0 desktop:justify-start desktop:overflow-visible desktop:pb-4",
       )}
     >
-      <header className="shrink-0 space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Perfil</h1>
-        <p className="text-sm text-muted-foreground">
+      <header className="shrink-0 space-y-1.5">
+        <h1 className="text-[1.75rem] font-semibold leading-tight tracking-tight sm:text-3xl">
+          Perfil
+        </h1>
+        <p className="text-[0.9375rem] text-muted-foreground">
           {role === "mentor" ? "A tua conta de mentor" : "A tua conta"}
         </p>
       </header>
 
-      <div className="shrink-0 space-y-5">
-      <div className="flex flex-col items-center gap-3">
+      <div className="shrink-0 space-y-6">
+      <div className="flex flex-col items-center gap-3.5">
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
@@ -137,7 +139,7 @@ export function SettingsView({
         >
           <span
             className={cn(
-              "relative grid size-28 place-items-center overflow-hidden rounded-full",
+              "relative grid size-32 place-items-center overflow-hidden rounded-full",
               "bg-gradient-to-br from-[var(--neuma-coral)] to-[var(--neuma-blue)]",
               "ring-2 ring-white/10 transition-opacity group-hover:opacity-90",
             )}
@@ -148,7 +150,7 @@ export function SettingsView({
                 alt=""
                 fill
                 className="object-cover"
-                sizes="112px"
+                sizes="128px"
                 unoptimized
               />
             ) : (
@@ -157,8 +159,8 @@ export function SettingsView({
               </span>
             )}
           </span>
-          <span className="absolute bottom-0.5 right-0.5 grid size-9 place-items-center rounded-full bg-background/90 text-foreground ring-1 ring-white/15 backdrop-blur-sm">
-            <Camera className="size-4" />
+          <span className="absolute bottom-0.5 right-0.5 grid size-10 place-items-center rounded-full bg-background/90 text-foreground ring-1 ring-white/15 backdrop-blur-sm">
+            <Camera className="size-5" />
           </span>
         </button>
         <input
@@ -168,18 +170,18 @@ export function SettingsView({
           className="sr-only"
           onChange={onPickPhoto}
         />
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           {avatarPending ? "A carregar foto…" : "Toca para alterar a fotografia"}
         </p>
 
         <div className="text-center">
-          <p className="text-xl font-semibold tracking-tight">
+          <p className="text-2xl font-semibold tracking-tight">
             {name ?? "Sem nome"}
           </p>
           {status ? (
             <p
               aria-live="polite"
-              className="mt-1 text-[11px] leading-tight text-emerald-400/90"
+              className="mt-1 text-xs leading-tight text-emerald-400/90"
             >
               {status}
             </p>
@@ -199,7 +201,7 @@ export function SettingsView({
               Alterar email
             </button>
           </div>
-          <Input id="email-display" value={email} disabled readOnly />
+          <Input id="email-display" value={email} disabled readOnly className="h-11 text-base" />
           {emailOpen ? (
             <form
               onSubmit={onChangeEmail}
@@ -238,11 +240,12 @@ export function SettingsView({
             <Textarea
               id="bio"
               name="bio"
-              rows={4}
+              rows={5}
               value={draftBio}
               onChange={(e) => setDraftBio(e.target.value)}
               placeholder="Uma linha sobre ti…"
               maxLength={280}
+              className="min-h-[7.5rem] text-base"
             />
             <p className="text-[11px] text-muted-foreground">
               Máx. 280 caracteres

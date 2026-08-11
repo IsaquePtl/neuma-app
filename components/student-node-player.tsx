@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
   Video,
   MessageSquare,
-  CalendarClock,
   ExternalLink,
   Paperclip,
 } from "lucide-react";
@@ -12,12 +11,11 @@ import type {
   StudentUpcomingBooking,
 } from "@/lib/students/queries";
 import { Button } from "@/components/ui/button";
-import { NodeKindBadge } from "@/components/status-badges";
 import { VideoEmbed, toEmbedUrl } from "@/components/video-embed";
 import { CheckpointQuiz } from "@/components/checkpoint-quiz";
 import { SessionBookingSection } from "@/components/session-booking-section";
 import { SupportMediaToggle } from "@/components/support-media-toggle";
-import { formatDate } from "@/lib/labels";
+import { formatDate, nodeKindLabel } from "@/lib/labels";
 
 /** Anexo de apoio (link externo) — usado quando não é vídeo. */
 function SupportAttachmentButton({
@@ -47,22 +45,19 @@ function SupportAttachmentButton({
 
 function NodeMeta({ node }: { node: StudentNode }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <NodeKindBadge kind={node.kind} />
-      {node.status === "completed" ? (
-        <span className="text-xs font-medium text-emerald-400">Concluído</span>
-      ) : node.status === "active" ? (
-        <span className="text-xs font-medium text-[var(--neuma-coral)]">
-          Activo
-        </span>
-      ) : null}
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+      <span>{nodeKindLabel[node.kind]}</span>
       {node.due_date ? (
-        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-          <CalendarClock className="size-3.5" />
-          Até {formatDate(node.due_date)}
-        </span>
+        <>
+          <span aria-hidden className="text-white/25">
+            ·
+          </span>
+          <span className="normal-case tracking-normal text-muted-foreground/90">
+            Até {formatDate(node.due_date)}
+          </span>
+        </>
       ) : null}
-    </div>
+    </p>
   );
 }
 
