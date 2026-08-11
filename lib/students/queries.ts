@@ -293,12 +293,20 @@ export async function loadMyUpcomingBooking(
     .eq("id", studentId)
     .maybeSingle();
 
-  if (!profile?.email) return null;
+  // Alguns fluxos podem ter o email em `profiles` ainda não sincronizado
+  // (ou webhook gravar com outro campo). Tentamos também o email do auth.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const email = profile?.email ?? user?.email;
+  if (!email) return null;
 
   const { data: byEmail } = await supabase
     .from("cal_bookings")
     .select("id, start_time, end_time, title, meet_url, status")
-    .ilike("attendee_email", profile.email)
+    // Usa % para tolerar variações de casing e possíveis espaços.
+    .ilike("attendee_email", `%${email.trim()}%`)
     .in("status", ["accepted", "pending", "rescheduled"])
     .gte("start_time", nowIso)
     .order("start_time", { ascending: true })
