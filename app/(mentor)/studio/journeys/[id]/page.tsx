@@ -116,7 +116,10 @@ export default async function JourneyDetailPage({
   }));
 
   const journeyCheckIns: JourneyCheckIn[] = (checkIns ?? [])
-    .filter((c) => nodeIds.has(c.node_id))
+    .filter(
+      (c): c is typeof c & { node_id: string } =>
+        typeof c.node_id === "string" && nodeIds.has(c.node_id),
+    )
     .map((c) => {
       const feedback = Array.isArray(c.feedback) ? c.feedback[0] : c.feedback;
       return {

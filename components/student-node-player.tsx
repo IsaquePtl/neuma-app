@@ -16,9 +16,10 @@ import { NodeKindBadge } from "@/components/status-badges";
 import { VideoEmbed, toEmbedUrl } from "@/components/video-embed";
 import { CheckpointQuiz } from "@/components/checkpoint-quiz";
 import { SessionBookingSection } from "@/components/session-booking-section";
+import { SupportMediaToggle } from "@/components/support-media-toggle";
 import { formatDate } from "@/lib/labels";
 
-/** Anexo de apoio no estilo to-do (Sessão / Check-point). */
+/** Anexo de apoio (link externo) — usado quando não é vídeo. */
 function SupportAttachmentButton({
   url,
   label = "Abrir anexo de apoio",
@@ -129,7 +130,11 @@ function SessionLayout({
       ) : null}
 
       {node.resource_url ? (
-        <SupportAttachmentButton url={node.resource_url} />
+        <SupportMediaToggle
+          url={node.resource_url}
+          title={node.title}
+          label="Abrir anexo de apoio"
+        />
       ) : null}
 
       <SessionBookingSection
@@ -247,7 +252,11 @@ function CheckpointLayout({ node }: { node: StudentNode }) {
       <CheckpointQuiz nodeId={node.id} />
 
       {node.resource_url ? (
-        <SupportAttachmentButton url={node.resource_url} />
+        <SupportMediaToggle
+          url={node.resource_url}
+          title={node.title}
+          label="Abrir anexo de apoio"
+        />
       ) : null}
 
       <div className="flex flex-wrap gap-2">

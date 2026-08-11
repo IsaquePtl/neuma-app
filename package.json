@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.18",
-    "@ai-sdk/xai": "^4.0.27",
+    "@ai-sdk/xai": "^4.0.34",
     "@base-ui/react": "^1.6.0",
     "@calcom/embed-react": "^1.5.3",
     "@supabase/ssr": "^0.12.3",
