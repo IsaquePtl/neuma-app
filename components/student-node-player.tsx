@@ -1,7 +1,6 @@
 import Link from "next/link";
 import {
   Video,
-  Phone,
   MessageSquare,
   CalendarClock,
   Sparkles,
@@ -18,6 +17,28 @@ import { NodeKindBadge } from "@/components/status-badges";
 import { VideoEmbed } from "@/components/video-embed";
 import { CalBookButton } from "@/components/calcom-embed";
 import { formatDate, formatDateTime } from "@/lib/labels";
+
+function GoogleMeetMark({ className }: { className?: string }) {
+  // Ícone simples (monocromático) para evitar dependências externas.
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M3 12a4 4 0 0 1 4-4h1" />
+      <path d="M21 12a4 4 0 0 1-4 4h-1" />
+      <rect x="7" y="7" width="10" height="10" rx="2" />
+      <path d="M10 12h4" />
+    </svg>
+  );
+}
 
 function formatTimeRange(startIso: string, endIso: string) {
   const start = new Date(startIso);
@@ -45,61 +66,38 @@ function CallBookingCard({
         </p>
         <p className="text-sm text-muted-foreground">
           Ainda sem marcação
-          {mentorName ? ` com ${mentorName}` : ""}. Agenda abaixo para ver dia,
-          horário e o link do Meet aqui.
+          {mentorName ? ` com ${mentorName}` : ""}. Assim que agendar, aqui
+          aparecem o <span className="text-foreground/90">dia, horário</span> e o{" "}
+          <span className="text-foreground/90">link do Google Meet</span>.
         </p>
-        <div className="grid gap-2 text-sm text-muted-foreground/70 sm:grid-cols-3">
-          <div className="rounded-xl border border-dashed border-white/10 px-3 py-2">
-            Dia
-          </div>
-          <div className="rounded-xl border border-dashed border-white/10 px-3 py-2">
-            Horário
-          </div>
-          <div className="rounded-xl border border-dashed border-white/10 px-3 py-2">
-            Google Meet
-          </div>
-        </div>
       </div>
     );
   }
 
   return (
-    <div className="student-path-step student-path-step--active space-y-4">
+    <div className="student-path-step student-path-step--active space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--neuma-coral)]">
             Reserva confirmada
           </p>
-          <p className="text-lg font-semibold tracking-tight sm:text-xl">
+          <p className="text-sm font-semibold tracking-tight sm:text-base">
             {booking.title ?? "Chamada 1:1"}
           </p>
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="flex items-start gap-2.5 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
-          <CalendarClock className="mt-0.5 size-4 shrink-0 text-[var(--neuma-coral)]" />
-          <div className="min-w-0">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              Dia
-            </p>
-            <p className="text-sm font-medium">
-              {formatDate(booking.start_time)}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-start gap-2.5 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
-          <Clock className="mt-0.5 size-4 shrink-0 text-[var(--neuma-coral)]" />
-          <div className="min-w-0">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              Horário
-            </p>
-            <p className="text-sm font-medium">
-              {formatTimeRange(booking.start_time, booking.end_time) ||
-                formatDateTime(booking.start_time)}
-            </p>
-          </div>
-        </div>
+      {/* Dia / horário discretos, acima do CTA do Meet */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <CalendarClock className="size-3.5 text-[var(--neuma-coral)]" />
+          {formatDate(booking.start_time)}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <Clock className="size-3.5 text-[var(--neuma-coral)]" />
+          {formatTimeRange(booking.start_time, booking.end_time) ||
+            formatDateTime(booking.start_time)}
+        </span>
       </div>
 
       {booking.meet_url ? (
@@ -110,14 +108,16 @@ function CallBookingCard({
           className="inline-flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-medium transition-colors hover:bg-white/[0.06]"
         >
           <span className="inline-flex min-w-0 items-center gap-2">
-            <Video className="size-4 shrink-0 text-[var(--neuma-coral)]" />
-            <span className="truncate">Abrir Google Meet</span>
+            <GoogleMeetMark className="size-5 shrink-0 text-[var(--neuma-coral)]" />
+            <span className="truncate">
+              Entrar na call
+            </span>
           </span>
           <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
         </a>
       ) : (
         <p className="rounded-xl border border-dashed border-white/10 px-3 py-2.5 text-sm text-muted-foreground">
-          Link do Meet ainda não disponível.
+          Link do Google Meet ainda não disponível.
         </p>
       )}
     </div>
@@ -191,7 +191,7 @@ export function StudentNodePlayer({
       ) : null}
 
       {isCall ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <CallBookingCard booking={upcomingBooking} mentorName={mentorName} />
 
           <div className="grid gap-3">
@@ -200,21 +200,12 @@ export function StudentNodePlayer({
               namespace={`student-path-node-${node.id}`}
               eventType="30min"
               label={
-                upcomingBooking ? "Reagendar chamada" : "Agendar chamada"
+                upcomingBooking ? "Alterar agendamento" : "Agendar chamada"
               }
               description=""
               showExternalLink={false}
               size="lg"
             />
-            <Button
-              render={<Link href="/session#agenda" />}
-              nativeButton={false}
-              size="lg"
-              variant="secondary"
-              className="h-14 w-full gap-2 text-base font-semibold"
-            >
-              <Phone className="size-5" /> Abrir 1:1 completo
-            </Button>
           </div>
         </div>
       ) : null}
