@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -57,22 +57,7 @@ export default async function CheckinDetail({
   const studentName = student?.full_name ?? student?.email ?? "o aluno";
   const studentId = studentParam || checkIn.student_id;
   const fromStudent = from === "student" && studentId;
-  const fromDashboard = from === "dashboard";
   const fromJourney = from === "journey" && pathParam;
-  const backHref = fromStudent
-    ? `/studio/students/${studentId}`
-    : fromJourney
-      ? `/studio/journeys/${pathParam}`
-      : fromDashboard
-        ? "/studio"
-        : "/studio/journeys/checkins";
-  const backLabel = fromStudent
-    ? "Ficha do aluno"
-    : fromJourney
-      ? "Percurso"
-      : fromDashboard
-        ? "Menu e Dashboard"
-        : "Check-ins";
   const returnTo = fromStudent
     ? `/studio/students/${studentId}`
     : fromJourney
@@ -85,13 +70,6 @@ export default async function CheckinDetail({
 
   return (
     <div className="space-y-6">
-      <Link
-        href={backHref}
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> {backLabel}
-      </Link>
-
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm text-muted-foreground">

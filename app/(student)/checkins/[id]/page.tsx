@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  ArrowLeft,
   Video,
   ExternalLink,
   MessageSquare,
@@ -56,13 +55,6 @@ export default async function CheckInDetailPage({
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <Link
-        href="/checkins"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Check-ins
-      </Link>
-
       <header className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm text-muted-foreground">Check-in</p>

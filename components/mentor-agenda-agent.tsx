@@ -19,6 +19,7 @@ import {
 } from "@/lib/actions/mentor-agent";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ScreenLoader } from "@/components/screen-loader";
 import { cn } from "@/lib/utils";
 
 const PRIORITY_DOT: Record<MentorAgentSuggestion["priority"], string> = {
@@ -120,12 +121,7 @@ export function MentorAgendaAgent() {
       </div>
 
       {pending && !data ? (
-        <Card className="flex min-h-[10rem] flex-col items-center justify-center gap-3 p-8 text-center">
-          <span className="size-8 animate-spin rounded-full border-2 border-white/15 border-t-[var(--neuma-coral)]" />
-          <p className="text-sm text-muted-foreground">
-            A ler o teu cenário e a preparar sugestões…
-          </p>
-        </Card>
+        <ScreenLoader className="min-h-[10rem]" />
       ) : null}
 
       {data ? (

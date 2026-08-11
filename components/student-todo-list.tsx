@@ -28,16 +28,16 @@ export function StudentTodoList({ items }: { items: StudentTodoItem[] }) {
   return (
     <Card
       className={cn(
-        "neuma-accent-top flex shrink-0 flex-col gap-2.5 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] px-3 pb-3 pt-5",
+        "neuma-accent-top flex shrink-0 flex-col gap-2.5 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] px-5 pb-3 pt-7",
         // Mobile/tablet: altura fixa para 3 slots (+ setas se necessário)
         showArrows
-          ? "h-[calc(2rem+1.625rem+3*3.5rem+2*0.375rem+2.5rem)]"
-          : "h-[calc(2rem+1.625rem+3*3.5rem+2*0.375rem)]",
+          ? "h-[calc(3.25rem+1.625rem+3*3.5rem+2*0.375rem+2.5rem)]"
+          : "h-[calc(3.25rem+1.625rem+3*3.5rem+2*0.375rem)]",
         // Desktop: cresce com o conteúdo, sem setas
         "desktop:h-auto",
       )}
     >
-      <p className="shrink-0 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+      <p className="mb-2 shrink-0 pl-1 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
         To do list
       </p>
 

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -8,7 +8,6 @@ import {
   type JourneyCheckIn,
   type JourneyLevelFeedback,
 } from "@/components/journey-path-composer";
-import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/user-avatar";
 import {
   mapPath,
@@ -175,16 +174,7 @@ export default async function JourneyDetailPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button
-          render={<Link href="/studio/journeys" />}
-          nativeButton={false}
-          variant="ghost"
-          size="sm"
-          className="gap-1.5"
-        >
-          <ArrowLeft className="size-3.5" /> Todos os percursos
-        </Button>
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <Link
           href={`/studio/students/${student.id}`}
           className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm transition-colors hover:bg-white/10"

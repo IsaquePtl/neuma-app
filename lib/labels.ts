@@ -13,8 +13,8 @@ export const nodeKindLabel: Record<NodeKind, string> = {
   practice: "Prática",
   call: "Sessão",
   milestone: "Check-point",
-  lesson: "Gravação",
-  resource: "Gravação",
+  lesson: "Aula",
+  resource: "Aula",
 };
 
 /** Hints curtos para o editor do mentor. */
@@ -22,8 +22,8 @@ export const nodeKindHint: Record<NodeKind, string> = {
   practice: "Prática — texto, vídeo e ficheiros de qualquer tipo",
   call: "Sessão — foco no Meet/Cal.com; texto e anexo só como apoio",
   milestone: "Check-point — quiz de escolha múltipla + material de apoio",
-  lesson: "Gravação — vídeo em destaque; texto e anexos abaixo",
-  resource: "Gravação (legado)",
+  lesson: "Aula — vídeo em destaque; texto e anexos abaixo",
+  resource: "Aula (legado)",
 };
 
 export const nodeStatusLabel: Record<NodeStatus, string> = {

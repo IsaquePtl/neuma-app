@@ -113,15 +113,20 @@ export function SettingsView({
   }
 
   return (
-    <div className="mx-auto max-w-md space-y-8 pb-4">
-      <header className="space-y-1">
+    <div
+      className={cn(
+        "neuma-mobile-viewport mx-auto flex w-full max-w-2xl flex-col justify-center gap-8 overflow-y-auto pb-5",
+        "desktop:h-auto desktop:min-h-0 desktop:justify-start desktop:overflow-visible desktop:pb-4",
+      )}
+    >
+      <header className="shrink-0 space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Perfil</h1>
         <p className="text-sm text-muted-foreground">
           {role === "mentor" ? "A tua conta de mentor" : "A tua conta"}
         </p>
       </header>
 
-      <div className="space-y-5">
+      <div className="shrink-0 space-y-5">
       <div className="flex flex-col items-center gap-3">
         <button
           type="button"
@@ -254,7 +259,7 @@ export function SettingsView({
       </div>
       </div>
 
-      <div className="border-t border-white/10 pt-6">
+      <div className="shrink-0 border-t border-white/10 pt-6">
         <form action={logout}>
           <Button
             type="submit"

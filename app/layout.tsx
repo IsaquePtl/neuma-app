@@ -19,10 +19,15 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Neuma",
   description: "Mentoria 1:1 premium de transformacao musical.",
+  applicationName: "Neuma",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "Neuma",
+  },
+  icons: {
+    icon: [{ url: "/brand/app-icon.png", type: "image/png" }],
+    apple: [{ url: "/brand/app-icon.png", type: "image/png" }],
   },
 };
 
@@ -32,6 +37,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
 };
 
@@ -52,16 +58,8 @@ export default function RootLayout({
       <body className="relative flex min-h-dvh flex-col">
         {/* Fundo inviolável: ponta a ponta, sob safe areas do iOS */}
         <AppBackground />
-        {/* Conteúdo interior respeita safe areas */}
-        <div
-          className={
-            "relative z-10 flex min-h-dvh flex-1 flex-col " +
-            "pt-[env(safe-area-inset-top,0px)] " +
-            "pb-[env(safe-area-inset-bottom,0px)] " +
-            "pl-[env(safe-area-inset-left,0px)] " +
-            "pr-[env(safe-area-inset-right,0px)]"
-          }
-        >
+        {/* Conteúdo full-bleed; safe-area só no chrome (header / menubar) */}
+        <div className="relative z-10 flex min-h-dvh flex-1 flex-col">
           <AccentProvider>{children}</AccentProvider>
           <Toaster />
         </div>

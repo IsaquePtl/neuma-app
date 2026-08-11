@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 
 import {
   markTallySubmissionPending,
@@ -42,13 +42,6 @@ export default async function TallySubmissionDetailPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/studio/journeys/onboardings"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Onboardings
-      </Link>
-
       <header className="neuma-accent-top space-y-3 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">

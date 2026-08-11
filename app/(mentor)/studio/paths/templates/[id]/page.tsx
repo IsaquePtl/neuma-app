@@ -1,9 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 
 import { PathTemplateEditor } from "@/components/path-template-editor";
-import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import type { LibraryAssetUsage } from "@/lib/types/database.types";
 
@@ -83,16 +80,6 @@ export default async function PathTemplateDetailPage({
 
   return (
     <div className="space-y-6">
-      <Button
-        render={<Link href="/studio/paths#templates" />}
-        nativeButton={false}
-        variant="ghost"
-        size="sm"
-        className="gap-1.5"
-      >
-        <ArrowLeft className="size-4" /> Percursos
-      </Button>
-
       <PathTemplateEditor
         template={template}
         nodes={mappedNodes}

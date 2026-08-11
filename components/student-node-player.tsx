@@ -91,7 +91,7 @@ function CheckInActions({
           variant="secondary"
           className="gap-2"
         >
-          <MessageSquare className="size-4" /> Falar no 1:1
+          <MessageSquare className="size-4" /> Falar no Mentor
         </Button>
       ) : null}
     </div>
@@ -141,7 +141,6 @@ function SessionLayout({
         initialBooking={upcomingBooking}
         mentorName={mentorName}
         calUser={calUser}
-        nodeId={node.id}
       />
     </div>
   );
@@ -160,7 +159,7 @@ function RecordingLayout({ node }: { node: StudentNode }) {
           url={node.resource_url}
           title={node.title}
           className="aspect-video w-full overflow-hidden rounded-xl border border-white/10"
-          fallbackLabel="Abrir gravação"
+          fallbackLabel="Abrir aula"
         />
       ) : (
         <p className="rounded-xl border border-dashed border-white/10 px-4 py-6 text-sm text-muted-foreground">
@@ -276,7 +275,7 @@ function CheckpointLayout({ node }: { node: StudentNode }) {
           variant="secondary"
           className="gap-2"
         >
-          <MessageSquare className="size-4" /> Falar no 1:1
+          <MessageSquare className="size-4" /> Falar no Mentor
         </Button>
       </div>
     </div>

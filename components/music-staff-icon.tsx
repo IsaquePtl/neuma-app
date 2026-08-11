@@ -2,14 +2,14 @@ import { forwardRef } from "react";
 import type { LucideProps } from "lucide-react";
 
 /**
- * Metrónomo minimalista (pirâmide um pouco mais larga + pêndulo limpo).
+ * Duas notas com ligadura — ícone de Recursos (linha fina e limpa).
  */
-export const MetronomeIcon = forwardRef<SVGSVGElement, LucideProps>(
+export const MusicStaffIcon = forwardRef<SVGSVGElement, LucideProps>(
   (
     {
       className,
       size = 24,
-      strokeWidth = 2,
+      strokeWidth = 1.75,
       absoluteStrokeWidth,
       color = "currentColor",
       ...props
@@ -37,17 +37,17 @@ export const MetronomeIcon = forwardRef<SVGSVGElement, LucideProps>(
         aria-hidden="true"
         {...props}
       >
-        {/* Corpo mais largo */}
-        <path d="M5.5 20h13L15.2 5.5H8.8L5.5 20Z" />
-        {/* Base */}
-        <path d="M4.5 20h15" />
-        {/* Pêndulo */}
-        <path d="M12 6.5v9" />
-        {/* Peso */}
-        <circle cx="12" cy="16.75" r="1.35" fill={color} stroke="none" />
+        {/* Cabeças (ligeiramente ovais, alinhadas) */}
+        <ellipse cx="7" cy="18" rx="2.4" ry="1.85" fill={color} stroke="none" />
+        <ellipse cx="15" cy="18" rx="2.4" ry="1.85" fill={color} stroke="none" />
+        {/* Hastes verticais */}
+        <path d="M9.4 18V6" />
+        <path d="M17.4 18V6" />
+        {/* Ligadura horizontal */}
+        <path d="M9.4 6h8" strokeLinecap="butt" />
       </svg>
     );
   },
 );
 
-MetronomeIcon.displayName = "MetronomeIcon";
+MusicStaffIcon.displayName = "MusicStaffIcon";

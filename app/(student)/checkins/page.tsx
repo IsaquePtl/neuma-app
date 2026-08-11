@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  ArrowLeft,
   Video,
   ExternalLink,
   MessageSquare,
@@ -49,15 +48,8 @@ export default async function StudentCheckinsPage() {
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/session"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> 1:1
-      </Link>
-
       <PageHero
-        eyebrow="1:1"
+        eyebrow="Mentor"
         title="Os teus check-ins"
         subtitle="Histórico das tuas submissões e o feedback do mentor."
       >

@@ -15,41 +15,54 @@ export default async function ForgotPasswordPage({
   const { error, ok } = await searchParams;
 
   return (
-    <div className="flex w-full max-w-sm flex-col items-center">
+    <div className="flex w-full max-w-md flex-col items-center">
       <Image
         src="/brand/mark-white.png"
         alt="Neuma"
-        width={72}
-        height={72}
+        width={96}
+        height={96}
         priority
-        className="mb-8"
+        className="mb-8 h-24 w-24"
       />
-      <Card className="w-full p-6">
-        <form action={requestPasswordReset} className="space-y-4">
+      <Card className="w-full p-7 sm:p-8">
+        <form action={requestPasswordReset} className="space-y-5">
           <div className="space-y-1">
-            <h1 className="text-lg font-semibold">Recuperar password</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-xl font-semibold">Recuperar password</h1>
+            <p className="text-base text-muted-foreground">
               Enviamos um link para o teu email.
             </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" name="email" type="email" required autoComplete="email" />
+            <Label htmlFor="email" className="text-base">
+              Email
+            </Label>
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              required
+              autoComplete="email"
+              className="h-12 text-base"
+            />
           </div>
           {error ? (
-            <p className="text-sm text-destructive" role="alert">
+            <p className="text-base text-destructive" role="alert">
               {error}
             </p>
           ) : null}
           {ok ? (
-            <p className="text-sm text-muted-foreground" role="status">
+            <p className="text-base text-muted-foreground" role="status">
               {ok}
             </p>
           ) : null}
-          <Button type="submit" className="w-full bg-white/12 text-foreground hover:bg-white/18">
+          <Button
+            type="submit"
+            size="lg"
+            className="h-14 w-full text-base font-semibold bg-white/12 text-foreground hover:bg-white/18"
+          >
             Enviar link
           </Button>
-          <p className="text-center text-sm text-muted-foreground">
+          <p className="text-center text-base text-muted-foreground">
             <Link href="/login" className="underline-offset-4 hover:underline">
               Voltar ao login
             </Link>

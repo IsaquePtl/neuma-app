@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, ExternalLink, Video } from "lucide-react";
+import { ExternalLink, Video } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/card";
@@ -32,12 +32,6 @@ export default async function SessionFeedbackPage() {
   if (!activeNode) {
     return (
       <div className="mx-auto max-w-2xl space-y-6">
-        <Link
-          href="/session"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" /> 1:1
-        </Link>
         <Card className="p-6 text-sm text-muted-foreground">
           Sem feedbacks de momento.
         </Card>
@@ -75,13 +69,6 @@ export default async function SessionFeedbackPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <Link
-        href="/session"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> 1:1
-      </Link>
-
       <header className="space-y-1">
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
           Feedback

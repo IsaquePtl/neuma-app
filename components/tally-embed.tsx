@@ -1,4 +1,19 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+import Script from "next/script";
+
 import { cn } from "@/lib/utils";
+
+const TALLY_EMBED_JS = "https://tally.so/widgets/embed.js";
+
+declare global {
+  interface Window {
+    Tally?: {
+      loadEmbeds: () => void;
+    };
+  }
+}
 
 export function tallyEmbedUrl(
   formId: string,
@@ -19,37 +34,77 @@ export function tallyEmbedUrl(
   return url.toString();
 }
 
+function loadTallyEmbeds() {
+  if (typeof window === "undefined") return;
+  if (window.Tally) {
+    window.Tally.loadEmbeds();
+    return;
+  }
+  document
+    .querySelectorAll<HTMLIFrameElement>("iframe[data-tally-src]:not([src])")
+    .forEach((iframe) => {
+      const src = iframe.dataset.tallySrc;
+      if (src) iframe.src = src;
+    });
+}
+
+/** Embed oficial Tally: data-tally-src + widgets/embed.js (dynamicHeight). */
 export function TallyEmbed({
   formId,
   title,
   className,
-  height = 760,
+  height = 500,
   params,
+  onReady,
 }: {
   formId: string;
   title: string;
   className?: string;
   height?: number;
   params?: Record<string, string | null | undefined>;
+  onReady?: () => void;
 }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const readyRef = useRef(false);
+  const src = tallyEmbedUrl(formId, params);
+
+  useEffect(() => {
+    readyRef.current = false;
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    iframe.removeAttribute("src");
+    iframe.setAttribute("data-tally-src", src);
+    loadTallyEmbeds();
+  }, [src]);
+
+  function markReady() {
+    if (readyRef.current) return;
+    readyRef.current = true;
+    onReady?.();
+  }
+
   return (
-    <div
-      className={cn(
-        "overflow-hidden rounded-3xl border border-white/10 bg-black/20",
-        className,
-      )}
-    >
+    <>
+      <Script
+        src={TALLY_EMBED_JS}
+        strategy="afterInteractive"
+        onLoad={loadTallyEmbeds}
+        onError={loadTallyEmbeds}
+      />
       <iframe
-        src={tallyEmbedUrl(formId, params)}
-        loading="lazy"
+        ref={iframeRef}
+        data-tally-src={src}
+        loading="eager"
         width="100%"
         height={height}
-        frameBorder="0"
+        frameBorder={0}
         marginHeight={0}
         marginWidth={0}
         title={title}
-        className="block w-full"
+        onLoad={markReady}
+        className={cn("block w-full border-0 bg-transparent", className)}
+        allow="camera; microphone; clipboard-write"
       />
-    </div>
+    </>
   );
 }

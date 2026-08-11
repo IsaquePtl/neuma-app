@@ -53,10 +53,10 @@ function kindIconEl(kind: NodeKind) {
 
 function todoTagLabel(key: string) {
   if (key.startsWith("call:")) return "SESSÃO";
-  if (key.startsWith("content:")) return "GRAVAÇÃO";
+  if (key.startsWith("content:")) return "AULA";
   if (key.startsWith("checkin:")) return "PRÁTICA";
   if (key.startsWith("feedback:")) return "FEEDBACK";
-  if (key === "session") return "1:1";
+  if (key === "session") return "MENTOR";
   if (key === "path") return "PERCURSO";
   return "TAREFA";
 }
@@ -66,7 +66,7 @@ function todoTagLabel(key: string) {
  * Desktop: fluxo normal no topo.
  */
 const HOME_VIEWPORT =
-  "flex h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-1rem-5.75rem-14px)] flex-col justify-center gap-4 overflow-hidden pb-5 " +
+  "neuma-mobile-viewport flex flex-col justify-center gap-4 overflow-hidden pb-5 " +
   "desktop:h-auto desktop:min-h-0 desktop:justify-start desktop:gap-3 desktop:overflow-visible desktop:pb-4";
 
 export default async function StudentHomePage() {
@@ -146,7 +146,7 @@ export default async function StudentHomePage() {
     const emptyTodos: StudentTodoItem[] = [
       {
         key: "session",
-        title: "Agendar 1:1 com o mentor",
+        title: "Agendar com o mentor",
         href: "/session#agenda",
         tag: todoTagLabel("session"),
       },
@@ -161,10 +161,10 @@ export default async function StudentHomePage() {
     return (
       <div className={HOME_VIEWPORT}>
         <div className="shrink-0 space-y-0.5">
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+          <p className="text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">
             Geral
           </p>
-          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
             Bem vindo, {studentName}
           </h1>
         </div>
@@ -253,10 +253,10 @@ export default async function StudentHomePage() {
   return (
     <div className={HOME_VIEWPORT}>
       <div className="shrink-0 space-y-0.5">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+        <p className="text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">
           Geral
         </p>
-        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
           Bem vindo, {studentName}
         </h1>
       </div>
@@ -278,7 +278,7 @@ export default async function StudentHomePage() {
                   ) : (
                     <Video className="size-3" />
                   )}
-                  {activeNode ? nodeKindLabel[activeNode.kind] : "Gravação"}
+                  {activeNode ? nodeKindLabel[activeNode.kind] : "Aula"}
                   {activeNode?.week_number
                     ? ` · Sem. ${activeNode.week_number}`
                     : null}

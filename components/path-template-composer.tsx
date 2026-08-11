@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   Dumbbell,
   Flag,
   Pencil,
@@ -101,7 +99,6 @@ export function PathTemplateComposer({
   topics: PickerTopic[];
   assets: PickerAsset[];
 }) {
-  const router = useRouter();
   const [title, setTitle] = useState(template.title);
   const [startDate, setStartDate] = useState(template.start_date ?? "");
   const [periodMonths, setPeriodMonths] = useState<number>(
@@ -155,23 +152,9 @@ export function PathTemplateComposer({
     });
   }
 
-  function backToLibrary() {
-    router.push("/studio/paths");
-  }
-
   return (
     <div className="mx-auto max-w-lg space-y-8 pb-8">
       <div className="space-y-5">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="-ml-2 gap-2 text-muted-foreground"
-          onClick={backToLibrary}
-        >
-          <ArrowLeft className="size-4" /> Biblioteca
-        </Button>
-
         <div className="space-y-1">
           <Input
             value={title}

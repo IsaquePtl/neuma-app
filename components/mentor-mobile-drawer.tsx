@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { Loader2, Menu, X, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { NeumaLogo } from "@/components/neuma-logo";
 import { UserAvatar } from "@/components/user-avatar";
 
 export type MentorDrawerItem = {
@@ -34,12 +35,17 @@ export function MentorMobileDrawer({
   items,
   onNavigate,
   pending = false,
+  showMenuButton = true,
+  homeHref = "/home",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   items: MentorDrawerItem[];
   onNavigate: (href?: string) => void;
   pending?: boolean;
+  /** Em páginas internas o header mostra só «voltar». */
+  showMenuButton?: boolean;
+  homeHref?: string;
 }) {
   const pathname = usePathname();
   const [targetHref, setTargetHref] = useState<string | null>(null);
@@ -98,7 +104,7 @@ export function MentorMobileDrawer({
 
   return (
     <>
-      {!open ? (
+      {showMenuButton && !open ? (
         <button
           type="button"
           aria-label="Abrir menu"
@@ -140,20 +146,31 @@ export function MentorMobileDrawer({
         )}
       >
         <div className="mentor-mobile-drawer-panel relative flex h-full flex-col overflow-hidden rounded-3xl p-4">
-          <div className="flex items-center justify-between px-1 py-2">
-            <p className="text-sm font-semibold">Menu</p>
+          <div className="flex items-center justify-between gap-2">
+            <Link
+              href={homeHref}
+              aria-label="Neuma"
+              prefetch
+              className="px-2 py-3"
+              onClick={(e) => {
+                e.preventDefault();
+                handleNavigate(homeHref, pathname === homeHref);
+              }}
+            >
+              <NeumaLogo withWordmark={false} />
+            </Link>
             <button
               type="button"
               aria-label="Fechar"
               disabled={pending}
               onClick={closeIfIdle}
-              className="grid size-9 place-items-center rounded-full hover:bg-white/10 disabled:opacity-40"
+              className="grid size-9 shrink-0 place-items-center rounded-full hover:bg-white/10 disabled:opacity-40"
             >
               <X className="size-4" />
             </button>
           </div>
-          <div className="neuma-hairline mx-1 rounded-full opacity-70" />
-          <nav className="mt-3 flex-1 space-y-1 overflow-y-auto">
+          <div className="neuma-hairline mx-2 mt-1 rounded-full opacity-70" />
+          <nav className="mt-4 flex-1 space-y-2 overflow-y-auto">
             {mainItems.map((item) => (
               <DrawerLink
                 key={item.href}
@@ -213,7 +230,7 @@ function DrawerLink({
         onNavigate(item.href, isCurrent);
       }}
       className={cn(
-        "flex items-center gap-3 rounded-xl px-3 py-3 transition-colors",
+        "flex items-center gap-3.5 rounded-2xl px-3.5 py-4 transition-colors",
         active
           ? "neuma-gradient text-white shadow-md"
           : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
@@ -222,24 +239,24 @@ function DrawerLink({
     >
       {isProfileItem(item) ? (
         isTarget && pending ? (
-          <span className="grid size-9 shrink-0 place-items-center">
-            <Loader2 className="size-4 animate-spin" />
+          <span className="grid size-10 shrink-0 place-items-center">
+            <Loader2 className="size-5 animate-spin" />
           </span>
         ) : (
           <UserAvatar
             name={item.profileName}
             email={item.profileEmail}
             avatarUrl={item.profileAvatarUrl}
-            size="md"
+            size="lg"
             className={cn(active && "ring-2 ring-white/30")}
           />
         )
       ) : (
         <span className="relative shrink-0">
           {isTarget && pending ? (
-            <Loader2 className="size-[18px] animate-spin" />
+            <Loader2 className="size-5 animate-spin" />
           ) : (
-            <Icon className="size-[18px]" />
+            <Icon className="size-5" />
           )}
           {item.badge && item.badge > 0 && !(isTarget && pending) ? (
             <span
@@ -254,15 +271,15 @@ function DrawerLink({
         </span>
       )}
       <span className="min-w-0">
-        <span className="block text-sm font-medium">{item.label}</span>
-        {item.subtitle ? (
+        <span className="block text-base font-medium">{item.label}</span>
+        {item.subtitle && !(isTarget && pending) ? (
           <span
             className={cn(
-              "block truncate text-xs",
+              "block truncate text-sm",
               active ? "text-white/75" : "text-muted-foreground",
             )}
           >
-            {isTarget && pending ? "A carregar…" : item.subtitle}
+            {item.subtitle}
           </span>
         ) : null}
       </span>

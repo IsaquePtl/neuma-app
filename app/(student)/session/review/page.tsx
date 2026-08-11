@@ -1,8 +1,6 @@
 "use client";
 
 import { useTransition } from "react";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 import { submitStudentReview } from "@/lib/actions/student-reviews";
@@ -29,13 +27,6 @@ export default function StudentReviewPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <Link
-        href="/session"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> 1:1
-      </Link>
-
       <header className="space-y-1">
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
           A tua opinião
@@ -44,7 +35,7 @@ export default function StudentReviewPage() {
           Deixar um feedback
         </h1>
         <p className="text-sm text-muted-foreground">
-          Diz-nos o que pensas da app, do 1:1 ou da mentoria — ajuda-nos a
+          Diz-nos o que pensas da app, do Mentor ou da mentoria — ajuda-nos a
           melhorar.
         </p>
       </header>
@@ -60,7 +51,7 @@ export default function StudentReviewPage() {
           >
             <option value="geral">Geral</option>
             <option value="app">App</option>
-            <option value="1:1">1:1 / sessões</option>
+            <option value="1:1">Mentor / sessões</option>
             <option value="percurso">Percurso</option>
             <option value="mentor">Mentor</option>
           </select>

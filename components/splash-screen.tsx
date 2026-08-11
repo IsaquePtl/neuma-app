@@ -24,7 +24,7 @@ export function SplashScreen() {
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex h-[100dvh] w-screen max-h-[100dvh] items-center justify-center overflow-hidden bg-background transition-opacity duration-[1200ms] ${
+      className={`fixed inset-0 z-[100] flex h-[100dvh] w-screen max-h-[100dvh] touch-manipulation items-center justify-center overflow-hidden overscroll-none bg-background transition-opacity duration-[1200ms] ${
         leaving ? "pointer-events-none opacity-0" : "opacity-100"
       }`}
     >

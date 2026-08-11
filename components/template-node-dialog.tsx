@@ -159,7 +159,7 @@ export function TemplateNodeDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? "Editar nível" : "Novo nível"}</DialogTitle>
           <DialogDescription>
-            Cada tipo tem um foco diferente. Em Gravação: categoria → tópico →
+            Cada tipo tem um foco diferente. Em Aula: categoria → tópico →
             vídeo.
           </DialogDescription>
         </DialogHeader>

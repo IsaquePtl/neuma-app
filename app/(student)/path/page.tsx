@@ -6,6 +6,13 @@ import { loadMyPathWithNodes } from "@/lib/students/queries";
 import { StudentPathMap } from "@/components/student-path-map";
 import { Button } from "@/components/ui/button";
 
+/**
+ * Mobile/tablet: mais perto do centro (como Geral). Desktop: fluxo no topo.
+ */
+const PATH_VIEWPORT =
+  "neuma-mobile-viewport flex flex-col justify-center gap-8 overflow-y-auto pb-5 " +
+  "desktop:h-auto desktop:min-h-0 desktop:justify-start desktop:overflow-visible desktop:pb-4";
+
 export default async function StudentPathPage() {
   const supabase = await createClient();
   const {
@@ -19,8 +26,8 @@ export default async function StudentPathPage() {
 
   if (!path) {
     return (
-      <div className="space-y-6 pb-4">
-        <div className="space-y-3">
+      <div className={PATH_VIEWPORT}>
+        <div className="shrink-0 space-y-3">
           <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
             Percurso
           </p>
@@ -36,7 +43,7 @@ export default async function StudentPathPage() {
             nativeButton={false}
             className="gap-2"
           >
-            Agendar 1:1 <ArrowRight className="size-4" />
+            Agendar com o mentor <ArrowRight className="size-4" />
           </Button>
         </div>
       </div>
@@ -44,9 +51,9 @@ export default async function StudentPathPage() {
   }
 
   return (
-    <div className="space-y-8 pb-4">
+    <div className={PATH_VIEWPORT}>
       {/* Cabeçalho leve — o foco é o mapa de níveis */}
-      <div className="space-y-3">
+      <div className="shrink-0 space-y-3">
         <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
           <Route className="size-3.5" /> Percurso
         </p>
@@ -73,11 +80,13 @@ export default async function StudentPathPage() {
       </div>
 
       {nodes.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
+        <p className="shrink-0 text-sm text-muted-foreground">
           Ainda sem níveis neste percurso.
         </p>
       ) : (
-        <StudentPathMap nodes={nodes} />
+        <div className="min-h-0 w-full">
+          <StudentPathMap nodes={nodes} />
+        </div>
       )}
     </div>
   );

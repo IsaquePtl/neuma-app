@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Users,
   House,
@@ -12,29 +12,30 @@ import {
   Route,
   Library,
   CalendarDays,
+  ChevronLeft,
   type LucideIcon,
 } from "lucide-react";
 
 import { logout } from "@/lib/actions/auth";
-import { MetronomeIcon } from "@/components/metronome-icon";
+import { MusicStaffIcon } from "@/components/music-staff-icon";
 import { NeumaLogo } from "@/components/neuma-logo";
 import { MobileMenubar, type MobileNavItem } from "@/components/mobile-menubar";
 import {
   MentorMobileDrawer,
   type MentorDrawerItem,
 } from "@/components/mentor-mobile-drawer";
+import { ScreenLoader } from "@/components/screen-loader";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type NavIcon = LucideIcon | typeof MetronomeIcon;
+type NavIcon = LucideIcon | typeof MusicStaffIcon;
 
 type NavItem = {
   label: string;
   href: string;
   icon: NavIcon;
   match: (path: string) => boolean;
-  subtitle?: string;
 };
 
 /** Desktop sidebar — inclui Calendário. */
@@ -44,14 +45,12 @@ const mentorNavDesktop: NavItem[] = [
     href: "/studio",
     icon: House,
     match: (p) => p === "/studio",
-    subtitle: "Menu e Dashboard",
   },
   {
     label: "Alunos",
     href: "/studio/students",
     icon: Users,
     match: (p) => p.startsWith("/studio/students"),
-    subtitle: "Fichas e perfil",
   },
   {
     label: "Percursos",
@@ -62,31 +61,27 @@ const mentorNavDesktop: NavItem[] = [
       p.startsWith("/studio/inbox") ||
       p.startsWith("/studio/checkins") ||
       p.startsWith("/studio/intake"),
-    subtitle: "Check-ins e feedback",
   },
   {
     label: "Biblioteca",
     href: "/studio/paths",
     icon: Library,
     match: (p) => p.startsWith("/studio/paths"),
-    subtitle: "Templates e conteúdos",
   },
   {
     label: "Calendário",
     href: "/studio/calendar",
     icon: CalendarDays,
     match: (p) => p.startsWith("/studio/calendar"),
-    subtitle: "Sessões e prazos",
   },
 ];
 
 const mentorExtraNav: NavItem[] = [
   {
-    label: "Ferramentas",
+    label: "Recursos",
     href: "/studio/tools",
-    icon: MetronomeIcon,
+    icon: MusicStaffIcon,
     match: (p) => p.startsWith("/studio/tools"),
-    subtitle: "Metrónomo e campo harmónico",
   },
 ];
 
@@ -101,30 +96,88 @@ const studentNav: NavItem[] = [
     href: "/home",
     icon: House,
     match: (p) => p === "/home",
-    subtitle: "O teu panorama",
   },
   {
     label: "Percurso",
     href: "/path",
     icon: Route,
     match: (p) => p.startsWith("/path"),
-    subtitle: "Níveis e progresso",
   },
   {
-    label: "1:1",
+    label: "Mentor",
     href: "/session",
     icon: ClipboardList,
     match: (p) => p.startsWith("/session") || p.startsWith("/checkins"),
-    subtitle: "Sessões e check-ins",
   },
   {
-    label: "Ferramentas",
+    label: "Recursos",
     href: "/tools",
-    icon: MetronomeIcon,
+    icon: MusicStaffIcon,
     match: (p) => p.startsWith("/tools"),
-    subtitle: "Metrónomo e campo harmónico",
   },
 ];
+
+/** Tabs principais — mantêm logo + menu. Tudo o resto é «página interna». */
+const STUDENT_ROOT_PATHS = new Set([
+  "/home",
+  "/path",
+  "/session",
+  "/tools",
+  "/settings",
+]);
+
+const MENTOR_ROOT_PATHS = new Set([
+  "/studio",
+  "/studio/students",
+  "/studio/journeys",
+  "/studio/journeys/checkins",
+  "/studio/journeys/onboardings",
+  "/studio/paths",
+  "/studio/calendar",
+  "/studio/tools",
+  "/studio/settings",
+]);
+
+function isShellRootPage(pathname: string, role: "mentor" | "student") {
+  if (role === "student") return STUDENT_ROOT_PATHS.has(pathname);
+  return MENTOR_ROOT_PATHS.has(pathname);
+}
+
+function shellBackHref(
+  pathname: string,
+  role: "mentor" | "student",
+  searchParams?: URLSearchParams | { get: (key: string) => string | null },
+) {
+  if (role === "student") {
+    if (pathname.startsWith("/path/")) return "/path";
+    if (pathname.startsWith("/session/")) return "/session";
+    if (pathname === "/checkins" || pathname.startsWith("/checkins/new")) {
+      return "/session";
+    }
+    if (pathname.startsWith("/checkins/")) return "/checkins";
+    if (pathname === "/settings") return "/home";
+    return "/home";
+  }
+
+  if (pathname.startsWith("/studio/students/")) return "/studio/students";
+  if (/^\/studio\/journeys\/[^/]+$/.test(pathname)) return "/studio/journeys";
+  if (pathname.startsWith("/studio/paths/")) return "/studio/paths";
+  if (pathname.startsWith("/studio/checkins")) {
+    const from = searchParams?.get("from");
+    const student = searchParams?.get("student");
+    const path = searchParams?.get("path");
+    if (from === "student" && student) return `/studio/students/${student}`;
+    if (from === "journey" && path) return `/studio/journeys/${path}`;
+    if (from === "dashboard") return "/studio";
+    return "/studio/journeys/checkins";
+  }
+  if (pathname.startsWith("/studio/intake")) {
+    return "/studio/journeys/onboardings";
+  }
+  if (pathname.startsWith("/studio/inbox")) return "/studio/journeys";
+  if (pathname === "/studio/settings") return "/studio";
+  return "/studio";
+}
 
 function scrollToTop() {
   window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -146,15 +199,22 @@ export function AppShell({
   badgeCounts?: { checkins?: number };
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const [navPending, startNavTransition] = useTransition();
   const nav = role === "mentor" ? mentorNavDesktop : studentNav;
-  const mobileNav = role === "mentor" ? mentorNavMobile : studentNav;
+  /** Menubar: sem Recursos (fica só na sidebar). */
+  const mobileNav =
+    role === "mentor"
+      ? mentorNavMobile
+      : studentNav.filter((item) => item.href !== "/tools");
   const settingsHref = role === "mentor" ? "/studio/settings" : "/settings";
   const settingsActive = pathname === settingsHref;
   const home = role === "mentor" ? "/studio" : "/home";
   const [navCompact, setNavCompact] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /** Destino optimista — o header muda já no clique (voltar → logo/menu). */
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
 
   const mobileItems = useMemo<MobileNavItem[]>(() => {
     const items: MobileNavItem[] = mobileNav.map((item) => ({
@@ -189,7 +249,6 @@ export function AppShell({
       href: item.href,
       icon: item.icon,
       match: item.match,
-      subtitle: item.subtitle,
       badge:
         item.href === "/studio/journeys" && badgeCounts?.checkins
           ? badgeCounts.checkins
@@ -215,7 +274,6 @@ export function AppShell({
       href: item.href,
       icon: item.icon,
       match: item.match,
-      subtitle: item.subtitle,
       badge:
         item.href === "/session" && badgeCounts?.checkins
           ? badgeCounts.checkins
@@ -236,6 +294,9 @@ export function AppShell({
 
   const drawerItems =
     role === "mentor" ? mentorDrawerItems : studentDrawerItems;
+  const headerPath = pendingHref ?? pathname;
+  const isRootPage = isShellRootPage(headerPath, role);
+  const backHref = shellBackHref(pathname, role, searchParams);
 
   useEffect(() => {
     for (const item of mobileItems) router.prefetch(item.href);
@@ -253,7 +314,12 @@ export function AppShell({
   useEffect(() => {
     scrollToTop();
     setNavCompact(false);
+    setPendingHref(null);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!navPending) setPendingHref(null);
+  }, [navPending]);
 
   useEffect(() => {
     let lastY = window.scrollY;
@@ -281,6 +347,7 @@ export function AppShell({
     scrollToTop();
     setNavCompact(false);
     if (href && href !== pathname) {
+      setPendingHref(href);
       startNavTransition(() => {
         router.push(href);
       });
@@ -344,16 +411,6 @@ export function AppShell({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block">{item.label}</span>
-                    {item.subtitle ? (
-                      <span
-                        className={cn(
-                          "block truncate text-[11px]",
-                          active ? "text-white/70" : "text-muted-foreground/80",
-                        )}
-                      >
-                        {item.subtitle}
-                      </span>
-                    ) : null}
                   </span>
                 </Link>
               );
@@ -417,9 +474,10 @@ export function AppShell({
       <div className="flex flex-1 flex-col desktop:pl-64">
         <header
           className={cn(
-            "fixed inset-x-0 top-0 z-20 flex items-center justify-center bg-transparent desktop:hidden",
-            /* Safe-area: o layout já faz pt no fluxo; o header fixed precisa do inset para o logo */
+            "fixed inset-x-0 top-0 z-20 flex items-center bg-transparent desktop:hidden",
+            /* Safe-area no header fixed (root já não faz pt) */
             "h-[calc(3.5rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)]",
+            isRootPage ? "justify-center" : "justify-start px-1",
           )}
         >
           <MentorMobileDrawer
@@ -428,30 +486,71 @@ export function AppShell({
             items={drawerItems}
             onNavigate={onNavClick}
             pending={navPending}
+            showMenuButton={isRootPage}
+            homeHref={home}
           />
-          <Link
-            href={home}
-            aria-label="Neuma"
-            prefetch
-            onClick={(e) => {
-              e.preventDefault();
-              onNavClick(home);
-            }}
-          >
-            <NeumaLogo size={28} withWordmark={false} />
-          </Link>
+          {isRootPage ? (
+            <Link
+              href={home}
+              aria-label="Neuma"
+              prefetch
+              onClick={(e) => {
+                e.preventDefault();
+                onNavClick(home);
+              }}
+            >
+              <NeumaLogo size={28} withWordmark={false} />
+            </Link>
+          ) : (
+            <Link
+              href={backHref}
+              aria-label="Voltar"
+              prefetch
+              onClick={(e) => {
+                e.preventDefault();
+                onNavClick(backHref);
+              }}
+              className="grid size-10 place-items-center text-foreground"
+            >
+              <ChevronLeft className="size-7" strokeWidth={2} />
+            </Link>
+          )}
         </header>
-        {/* Spacer só da barra (3.5rem): o pt safe-area vem do layout root */}
-        <div className="h-14 shrink-0 desktop:hidden" aria-hidden />
+        {/* Spacer = altura do header fixed (barra + safe-top) */}
+        <div
+          className="h-[calc(3.5rem+env(safe-area-inset-top,0px))] shrink-0 desktop:hidden"
+          aria-hidden
+        />
 
         <main
           className={cn(
-            "mx-auto w-full flex-1 px-4 pt-4 pb-[calc(5.75rem+14px)] transition-opacity duration-150 desktop:px-10 desktop:pb-14 desktop:pt-10",
+            "mx-auto flex w-full flex-1 flex-col px-4 pt-4 pb-[calc(5.75rem+14px)] desktop:px-10 desktop:pb-14 desktop:pt-10",
             role === "mentor" ? "max-w-7xl" : "max-w-5xl",
-            navPending && "opacity-70",
           )}
         >
-          {children}
+          {navPending ? (
+            <ScreenLoader />
+          ) : (
+            <>
+              {!isRootPage ? (
+                <div className="mb-4 hidden desktop:block">
+                  <Link
+                    href={backHref}
+                    aria-label="Voltar"
+                    prefetch
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onNavClick(backHref);
+                    }}
+                    className="-ml-2 inline-grid size-10 place-items-center text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <ChevronLeft className="size-7" strokeWidth={2} />
+                  </Link>
+                </div>
+              ) : null}
+              {children}
+            </>
+          )}
         </main>
       </div>
 

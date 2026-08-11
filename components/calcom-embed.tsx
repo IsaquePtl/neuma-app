@@ -1,55 +1,44 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef } from "react";
 import Cal, { getCalApi } from "@calcom/embed-react";
-import { CalendarClock, ExternalLink, Phone } from "lucide-react";
+import { ExternalLink, Phone } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_CAL_USER =
   process.env.NEXT_PUBLIC_CALCOM_USERNAME || "isaque-portilho-nutfa9";
 
-/** Fundo escuro oficial do booker Cal (evita canvas branco no iframe). */
-const CAL_DARK_BG = "#101010";
+/** Config do botão element-click (oficial Cal.com). */
+const CAL_DATA_CONFIG = JSON.stringify({
+  layout: "month_view",
+  useSlotsViewOnSmallScreen: "true",
+  theme: "dark",
+});
 
-/**
- * UI dark completo. `colorScheme: "dark"` alinha o color-scheme do iframe
- * com a página (viewport dark) — sem isto o browser pinta um fundo branco
- * atrás do body transparente do embed.
- */
+/** UI mínima — alinhada ao snippet Cal + dark para a app. */
 const CAL_UI = {
   theme: "dark" as const,
   colorScheme: "dark",
   hideEventTypeDetails: false,
   layout: "month_view" as const,
-  styles: {
-    body: { background: CAL_DARK_BG },
-  },
-  cssVarsPerTheme: {
-    light: {
-      "cal-bg": CAL_DARK_BG,
-    },
-    dark: {
-      "cal-bg": CAL_DARK_BG,
-      "cal-bg-muted": "#171717",
-      "cal-bg-subtle": "#1c1c1c",
-      "cal-bg-emphasis": "#262626",
-    },
-  },
 };
 
-/** Tema via config = query param síncrono (sem flash light→dark). */
-const CAL_CONFIG = {
-  layout: "month_view" as const,
-  theme: "dark" as const,
-  "ui.color-scheme": "dark",
-  useSlotsViewOnSmallScreen: "true",
+export type CalBookingSuccessData = {
+  uid?: string;
+  title?: string;
+  startTime?: string;
+  endTime?: string;
+  status?: string;
+  videoCallUrl?: string;
+  isReschedule?: boolean;
 };
 
 type CalLinkProps = {
-  /** Ex.: `isaque-portilho-nutfa9/30min` ou só o username (usa eventType). */
+  /** Ex.: `isaque-portilho-nutfa9/30min`. */
   calLink?: string;
+  /** Namespace oficial Cal (`30min` | `sessao-de-duvidas`). */
   namespace?: string;
   eventType?: string;
 };
@@ -65,38 +54,24 @@ function publicCalUrl(calLink: string) {
   return `https://cal.com/${calLink.replace(/^\//, "")}`;
 }
 
-async function applyCalUi(namespace: string) {
-  const cal = await getCalApi({ namespace });
-  cal("ui", CAL_UI);
-  return cal;
+function extractBookingData(e: unknown): CalBookingSuccessData {
+  const detail = (e as { detail?: { data?: CalBookingSuccessData } })?.detail;
+  return detail?.data ?? {};
 }
 
 type CalBookButtonProps = CalLinkProps & {
   className?: string;
   label?: string;
   description?: string;
-  /** Esconde o botão “Abrir no Cal.com”. */
   showExternalLink?: boolean;
-  /** Botão grande (estilo session / nível). */
   size?: "default" | "lg";
   variant?: "default" | "secondary";
-  /** Chamado quando o aluno confirma / reagenda no embed. */
   onBookingSuccess?: (data: CalBookingSuccessData) => void | Promise<void>;
 };
 
-export type CalBookingSuccessData = {
-  uid?: string;
-  title?: string;
-  startTime?: string;
-  endTime?: string;
-  status?: string;
-  videoCallUrl?: string;
-  isReschedule?: boolean;
-};
-
 /**
- * CTA instantâneo + modal Cal.com com prerender (sem iframe inline).
- * Fallback: abrir cal.com noutra aba se o script falhar.
+ * Botão Cal.com element-click (data-cal-*), como no snippet oficial React.
+ * Mantém listeners de sucesso para actualizar a UI após agendar.
  */
 export function CalBookButton({
   calLink,
@@ -104,17 +79,16 @@ export function CalBookButton({
   eventType = "30min",
   className,
   label = "Agendar chamada",
-  description = "Escolhe um horário — abre de imediato.",
-  showExternalLink = true,
+  description,
+  showExternalLink = false,
   size = "default",
   variant = "default",
   onBookingSuccess,
 }: CalBookButtonProps) {
   const reactId = useId().replace(/:/g, "");
-  const ns = namespace ?? `cal-book-${reactId}`;
+  const ns = namespace ?? eventType ?? `cal-${reactId}`;
   const resolvedLink = resolveCalLink({ calLink, eventType });
   const fallbackHref = publicCalUrl(resolvedLink);
-  const [scriptReady, setScriptReady] = useState(false);
   const onSuccessRef = useRef(onBookingSuccess);
   onSuccessRef.current = onBookingSuccess;
 
@@ -123,74 +97,38 @@ export function CalBookButton({
 
     (async () => {
       try {
-        const cal = await applyCalUi(ns);
+        const cal = await getCalApi({ namespace: ns });
         if (cancelled) return;
 
-        const emit = (
-          data: {
-            uid?: string;
-            title?: string;
-            startTime?: string;
-            endTime?: string;
-            status?: string;
-            videoCallUrl?: string;
-          },
-          isReschedule: boolean,
-        ) => {
-          void onSuccessRef.current?.({
-            uid: data.uid,
-            title: data.title,
-            startTime: data.startTime,
-            endTime: data.endTime,
-            status: data.status,
-            videoCallUrl: data.videoCallUrl,
-            isReschedule,
-          });
-        };
+        cal("ui", CAL_UI);
 
         cal("on", {
           action: "bookingSuccessfulV2",
           callback: (e: unknown) => {
-            const detail = (e as { detail?: { data?: CalBookingSuccessData } })
-              ?.detail;
-            emit(detail?.data ?? {}, false);
+            void onSuccessRef.current?.({
+              ...extractBookingData(e),
+              isReschedule: false,
+            });
           },
         });
         cal("on", {
           action: "rescheduleBookingSuccessfulV2",
           callback: (e: unknown) => {
-            const detail = (e as { detail?: { data?: CalBookingSuccessData } })
-              ?.detail;
-            emit(detail?.data ?? {}, true);
+            void onSuccessRef.current?.({
+              ...extractBookingData(e),
+              isReschedule: true,
+            });
           },
         });
-
-        cal("prerender", {
-          calLink: resolvedLink,
-          type: "modal",
-        });
-        if (!cancelled) setScriptReady(true);
-      } catch {
-        if (!cancelled) setScriptReady(false);
+      } catch (err) {
+        console.error("[cal:init]", err);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [ns, resolvedLink]);
-
-  const openModal = async () => {
-    try {
-      const cal = await applyCalUi(ns);
-      cal("modal", {
-        calLink: resolvedLink,
-        config: CAL_CONFIG,
-      });
-    } catch {
-      window.open(fallbackHref, "_blank", "noopener,noreferrer");
-    }
-  };
+  }, [ns]);
 
   const lg = size === "lg";
 
@@ -200,20 +138,25 @@ export function CalBookButton({
         <p className="text-sm text-muted-foreground">{description}</p>
       ) : null}
       <div className={cn("flex flex-wrap gap-2", lg && "flex-col")}>
-        <Button
+        {/* data-cal-* = API oficial element-click do Cal.com */}
+        <button
           type="button"
-          size={lg ? "lg" : "default"}
-          variant={variant}
+          data-cal-namespace={ns}
+          data-cal-link={resolvedLink}
+          data-cal-config={CAL_DATA_CONFIG}
           className={cn(
+            buttonVariants({
+              variant,
+              size: lg ? "lg" : "default",
+            }),
             "gap-2",
             lg && "h-14 w-full gap-2 text-base font-semibold",
             !lg && "w-full sm:w-auto",
           )}
-          onClick={openModal}
         >
           <Phone className={lg ? "size-5" : "size-4"} />
           {label}
-        </Button>
+        </button>
         {showExternalLink ? (
           <Button
             render={
@@ -228,26 +171,16 @@ export function CalBookButton({
           </Button>
         ) : null}
       </div>
-      {!scriptReady && !lg ? (
-        <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <CalendarClock className="size-3.5" />
-          A preparar agenda em segundo plano…
-        </p>
-      ) : null}
     </div>
   );
 }
 
 type CalEmbedProps = CalLinkProps & {
   className?: string;
-  /** Viewport compacto (cabe no ecrã; scroll interno do Cal). */
   compact?: boolean;
 };
 
-/**
- * Inline embed Cal.com — lento (iframe da app Cal). Preferir `CalBookButton`.
- * Montar só quando o contentor estiver visível (não dentro de `<details>` fechado).
- */
+/** Inline embed — preferir `CalBookButton` (modal). */
 export function CalEmbed({
   calLink,
   namespace = "30min",
@@ -261,11 +194,12 @@ export function CalEmbed({
     let cancelled = false;
     (async () => {
       try {
-        await applyCalUi(namespace);
+        const cal = await getCalApi({ namespace });
+        if (cancelled) return;
+        cal("ui", CAL_UI);
       } catch {
-        // O iframe ainda pode carregar; UI theme é best-effort.
+        // best-effort
       }
-      if (cancelled) return;
     })();
     return () => {
       cancelled = true;
@@ -275,7 +209,7 @@ export function CalEmbed({
   return (
     <div
       className={cn(
-        "cal-embed-frame relative w-full overflow-hidden rounded-2xl",
+        "cal-embed-frame relative w-full overflow-hidden",
         compact && "cal-embed-frame--compact",
         className,
       )}
@@ -284,24 +218,22 @@ export function CalEmbed({
         key={`${namespace}-${resolvedLink}`}
         namespace={namespace}
         calLink={resolvedLink}
-        style={{
-          width: "100%",
-          height: "100%",
-          overflow: "scroll",
-          background: CAL_DARK_BG,
+        style={{ width: "100%", height: "100%", overflow: "scroll" }}
+        config={{
+          layout: "month_view",
+          useSlotsViewOnSmallScreen: "true",
+          theme: "dark",
         }}
-        config={CAL_CONFIG}
       />
     </div>
   );
 }
 
-/** Embed atrás de um `<details>` — só monta quando aberto (evita iframe a 0×0). */
 export function CalEmbedDisclosure({
   calLink,
-  namespace = "cal-disclosure",
+  namespace = "30min",
   eventType = "30min",
-  summary = "Abrir embed Cal.com (marcar sessão)",
+  summary = "Abrir agenda Cal.com",
   id = "agendar",
 }: {
   calLink?: string;
@@ -310,44 +242,19 @@ export function CalEmbedDisclosure({
   summary?: string;
   id?: string;
 }) {
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const syncFromHash = () => {
-      if (window.location.hash.replace(/^#/, "") === id) {
-        setOpen(true);
-        document
-          .getElementById(id)
-          ?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    };
-
-    syncFromHash();
-    window.addEventListener("hashchange", syncFromHash);
-    return () => window.removeEventListener("hashchange", syncFromHash);
-  }, [id]);
-
   return (
-    <details
-      id={id}
-      className="group scroll-mt-24"
-      open={open}
-      onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
-    >
+    <details id={id} className="group scroll-mt-24">
       <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
         {summary}
       </summary>
-      {open ? (
-        <div className="mt-3">
-          <CalBookButton
-            calLink={calLink}
-            namespace={namespace}
-            eventType={eventType}
-          />
-        </div>
-      ) : null}
+      <div className="mt-3">
+        <CalBookButton
+          calLink={calLink}
+          namespace={namespace}
+          eventType={eventType}
+          showExternalLink={false}
+        />
+      </div>
     </details>
   );
 }

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
@@ -22,14 +23,16 @@ export default async function StudentLayout({
   if (profile?.role !== "student") redirect("/");
 
   return (
-    <AppShell
-      role="student"
-      name={profile.full_name}
-      email={profile.email ?? user.email ?? ""}
-      avatarUrl={profile.avatar_url}
-      badgeCounts={{ checkins: badge }}
-    >
-      {children}
-    </AppShell>
+    <Suspense fallback={null}>
+      <AppShell
+        role="student"
+        name={profile.full_name}
+        email={profile.email ?? user.email ?? ""}
+        avatarUrl={profile.avatar_url}
+        badgeCounts={{ checkins: badge }}
+      >
+        {children}
+      </AppShell>
+    </Suspense>
   );
 }

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
@@ -21,14 +22,16 @@ export default async function MentorLayout({
   if (profile?.role !== "mentor") redirect("/");
 
   return (
-    <AppShell
-      role="mentor"
-      name={profile.full_name}
-      email={profile.email ?? user.email ?? ""}
-      avatarUrl={profile.avatar_url}
-      badgeCounts={{ checkins: badgeCount }}
-    >
-      {children}
-    </AppShell>
+    <Suspense fallback={null}>
+      <AppShell
+        role="mentor"
+        name={profile.full_name}
+        email={profile.email ?? user.email ?? ""}
+        avatarUrl={profile.avatar_url}
+        badgeCounts={{ checkins: badgeCount }}
+      >
+        {children}
+      </AppShell>
+    </Suspense>
   );
 }

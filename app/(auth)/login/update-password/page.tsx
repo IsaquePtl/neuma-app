@@ -15,25 +15,27 @@ export default async function UpdatePasswordPage({
   const { error } = await searchParams;
 
   return (
-    <div className="flex w-full max-w-sm flex-col items-center">
+    <div className="flex w-full max-w-md flex-col items-center">
       <Image
         src="/brand/mark-white.png"
         alt="Neuma"
-        width={72}
-        height={72}
+        width={96}
+        height={96}
         priority
-        className="mb-8"
+        className="mb-8 h-24 w-24"
       />
-      <Card className="w-full p-6">
-        <form action={updatePassword} className="space-y-4">
+      <Card className="w-full p-7 sm:p-8">
+        <form action={updatePassword} className="space-y-5">
           <div className="space-y-1">
-            <h1 className="text-lg font-semibold">Nova password</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-xl font-semibold">Nova password</h1>
+            <p className="text-base text-muted-foreground">
               Define uma password com pelo menos 8 caracteres.
             </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password" className="text-base">
+              Password
+            </Label>
             <Input
               id="password"
               name="password"
@@ -41,10 +43,13 @@ export default async function UpdatePasswordPage({
               required
               minLength={8}
               autoComplete="new-password"
+              className="h-12 text-base"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="confirm">Confirmar</Label>
+            <Label htmlFor="confirm" className="text-base">
+              Confirmar
+            </Label>
             <Input
               id="confirm"
               name="confirm"
@@ -52,17 +57,22 @@ export default async function UpdatePasswordPage({
               required
               minLength={8}
               autoComplete="new-password"
+              className="h-12 text-base"
             />
           </div>
           {error ? (
-            <p className="text-sm text-destructive" role="alert">
+            <p className="text-base text-destructive" role="alert">
               {error}
             </p>
           ) : null}
-          <Button type="submit" className="w-full bg-white/12 text-foreground hover:bg-white/18">
+          <Button
+            type="submit"
+            size="lg"
+            className="h-14 w-full text-base font-semibold bg-white/12 text-foreground hover:bg-white/18"
+          >
             Guardar
           </Button>
-          <p className="text-center text-sm text-muted-foreground">
+          <p className="text-center text-base text-muted-foreground">
             <Link href="/login" className="underline-offset-4 hover:underline">
               Voltar ao login
             </Link>

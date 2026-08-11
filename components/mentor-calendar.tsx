@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, Video } from "lucide-react";
 import type { CalendarEvent } from "@/lib/calendar/events";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ScreenLoader } from "@/components/screen-loader";
 import { cn } from "@/lib/utils";
 
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
@@ -136,12 +137,11 @@ export function MentorCalendar({
 
   return (
     <div className="flex w-full flex-col gap-2">
-      <Card
-        className={cn(
-          "w-full space-y-2 p-2.5 sm:p-3",
-          navPending && "opacity-70",
-        )}
-      >
+      {navPending ? (
+        <ScreenLoader className="min-h-[16rem]" />
+      ) : (
+        <>
+      <Card className="w-full space-y-2 p-2.5 sm:p-3">
         <div className="flex items-center justify-between gap-2">
           <Button
             type="button"
@@ -326,6 +326,8 @@ export function MentorCalendar({
           )}
         </Card>
       ) : null}
+        </>
+      )}
     </div>
   );
 }

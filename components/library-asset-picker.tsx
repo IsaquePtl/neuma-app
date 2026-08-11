@@ -227,7 +227,7 @@ export function LibraryAssetPicker({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="picker-lesson">Gravação</Label>
+        <Label htmlFor="picker-lesson">Aula</Label>
         <select
           id="picker-lesson"
           value={value}
@@ -243,7 +243,7 @@ export function LibraryAssetPicker({
           }}
           className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm disabled:opacity-50"
         >
-          <option value="">— escolher gravação —</option>
+          <option value="">— escolher aula —</option>
           {lessonsForTopic.map((a) => (
             <option key={a.id} value={a.id}>
               [{a.kind}] {a.title}
@@ -254,7 +254,7 @@ export function LibraryAssetPicker({
 
       {categories.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          Cria categorias e tópicos em Percursos → Biblioteca → Gravações.
+          Cria categorias e tópicos em Percursos → Biblioteca → Aulas.
         </p>
       ) : null}
     </div>

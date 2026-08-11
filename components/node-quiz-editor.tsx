@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScreenLoader } from "@/components/screen-loader";
 import { Textarea } from "@/components/ui/textarea";
 
 type DraftQuestion = {
@@ -120,9 +121,7 @@ export function NodeQuizEditor({ nodeId }: { nodeId: string }) {
   }
 
   if (loading) {
-    return (
-      <p className="text-sm text-muted-foreground">A carregar quiz…</p>
-    );
+    return <ScreenLoader className="min-h-[12rem]" />;
   }
 
   return (

@@ -4,6 +4,21 @@ import { createClient } from "@/lib/supabase/server";
 import { CheckInTallyPanel } from "@/components/check-in-tally-panel";
 import { ORPHAN_CHECKIN_LABEL } from "@/lib/labels";
 
+async function levelNumberForNode(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  nodeId: string,
+  pathId: string,
+) {
+  const { data: siblings } = await supabase
+    .from("nodes")
+    .select("id")
+    .eq("path_id", pathId)
+    .order("order_index", { ascending: true });
+
+  const idx = siblings?.findIndex((n) => n.id === nodeId) ?? -1;
+  return idx >= 0 ? idx + 1 : null;
+}
+
 export default async function NewCheckinPage({
   searchParams,
 }: {
@@ -32,7 +47,7 @@ export default async function NewCheckinPage({
 
   const { data: node } = await supabase
     .from("nodes")
-    .select("id, title")
+    .select("id, title, path_id")
     .eq("id", nodeId)
     .maybeSingle();
 
@@ -47,11 +62,16 @@ export default async function NewCheckinPage({
     );
   }
 
+  const levelNumber = node.path_id
+    ? await levelNumberForNode(supabase, node.id, node.path_id)
+    : null;
+
   return (
     <CheckInTallyPanel
       formId={formId}
       nodeId={node.id}
       nodeTitle={node.title}
+      levelNumber={levelNumber}
       studentId={user.id}
     />
   );

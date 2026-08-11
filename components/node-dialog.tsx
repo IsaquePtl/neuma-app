@@ -184,7 +184,7 @@ export function NodeDialog({
 
           {kind === "lesson" ? (
             <p className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-muted-foreground">
-              Foco: vídeo em destaque. Escolhe a gravação na biblioteca.
+              Foco: vídeo em destaque. Escolhe a aula na biblioteca.
             </p>
           ) : null}
 

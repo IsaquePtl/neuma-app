@@ -1,6 +1,3 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-
 import { formatDate } from "@/lib/labels";
 import type { StudentCounts, StudentProfile } from "@/lib/students/queries";
 import { PathStatusBadge } from "@/components/status-badges";
@@ -54,13 +51,6 @@ export function StudentShell({
 
   return (
     <div className="space-y-5 pb-2 sm:space-y-6">
-      <Link
-        href="/studio/students"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Alunos
-      </Link>
-
       <header className="space-y-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
           <div className="flex min-w-0 flex-1 items-start gap-4">

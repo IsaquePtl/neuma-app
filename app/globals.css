@@ -292,7 +292,7 @@
 }
 
 /* ---- Camadas de fundo (gradientes + textura neumas) ---- */
-/* ---- Cal.com embed: só dark, sem canvas branco no iframe ---- */
+/* ---- Cal.com embed: sem caixa extra; só o booker dark ---- */
 cal-modal-box,
 .cal-modal-box,
 cal-inline,
@@ -300,8 +300,8 @@ cal-inline,
 .cal-inline-container,
 .cal-embed-frame {
   color-scheme: dark;
-  background-color: #101010 !important;
-  border-color: transparent !important;
+  background: transparent !important;
+  border: none !important;
 }
 
 cal-modal-box,
@@ -316,11 +316,10 @@ cal-inline iframe,
 .cal-embed-frame iframe,
 .cal-inline-container iframe {
   color-scheme: dark !important;
-  background-color: #101010 !important;
-  background: #101010 !important;
+  background: transparent !important;
 }
 
-/* Overlay do modal: sem halo claro */
+/* Overlay do modal */
 .cal-modal-box::backdrop,
 cal-modal-box::backdrop {
   background: rgba(0, 0, 0, 0.72) !important;
@@ -393,6 +392,23 @@ cal-modal-box::backdrop {
 .bottom-safe {
   /* Mesma lógica da menubar: gap fixo ao fundo físico */
   bottom: 0.5rem;
+}
+
+/*
+ * Viewport mobile das páginas centradas (Geral / Percurso / Mentor / …).
+ * Altura = ecrã − header (3.5rem + safe-top) − main pt (1rem) − menubar reserve.
+ * Não subtrai safe-bottom (evita double-count; root já é full-bleed).
+ */
+.neuma-mobile-viewport {
+  height: calc(
+    100dvh - 3.5rem - env(safe-area-inset-top, 0px) - 1rem - 5.75rem - 14px
+  );
+}
+@media (min-width: 850px) {
+  .neuma-mobile-viewport {
+    height: auto;
+    min-height: 0;
+  }
 }
 
 /*

@@ -119,14 +119,10 @@ export function SessionBookingSection({
   initialBooking,
   mentorName,
   calUser,
-  nodeId,
-  namespace,
 }: {
   initialBooking: StudentUpcomingBooking | null;
   mentorName?: string | null;
   calUser: string;
-  nodeId: string;
-  namespace?: string;
 }) {
   const router = useRouter();
   const [booking, setBooking] = useState(initialBooking);
@@ -142,10 +138,9 @@ export function SessionBookingSection({
       <CallBookingCard booking={booking} mentorName={mentorName} />
       <CalBookButton
         calLink={`${calUser}/30min`}
-        namespace={namespace ?? `student-path-node-${nodeId}`}
+        namespace="30min"
         eventType="30min"
         label={hasBooking ? "Alterar agendamento" : "Agendar sessão"}
-        description=""
         showExternalLink={false}
         size={hasBooking ? "default" : "lg"}
         variant={hasBooking ? "secondary" : "default"}

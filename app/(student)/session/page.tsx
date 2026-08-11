@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  ClipboardList,
   History,
   MessageCircle,
   MessageSquareText,
@@ -23,8 +22,12 @@ const WHATSAPP_URL =
  * como em Geral. Desktop: fluxo no topo.
  */
 const SESSION_VIEWPORT =
-  "mx-auto flex h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-1rem-5.75rem-14px)] max-w-2xl flex-col justify-center gap-4 overflow-y-auto pb-5 " +
+  "neuma-mobile-viewport mx-auto flex w-full max-w-2xl flex-col justify-center gap-4 overflow-y-auto pb-5 " +
   "desktop:h-auto desktop:min-h-0 desktop:justify-start desktop:gap-6 desktop:overflow-visible desktop:pb-4";
+
+/** Gradient discreto no botão de feedback (activo e vazio). */
+const FEEDBACK_BTN =
+  "h-14 w-full gap-2 border border-white/12 bg-gradient-to-br from-[var(--neuma-coral)]/22 via-[var(--neuma-lavender)]/12 to-[var(--neuma-blue)]/25 text-base font-semibold text-foreground shadow-none hover:from-[var(--neuma-coral)]/32 hover:via-[var(--neuma-lavender)]/16 hover:to-[var(--neuma-blue)]/35 hover:text-foreground disabled:pointer-events-none disabled:opacity-55 disabled:saturate-75";
 
 export default async function StudentSessionPage({
   searchParams,
@@ -117,7 +120,7 @@ export default async function StudentSessionPage({
         />
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-            Mentoria 1:1
+            Mentor
           </p>
           <h1 className="truncate text-lg font-semibold tracking-tight">
             {mentor?.full_name ?? "O teu mentor"}
@@ -135,7 +138,6 @@ export default async function StudentSessionPage({
             </p>
           ) : null}
         </div>
-        <ClipboardList className="size-5 shrink-0 text-muted-foreground" />
       </header>
 
       {reviewed === "1" ? (
@@ -164,34 +166,30 @@ export default async function StudentSessionPage({
             render={<Link href="/session/feedback" />}
             nativeButton={false}
             size="lg"
-            variant="secondary"
-            className="h-14 w-full gap-2 text-base font-semibold"
+            variant="ghost"
+            className={FEEDBACK_BTN}
           >
             <MessageSquareText className="size-5" /> Ver feedback
           </Button>
         ) : (
           <Button
             size="lg"
-            variant="secondary"
+            variant="ghost"
             disabled
-            className="h-14 w-full gap-2 text-base font-semibold"
+            className={FEEDBACK_BTN}
           >
             <MessageSquareText className="size-5" /> Sem feedbacks de momento
           </Button>
         )}
 
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-          <p className="mb-2 text-sm font-medium">Agendar sessão de dúvidas</p>
-          <CalBookButton
-            calLink={`${calUser}/sessao-de-duvidas`}
-            namespace="sessao-de-duvidas"
-            eventType="sessao-de-duvidas"
-            label="Agendar sessão de dúvidas"
-            description=""
-            showExternalLink={false}
-            size="lg"
-          />
-        </div>
+        <CalBookButton
+          calLink={`${calUser}/sessao-de-duvidas`}
+          namespace="sessao-de-duvidas"
+          eventType="sessao-de-duvidas"
+          label="Agendar sessão de dúvidas"
+          showExternalLink={false}
+          size="lg"
+        />
 
         <Button
           render={<Link href="/checkins" />}
