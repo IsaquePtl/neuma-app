@@ -260,7 +260,7 @@ export function PathTemplateComposer({
               />
 
               <div className="flex flex-col items-center pt-0.5">
-                <span className="student-path-marker relative z-10 grid size-14 shrink-0 place-items-center rounded-full border-2 border-transparent neuma-gradient text-base font-semibold tabular-nums text-white shadow-[0_0_28px_-4px_color-mix(in_oklch,var(--neuma-coral)_45%,transparent)]">
+                <span className="student-path-marker relative z-10 grid size-14 shrink-0 place-items-center rounded-full neuma-gradient text-base font-semibold tabular-nums text-white shadow-[0_0_28px_-4px_color-mix(in_oklch,var(--neuma-coral)_45%,transparent)]">
                   {levelNum}
                 </span>
               </div>

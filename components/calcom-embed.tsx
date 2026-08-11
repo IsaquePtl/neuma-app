@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Cal, { getCalApi } from "@calcom/embed-react";
 import { CalendarClock, ExternalLink, Phone } from "lucide-react";
 
@@ -79,6 +79,19 @@ type CalBookButtonProps = CalLinkProps & {
   showExternalLink?: boolean;
   /** Botão grande (estilo session / nível). */
   size?: "default" | "lg";
+  variant?: "default" | "secondary";
+  /** Chamado quando o aluno confirma / reagenda no embed. */
+  onBookingSuccess?: (data: CalBookingSuccessData) => void | Promise<void>;
+};
+
+export type CalBookingSuccessData = {
+  uid?: string;
+  title?: string;
+  startTime?: string;
+  endTime?: string;
+  status?: string;
+  videoCallUrl?: string;
+  isReschedule?: boolean;
 };
 
 /**
@@ -94,12 +107,16 @@ export function CalBookButton({
   description = "Escolhe um horário — abre de imediato.",
   showExternalLink = true,
   size = "default",
+  variant = "default",
+  onBookingSuccess,
 }: CalBookButtonProps) {
   const reactId = useId().replace(/:/g, "");
   const ns = namespace ?? `cal-book-${reactId}`;
   const resolvedLink = resolveCalLink({ calLink, eventType });
   const fallbackHref = publicCalUrl(resolvedLink);
   const [scriptReady, setScriptReady] = useState(false);
+  const onSuccessRef = useRef(onBookingSuccess);
+  onSuccessRef.current = onBookingSuccess;
 
   useEffect(() => {
     let cancelled = false;
@@ -108,6 +125,46 @@ export function CalBookButton({
       try {
         const cal = await applyCalUi(ns);
         if (cancelled) return;
+
+        const emit = (
+          data: {
+            uid?: string;
+            title?: string;
+            startTime?: string;
+            endTime?: string;
+            status?: string;
+            videoCallUrl?: string;
+          },
+          isReschedule: boolean,
+        ) => {
+          void onSuccessRef.current?.({
+            uid: data.uid,
+            title: data.title,
+            startTime: data.startTime,
+            endTime: data.endTime,
+            status: data.status,
+            videoCallUrl: data.videoCallUrl,
+            isReschedule,
+          });
+        };
+
+        cal("on", {
+          action: "bookingSuccessfulV2",
+          callback: (e: unknown) => {
+            const detail = (e as { detail?: { data?: CalBookingSuccessData } })
+              ?.detail;
+            emit(detail?.data ?? {}, false);
+          },
+        });
+        cal("on", {
+          action: "rescheduleBookingSuccessfulV2",
+          callback: (e: unknown) => {
+            const detail = (e as { detail?: { data?: CalBookingSuccessData } })
+              ?.detail;
+            emit(detail?.data ?? {}, true);
+          },
+        });
+
         cal("prerender", {
           calLink: resolvedLink,
           type: "modal",
@@ -146,9 +203,11 @@ export function CalBookButton({
         <Button
           type="button"
           size={lg ? "lg" : "default"}
+          variant={variant}
           className={cn(
             "gap-2",
             lg && "h-14 w-full gap-2 text-base font-semibold",
+            !lg && "w-full sm:w-auto",
           )}
           onClick={openModal}
         >

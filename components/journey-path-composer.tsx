@@ -290,12 +290,12 @@ export function JourneyPathComposer({
                 <div className="flex flex-col items-center pt-0.5">
                   <span
                     className={cn(
-                      "relative z-10 grid size-14 shrink-0 place-items-center rounded-full border-2 text-base font-semibold tabular-nums",
+                      "student-path-marker relative z-10 grid size-14 shrink-0 place-items-center rounded-full text-base font-semibold tabular-nums",
                       node.status === "active"
-                        ? "border-transparent neuma-gradient text-white shadow-[0_0_28px_-4px_color-mix(in_oklch,var(--neuma-coral)_45%,transparent)]"
+                        ? "neuma-gradient text-white shadow-[0_0_28px_-4px_color-mix(in_oklch,var(--neuma-coral)_45%,transparent)]"
                         : node.status === "completed"
-                          ? "border-white/20 bg-white/10 text-foreground"
-                          : "border-dashed border-white/20 bg-white/[0.03] text-muted-foreground",
+                          ? "border-2 border-white/20 bg-white/10 text-foreground"
+                          : "border-2 border-dashed border-white/20 bg-white/[0.03] text-muted-foreground",
                     )}
                   >
                     {levelNum}

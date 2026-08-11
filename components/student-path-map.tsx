@@ -51,14 +51,14 @@ export function StudentPathMap({ nodes }: { nodes: StudentNode[] }) {
         const marker = (
           <span
             className={cn(
-              "student-path-marker relative z-10 grid shrink-0 place-items-center rounded-full border-2 transition-transform",
+              "student-path-marker relative z-10 grid shrink-0 place-items-center rounded-full transition-transform",
               isActive &&
-                "size-14 border-transparent neuma-gradient text-white shadow-[0_0_28px_-4px_color-mix(in_oklch,var(--neuma-coral)_55%,transparent)]",
+                "size-14 neuma-gradient text-white shadow-[0_0_28px_-4px_color-mix(in_oklch,var(--neuma-coral)_55%,transparent)]",
               isPast &&
                 !isActive &&
-                "size-11 border-transparent neuma-gradient text-white/90 opacity-45",
+                "size-11 neuma-gradient text-white/90 opacity-45",
               isFuture &&
-                "size-10 border-white/10 bg-white/[0.03] text-muted-foreground/50",
+                "size-10 border-2 border-white/10 bg-white/[0.03] text-muted-foreground/50",
             )}
           >
             {isFuture ? (

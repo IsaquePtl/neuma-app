@@ -276,6 +276,18 @@
   }
   .student-path-marker {
     flex-shrink: 0;
+    overflow: hidden;
+    /* Safari: força o clip circular do background (evita “quadrado” no gradient) */
+    -webkit-mask-image: -webkit-radial-gradient(circle, #000 99%, transparent 100%);
+    mask-image: radial-gradient(circle, #000 99%, transparent 100%);
+  }
+  .student-path-marker.neuma-gradient {
+    border-color: transparent;
+    border-width: 0;
+    background-image: var(--neuma-gradient);
+    background-size: 118% 118%;
+    background-position: center;
+    background-repeat: no-repeat;
   }
 }
 
