@@ -5,9 +5,8 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Users,
-  Music,
   House,
-  Headphones,
+  ClipboardList,
   Settings,
   LogOut,
   Route,
@@ -17,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { logout } from "@/lib/actions/auth";
+import { MetronomeIcon } from "@/components/metronome-icon";
 import { NeumaLogo } from "@/components/neuma-logo";
 import { MobileMenubar, type MobileNavItem } from "@/components/mobile-menubar";
 import {
@@ -27,10 +27,12 @@ import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+type NavIcon = LucideIcon | typeof MetronomeIcon;
+
 type NavItem = {
   label: string;
   href: string;
-  icon: LucideIcon;
+  icon: NavIcon;
   match: (path: string) => boolean;
   subtitle?: string;
 };
@@ -82,7 +84,7 @@ const mentorExtraNav: NavItem[] = [
   {
     label: "Ferramentas",
     href: "/studio/tools",
-    icon: Music,
+    icon: MetronomeIcon,
     match: (p) => p.startsWith("/studio/tools"),
     subtitle: "Metrónomo e campo harmónico",
   },
@@ -111,14 +113,14 @@ const studentNav: NavItem[] = [
   {
     label: "1:1",
     href: "/session",
-    icon: Headphones,
+    icon: ClipboardList,
     match: (p) => p.startsWith("/session") || p.startsWith("/checkins"),
     subtitle: "Sessões e check-ins",
   },
   {
     label: "Ferramentas",
     href: "/tools",
-    icon: Music,
+    icon: MetronomeIcon,
     match: (p) => p.startsWith("/tools"),
     subtitle: "Metrónomo e campo harmónico",
   },
@@ -286,7 +288,7 @@ export function AppShell({
   }
 
   return (
-    <div className="relative flex min-h-dvh flex-col desktop:flex-row">
+    <div className="relative flex min-h-full flex-1 flex-col desktop:flex-row">
       <aside className="fixed left-0 top-0 z-30 hidden h-dvh w-64 p-3 desktop:block">
         <div className="glass-panel flex h-full w-full flex-col rounded-3xl p-4">
           <Link
@@ -416,6 +418,7 @@ export function AppShell({
         <header
           className={cn(
             "fixed inset-x-0 top-0 z-20 flex items-center justify-center bg-transparent desktop:hidden",
+            /* Safe-area: o layout já faz pt no fluxo; o header fixed precisa do inset para o logo */
             "h-[calc(3.5rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)]",
           )}
         >
@@ -438,10 +441,8 @@ export function AppShell({
             <NeumaLogo size={28} withWordmark={false} />
           </Link>
         </header>
-        <div
-          className="h-[calc(3.5rem+env(safe-area-inset-top,0px))] shrink-0 desktop:hidden"
-          aria-hidden
-        />
+        {/* Spacer só da barra (3.5rem): o pt safe-area vem do layout root */}
+        <div className="h-14 shrink-0 desktop:hidden" aria-hidden />
 
         <main
           className={cn(

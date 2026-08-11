@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { generateCheckInDraft } from "@/lib/ai/draft-feedback";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { appUrl, sendEmail } from "@/lib/email";
+import { ORPHAN_CHECKIN_LABEL } from "@/lib/labels";
 import {
   getTallyConfig,
   parseTallyPayload,
@@ -77,7 +78,8 @@ export async function POST(request: Request) {
       source_form_id: parsed.formId,
       source_form_name: parsed.formName,
       submission_kind: submissionKind,
-      status: submissionKind === "checkin" && parsed.studentId && parsed.nodeId ? "linked" : "pending",
+      status:
+        submissionKind === "checkin" && parsed.studentId ? "linked" : "pending",
       respondent_name: parsed.respondentName,
       respondent_email: parsed.respondentEmail,
       student_id: parsed.studentId,
@@ -88,7 +90,7 @@ export async function POST(request: Request) {
       payload: parsed.payload,
       created_at: parsed.createdAt ?? undefined,
       processed_at:
-        submissionKind === "checkin" && parsed.studentId && parsed.nodeId
+        submissionKind === "checkin" && parsed.studentId
           ? new Date().toISOString()
           : null,
     })
@@ -107,12 +109,13 @@ export async function POST(request: Request) {
   revalidatePath("/studio/inbox");
   revalidatePath("/studio/intake");
 
-  if (submissionKind === "checkin" && parsed.studentId && parsed.nodeId) {
+  if (submissionKind === "checkin" && parsed.studentId) {
     const checkInKind = parsed.videoUrl ? "video" : "text";
     const { data: checkIn, error: checkInError } = await admin
       .from("check_ins")
       .insert({
-        node_id: parsed.nodeId,
+        node_id: parsed.nodeId ?? null,
+        level_label: parsed.nodeId ? null : ORPHAN_CHECKIN_LABEL,
         student_id: parsed.studentId,
         kind: checkInKind,
         video_url: parsed.videoUrl,

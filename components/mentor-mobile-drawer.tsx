@@ -11,7 +11,7 @@ import { UserAvatar } from "@/components/user-avatar";
 export type MentorDrawerItem = {
   label: string;
   href: string;
-  icon: LucideIcon;
+  icon: LucideIcon | React.ComponentType<{ className?: string }>;
   subtitle?: string;
   match: (path: string) => boolean;
   badge?: number;

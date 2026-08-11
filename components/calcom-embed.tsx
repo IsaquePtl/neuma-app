@@ -10,15 +10,41 @@ import { cn } from "@/lib/utils";
 const DEFAULT_CAL_USER =
   process.env.NEXT_PUBLIC_CALCOM_USERNAME || "isaque-portilho-nutfa9";
 
+/** Fundo escuro oficial do booker Cal (evita canvas branco no iframe). */
+const CAL_DARK_BG = "#101010";
+
+/**
+ * UI dark completo. `colorScheme: "dark"` alinha o color-scheme do iframe
+ * com a página (viewport dark) — sem isto o browser pinta um fundo branco
+ * atrás do body transparente do embed.
+ */
 const CAL_UI = {
   theme: "dark" as const,
+  colorScheme: "dark",
   hideEventTypeDetails: false,
   layout: "month_view" as const,
+  styles: {
+    body: { background: CAL_DARK_BG },
+  },
+  cssVarsPerTheme: {
+    light: {
+      "cal-bg": CAL_DARK_BG,
+    },
+    dark: {
+      "cal-bg": CAL_DARK_BG,
+      "cal-bg-muted": "#171717",
+      "cal-bg-subtle": "#1c1c1c",
+      "cal-bg-emphasis": "#262626",
+    },
+  },
 };
 
+/** Tema via config = query param síncrono (sem flash light→dark). */
 const CAL_CONFIG = {
   layout: "month_view" as const,
   theme: "dark" as const,
+  "ui.color-scheme": "dark",
+  useSlotsViewOnSmallScreen: "true",
 };
 
 type CalLinkProps = {
@@ -37,6 +63,12 @@ function resolveCalLink({
 
 function publicCalUrl(calLink: string) {
   return `https://cal.com/${calLink.replace(/^\//, "")}`;
+}
+
+async function applyCalUi(namespace: string) {
+  const cal = await getCalApi({ namespace });
+  cal("ui", CAL_UI);
+  return cal;
 }
 
 type CalBookButtonProps = CalLinkProps & {
@@ -74,9 +106,8 @@ export function CalBookButton({
 
     (async () => {
       try {
-        const cal = await getCalApi({ namespace: ns });
+        const cal = await applyCalUi(ns);
         if (cancelled) return;
-        cal("ui", CAL_UI);
         cal("prerender", {
           calLink: resolvedLink,
           type: "modal",
@@ -94,8 +125,7 @@ export function CalBookButton({
 
   const openModal = async () => {
     try {
-      const cal = await getCalApi({ namespace: ns });
-      cal("ui", CAL_UI);
+      const cal = await applyCalUi(ns);
       cal("modal", {
         calLink: resolvedLink,
         config: CAL_CONFIG,
@@ -172,12 +202,11 @@ export function CalEmbed({
     let cancelled = false;
     (async () => {
       try {
-        const cal = await getCalApi({ namespace });
-        if (cancelled) return;
-        cal("ui", CAL_UI);
+        await applyCalUi(namespace);
       } catch {
         // O iframe ainda pode carregar; UI theme é best-effort.
       }
+      if (cancelled) return;
     })();
     return () => {
       cancelled = true;
@@ -187,7 +216,7 @@ export function CalEmbed({
   return (
     <div
       className={cn(
-        "cal-embed-frame relative w-full overflow-hidden rounded-2xl border border-white/10 bg-black/20",
+        "cal-embed-frame relative w-full overflow-hidden rounded-2xl",
         compact && "cal-embed-frame--compact",
         className,
       )}
@@ -196,7 +225,12 @@ export function CalEmbed({
         key={`${namespace}-${resolvedLink}`}
         namespace={namespace}
         calLink={resolvedLink}
-        style={{ width: "100%", height: "100%", overflow: "scroll" }}
+        style={{
+          width: "100%",
+          height: "100%",
+          overflow: "scroll",
+          background: CAL_DARK_BG,
+        }}
         config={CAL_CONFIG}
       />
     </div>

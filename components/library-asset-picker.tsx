@@ -88,13 +88,54 @@ export function LibraryAssetPicker({
     [assets, topicId],
   );
 
+  // Sessão / Check-point: anexo opcional de apoio (qualquer material de prática)
   if (nodeKind === "call" || nodeKind === "milestone") {
     return (
-      <p className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-muted-foreground">
-        {nodeKind === "call"
-          ? "Chamada: o aluno agenda no Cal.com neste bloco — sem recurso da biblioteca."
-          : "Marco: só título e objectivo — sem recurso da biblioteca."}
-      </p>
+      <div className="space-y-3">
+        <p className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-muted-foreground">
+          {nodeKind === "call"
+            ? "Anexo de apoio (opcional) — não é o foco; a sessão é o Meet."
+            : "Material de apoio ao check-point (opcional)."}
+        </p>
+        <div className="space-y-2">
+          <Label htmlFor="picker-support">Anexo de apoio</Label>
+          <Input
+            id="picker-support-search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Filtrar por título ou tag…"
+          />
+        </div>
+        <select
+          value={value}
+          onChange={(e) => {
+            const id = e.target.value;
+            if (!id) {
+              onChange(null);
+              return;
+            }
+            const a = assets.find((x) => x.id === id);
+            onChange(
+              a
+                ? {
+                    assetId: a.id,
+                    title: a.title,
+                    url: a.url,
+                    body: a.body ?? null,
+                  }
+                : null,
+            );
+          }}
+          className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+        >
+          <option value="">— sem anexo —</option>
+          {practiceAssets.map((a) => (
+            <option key={a.id} value={a.id}>
+              [{a.kind}] {a.title}
+            </option>
+          ))}
+        </select>
+      </div>
     );
   }
 
@@ -186,7 +227,7 @@ export function LibraryAssetPicker({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="picker-lesson">Aula</Label>
+        <Label htmlFor="picker-lesson">Gravação</Label>
         <select
           id="picker-lesson"
           value={value}
@@ -202,7 +243,7 @@ export function LibraryAssetPicker({
           }}
           className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm disabled:opacity-50"
         >
-          <option value="">— escolher aula —</option>
+          <option value="">— escolher gravação —</option>
           {lessonsForTopic.map((a) => (
             <option key={a.id} value={a.id}>
               [{a.kind}] {a.title}
@@ -213,7 +254,7 @@ export function LibraryAssetPicker({
 
       {categories.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          Cria categorias e tópicos em Percursos → Biblioteca → Aulas.
+          Cria categorias e tópicos em Percursos → Biblioteca → Gravações.
         </p>
       ) : null}
     </div>

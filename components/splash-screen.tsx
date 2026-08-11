@@ -24,12 +24,15 @@ export function SplashScreen() {
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex h-dvh max-h-dvh w-full items-center justify-center overflow-hidden bg-background transition-opacity duration-[1200ms] ${
+      className={`fixed inset-0 z-[100] flex h-[100dvh] w-screen max-h-[100dvh] items-center justify-center overflow-hidden bg-background transition-opacity duration-[1200ms] ${
         leaving ? "pointer-events-none opacity-0" : "opacity-100"
       }`}
     >
-      {/* Mesmo fundo da app — absolute para não escapar do stacking do splash */}
-      <div aria-hidden className="neuma-bg !absolute !inset-0 !z-0" />
+      {/* Mesmo fundo da app — edge-to-edge sob notch / home indicator */}
+      <div
+        aria-hidden
+        className="neuma-bg pointer-events-none !absolute !inset-0 !z-0 !h-full !w-full !min-h-full"
+      />
       <div className="relative z-10 flex flex-col items-center gap-6">
         <Image
           src="/brand/wordmark-white.png"

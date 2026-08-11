@@ -172,7 +172,51 @@ export async function linkTallySubmissionToStudent(
       };
     }
 
-    needsActiveNode = true;
+    const { data: orphan, error: orphanError } = await supabase
+      .from("check_ins")
+      .insert({
+        node_id: null,
+        level_label: "Sem nível associado",
+        student_id: studentId,
+        kind: submission.video_url ? "video" : "text",
+        video_url: submission.video_url,
+        notes: submission.notes,
+        status: "pending",
+      })
+      .select("id")
+      .single();
+
+    if (orphanError || !orphan) {
+      throw new Error(orphanError?.message ?? "Falha ao criar check-in");
+    }
+
+    checkInId = orphan.id;
+
+    const { error: orphanLinkError } = await supabase
+      .from("tally_submissions")
+      .update({
+        student_id: studentId,
+        check_in_id: orphan.id,
+        status: "linked",
+        processed_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+
+    if (orphanLinkError) throw new Error(orphanLinkError.message);
+
+    revalidateSubmission(id, studentId);
+    revalidatePath(`/studio/checkins/${orphan.id}`);
+
+    after(async () => {
+      await generateCheckInDraft(orphan.id);
+    });
+
+    return {
+      studentId,
+      checkInId: orphan.id,
+      needsActiveNode: false,
+      submissionKind: submission.submission_kind,
+    };
   }
 
   const { error } = await supabase

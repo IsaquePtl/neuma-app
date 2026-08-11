@@ -43,15 +43,25 @@ export default function RootLayout({
   return (
     <html
       lang="pt"
-      className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`dark ${geistSans.variable} ${geistMono.variable} min-h-dvh antialiased`}
     >
       <head>
         <link rel="preconnect" href="https://app.cal.com" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://app.cal.com" />
       </head>
-      <body className="relative flex min-h-full flex-col">
+      <body className="relative flex min-h-dvh flex-col">
+        {/* Fundo inviolável: ponta a ponta, sob safe areas do iOS */}
         <AppBackground />
-        <div className="relative z-10 flex min-h-full flex-1 flex-col">
+        {/* Conteúdo interior respeita safe areas */}
+        <div
+          className={
+            "relative z-10 flex min-h-dvh flex-1 flex-col " +
+            "pt-[env(safe-area-inset-top,0px)] " +
+            "pb-[env(safe-area-inset-bottom,0px)] " +
+            "pl-[env(safe-area-inset-left,0px)] " +
+            "pr-[env(safe-area-inset-right,0px)]"
+          }
+        >
           <AccentProvider>{children}</AccentProvider>
           <Toaster />
         </div>

@@ -12,10 +12,12 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { loadMentorCalUsername, loadMyPathWithNodes } from "@/lib/students/queries";
 import { Card } from "@/components/ui/card";
-import { formatDate } from "@/lib/labels";
+import {
+  StudentTodoList,
+  type StudentTodoItem,
+} from "@/components/student-todo-list";
+import { formatDate, nodeKindLabel } from "@/lib/labels";
 import type { NodeKind } from "@/lib/types/database.types";
-
-type TodoItem = { title: string; href: string; key: string };
 
 type JoinedNodeWeek = { week_number: number | null };
 type JoinedFeedbackNotes = { notes: string | null };
@@ -49,34 +51,23 @@ function kindIconEl(kind: NodeKind) {
   }
 }
 
-function kindLabelTitle(kind: NodeKind) {
-  // Mantém exatamente o casing do `StudentPathMap`
-  switch (kind) {
-    case "call":
-      return "Chamada";
-    case "lesson":
-    case "resource":
-      return "Aula";
-    case "milestone":
-      return "Marco";
-    default:
-      return "Prática";
-  }
-}
-
 function todoTagLabel(key: string) {
-  if (key.startsWith("call:")) return "CHAMADA";
-  if (key.startsWith("content:")) return "CONTEÚDO";
-  if (key.startsWith("checkin:")) return "CHECK-IN";
+  if (key.startsWith("call:")) return "SESSÃO";
+  if (key.startsWith("content:")) return "GRAVAÇÃO";
+  if (key.startsWith("checkin:")) return "PRÁTICA";
   if (key.startsWith("feedback:")) return "FEEDBACK";
   if (key === "session") return "1:1";
   if (key === "path") return "PERCURSO";
   return "TAREFA";
 }
 
-/** Viewport sem scroll: header mobile + main pt + main pb (menubar). */
+/**
+ * Mobile/tablet: coluna centrada no ecrã (ligeiramente mais abaixo do centro).
+ * Desktop: fluxo normal no topo.
+ */
 const HOME_VIEWPORT =
-  "flex h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px)-1rem-5.75rem-14px)] flex-col gap-3 overflow-hidden desktop:h-auto desktop:min-h-0 desktop:overflow-visible desktop:pb-4";
+  "flex h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-1rem-5.75rem-14px)] flex-col justify-center gap-4 overflow-hidden pb-5 " +
+  "desktop:h-auto desktop:min-h-0 desktop:justify-start desktop:gap-3 desktop:overflow-visible desktop:pb-4";
 
 export default async function StudentHomePage() {
   const supabase = await createClient();
@@ -115,7 +106,9 @@ export default async function StudentHomePage() {
     );
   const activeCheckin =
     nodes.find(
-      (n) => n.status === "active" && (n.kind === "practice" || n.kind === "milestone"),
+      (n) =>
+        n.status === "active" &&
+        (n.kind === "practice" || n.kind === "milestone"),
     ) ??
     nodes.find(
       (n) =>
@@ -123,7 +116,6 @@ export default async function StudentHomePage() {
         (n.kind === "practice" || n.kind === "milestone"),
     );
 
-  // Apenas “feedback pronto” (status approved) para compor notificações.
   const { data: approvedCheckIns } = await supabase
     .from("check_ins")
     .select(
@@ -151,6 +143,21 @@ export default async function StudentHomePage() {
   });
 
   if (!path) {
+    const emptyTodos: StudentTodoItem[] = [
+      {
+        key: "session",
+        title: "Agendar 1:1 com o mentor",
+        href: "/session#agenda",
+        tag: todoTagLabel("session"),
+      },
+      {
+        key: "path",
+        title: "Abrir percurso",
+        href: "/path",
+        tag: todoTagLabel("path"),
+      },
+    ];
+
     return (
       <div className={HOME_VIEWPORT}>
         <div className="shrink-0 space-y-0.5">
@@ -162,33 +169,9 @@ export default async function StudentHomePage() {
           </h1>
         </div>
 
-        <Card className="neuma-accent-top flex min-h-0 flex-1 flex-col gap-2 rounded-3xl border border-white/10 bg-white/[0.03] p-3">
-          <p className="shrink-0 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
-            To do list
-          </p>
-          <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
-            <li>
-              <Link
-                href="/session#agenda"
-                className="group flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-medium hover:bg-white/[0.06]"
-              >
-                Agendar 1:1 com o mentor
-                <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5" />
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/path"
-                className="group flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-medium hover:bg-white/[0.06]"
-              >
-                Abrir percurso
-                <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5" />
-              </Link>
-            </li>
-          </ul>
-        </Card>
+        <StudentTodoList items={emptyTodos} />
 
-        <Link href="/path" className="mt-auto block shrink-0">
+        <Link href="/path" className="block shrink-0">
           <Card className="space-y-2 rounded-3xl border border-white/10 bg-white/[0.03] p-3">
             <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
               PERCURSO . SEM. —
@@ -205,7 +188,7 @@ export default async function StudentHomePage() {
     );
   }
 
-  const todos: TodoItem[] = [];
+  const todos: StudentTodoItem[] = [];
 
   if (activeContent) {
     const week = weekNumberLabel(activeContent.week_number);
@@ -213,6 +196,7 @@ export default async function StudentHomePage() {
       key: `content:${activeContent.id}`,
       title: `Ver conteúdo da semana ${week}`,
       href: `/path/${activeContent.id}`,
+      tag: todoTagLabel(`content:${activeContent.id}`),
     });
   }
 
@@ -222,6 +206,7 @@ export default async function StudentHomePage() {
       key: `call:${activeCall.id}`,
       title: `Agendar call da semana ${week}`,
       href: `/path/${activeCall.id}`,
+      tag: todoTagLabel(`call:${activeCall.id}`),
     });
   }
 
@@ -231,29 +216,35 @@ export default async function StudentHomePage() {
       key: `checkin:${activeCheckin.id}`,
       title: `Fazer check-in da semana ${week}`,
       href: `/path/${activeCheckin.id}`,
+      tag: todoTagLabel(`checkin:${activeCheckin.id}`),
     });
   }
 
-  const feedbackItem = normalizedCheckIns.find((c) => Boolean(c.feedback?.notes));
+  const feedbackItem = normalizedCheckIns.find((c) =>
+    Boolean(c.feedback?.notes),
+  );
   if (feedbackItem) {
     const week = weekNumberLabel(feedbackItem.node?.week_number);
     todos.push({
       key: `feedback:${feedbackItem.id}`,
       title: `Ver feedback do ${mentorName} da semana ${week}`,
       href: `/checkins/${feedbackItem.id}`,
+      tag: todoTagLabel(`feedback:${feedbackItem.id}`),
     });
   }
 
-  const fallbackTodos: TodoItem[] = [
+  const fallbackTodos: StudentTodoItem[] = [
     {
       key: "session",
       title: "Agendar chamada",
       href: "/session#agenda",
+      tag: todoTagLabel("session"),
     },
     {
       key: "path",
       title: "Abrir percurso",
       href: "/path",
+      tag: todoTagLabel("path"),
     },
   ];
 
@@ -270,49 +261,24 @@ export default async function StudentHomePage() {
         </h1>
       </div>
 
-      <Card className="neuma-accent-top flex min-h-0 flex-1 flex-col gap-2 rounded-3xl border border-white/10 bg-white/[0.03] p-3">
-        <p className="shrink-0 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
-          To do list
-        </p>
-        <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
-          {finalTodos.map((t) => (
-            <li key={t.key}>
-              <Link
-                href={t.href}
-                className="group block rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 transition-colors hover:bg-white/[0.06]"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--neuma-coral)]">
-                      {todoTagLabel(t.key)}
-                    </p>
-                    <p className="mt-0.5 truncate text-sm font-semibold tracking-tight">
-                      {t.title}
-                    </p>
-                  </div>
-                  <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5" />
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </Card>
+      <StudentTodoList items={finalTodos} />
 
-      {/* Atalho do nível activo — fixo acima da menubar (gap = padding do main) */}
       <Link
         href={activeNode ? `/path/${activeNode.id}` : "/path"}
         prefetch
-        className="mt-auto block min-w-0 shrink-0 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
+        className="block min-w-0 shrink-0 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
       >
         <div className="student-path-step student-path-step--active !p-3 sm:!p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 space-y-0.5">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--neuma-coral)]">
-                  {activeNode ? kindIconEl(activeNode.kind) : (
+                  {activeNode ? (
+                    kindIconEl(activeNode.kind)
+                  ) : (
                     <Video className="size-3" />
                   )}
-                  {activeNode ? kindLabelTitle(activeNode.kind) : "Aula"}
+                  {activeNode ? nodeKindLabel[activeNode.kind] : "Gravação"}
                   {activeNode?.week_number
                     ? ` · Sem. ${activeNode.week_number}`
                     : null}

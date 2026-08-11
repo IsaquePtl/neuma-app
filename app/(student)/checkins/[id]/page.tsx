@@ -16,7 +16,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CheckInStatusBadge } from "@/components/status-badges";
-import { checkInKindLabel, formatDateTime } from "@/lib/labels";
+import { checkInKindLabel, checkInLevelTitle, formatDateTime } from "@/lib/labels";
 
 export default async function CheckInDetailPage({
   params,
@@ -32,7 +32,7 @@ export default async function CheckInDetailPage({
   const { data: checkIn } = await supabase
     .from("check_ins")
     .select(
-      "id, status, kind, video_url, notes, created_at, node_id, student_id, node:nodes(title, description), feedback:feedbacks(notes, next_steps, video_url, approved, created_at)",
+      "id, status, kind, video_url, notes, created_at, node_id, level_label, student_id, node:nodes(title, description), feedback:feedbacks(notes, next_steps, video_url, approved, created_at)",
     )
     .eq("id", id)
     .single();
@@ -67,7 +67,7 @@ export default async function CheckInDetailPage({
         <div>
           <p className="text-sm text-muted-foreground">Check-in</p>
           <h1 className="text-2xl font-semibold tracking-tight">
-            {node?.title ?? "Bloco"}
+            {checkInLevelTitle(node?.title, checkIn.level_label)}
           </h1>
           <p className="text-sm text-muted-foreground">
             {checkInKindLabel[checkIn.kind]} ·{" "}

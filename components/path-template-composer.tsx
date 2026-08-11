@@ -31,6 +31,7 @@ import type {
   PickerTopic,
 } from "@/components/library-asset-picker";
 import { cn } from "@/lib/utils";
+import { nodeKindLabel } from "@/lib/labels";
 import type { NodeKind, PathTemplateStatus } from "@/lib/types/database.types";
 
 type Template = {
@@ -64,20 +65,6 @@ function kindIcon(kind: NodeKind) {
       return Flag;
     default:
       return Dumbbell;
-  }
-}
-
-function kindLabel(kind: NodeKind) {
-  switch (kind) {
-    case "call":
-      return "Chamada";
-    case "lesson":
-    case "resource":
-      return "Aula";
-    case "milestone":
-      return "Marco";
-    default:
-      return "Prática";
   }
 }
 
@@ -293,7 +280,7 @@ export function PathTemplateComposer({
                     <div className="min-w-0 space-y-1">
                       <p className="inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--neuma-coral)]">
                         <Icon className="size-3" />
-                        {kindLabel(node.kind)}
+                        {nodeKindLabel[node.kind]}
                         {period ? ` · ${period}` : null}
                       </p>
                       <p className="text-lg font-semibold tracking-tight">

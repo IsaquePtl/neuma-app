@@ -1,9 +1,10 @@
 import Link from "next/link";
 import {
-  CalendarClock,
-  CalendarPlus,
-  Headphones,
+  ClipboardList,
   History,
+  MessageCircle,
+  MessageSquareText,
+  Star,
   Video,
 } from "lucide-react";
 
@@ -14,7 +15,23 @@ import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 
-export default async function StudentSessionPage() {
+const WHATSAPP_URL =
+  "https://api.whatsapp.com/send/?phone=938909170&text&type=phone_number&app_absent=0";
+
+/**
+ * Mobile/tablet: coluna centrada no ecrã (ligeiramente mais abaixo do centro),
+ * como em Geral. Desktop: fluxo no topo.
+ */
+const SESSION_VIEWPORT =
+  "mx-auto flex h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-1rem-5.75rem-14px)] max-w-2xl flex-col justify-center gap-4 overflow-y-auto pb-5 " +
+  "desktop:h-auto desktop:min-h-0 desktop:justify-start desktop:gap-6 desktop:overflow-visible desktop:pb-4";
+
+export default async function StudentSessionPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ reviewed?: string }>;
+}) {
+  const { reviewed } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -59,13 +76,39 @@ export default async function StudentSessionPage() {
   const revisionCount =
     checkIns?.filter((c) => c.status === "needs_revision").length ?? 0;
 
+  // Check-in: nível actual se existir; senão check-in geral (sem nível)
   const checkInHref = activeNode
     ? `/checkins/new?node=${activeNode.id}`
-    : null;
+    : "/checkins/new";
+
+  // Feedback do nível actual (check-in com feedback ou level_feedback)
+  let hasFeedback = false;
+  if (activeNode) {
+    const [{ data: recentCheckIns }, { data: levelFb }] = await Promise.all([
+      supabase
+        .from("check_ins")
+        .select("id, feedback:feedbacks(id)")
+        .eq("student_id", user!.id)
+        .eq("node_id", activeNode.id)
+        .order("created_at", { ascending: false })
+        .limit(10),
+      supabase
+        .from("level_feedbacks")
+        .select("id")
+        .eq("node_id", activeNode.id)
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    const hasCheckInFb = (recentCheckIns ?? []).some((c) => {
+      const fb = Array.isArray(c.feedback) ? c.feedback[0] : c.feedback;
+      return Boolean(fb);
+    });
+    hasFeedback = hasCheckInFb || Boolean(levelFb?.id);
+  }
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6 pb-2">
-      <header className="flex items-center gap-3">
+    <div className={SESSION_VIEWPORT}>
+      <header className="flex shrink-0 items-center gap-3">
         <UserAvatar
           name={mentor?.full_name}
           email={mentor?.email}
@@ -81,7 +124,7 @@ export default async function StudentSessionPage() {
           </h1>
           {activeNode ? (
             <p className="truncate text-xs text-muted-foreground">
-              {activeNode.title}
+              Nível actual: {activeNode.title}
               {activeNode.due_date
                 ? ` · até ${formatDate(activeNode.due_date)}`
                 : ""}
@@ -92,81 +135,100 @@ export default async function StudentSessionPage() {
             </p>
           ) : null}
         </div>
-        <Headphones className="size-5 shrink-0 text-muted-foreground" />
+        <ClipboardList className="size-5 shrink-0 text-muted-foreground" />
       </header>
 
-      <section className="grid gap-3">
-        {checkInHref ? (
+      {reviewed === "1" ? (
+        <p className="shrink-0 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+          Obrigado pelo teu feedback — já ficou registado.
+        </p>
+      ) : null}
+
+      <section className="grid shrink-0 gap-3">
+        <Button
+          render={<Link href={checkInHref} />}
+          nativeButton={false}
+          size="lg"
+          className="h-14 w-full gap-2 text-base font-semibold"
+        >
+          <Video className="size-5" /> Fazer check-in
+        </Button>
+        {!activeNode ? (
+          <p className="-mt-1 text-center text-xs text-muted-foreground">
+            Sem nível activo — o check-in fica como «Sem nível associado».
+          </p>
+        ) : null}
+
+        {hasFeedback ? (
           <Button
-            render={<Link href={checkInHref} />}
+            render={<Link href="/session/feedback" />}
             nativeButton={false}
             size="lg"
+            variant="secondary"
             className="h-14 w-full gap-2 text-base font-semibold"
           >
-            <Video className="size-5" /> Fazer check-in
+            <MessageSquareText className="size-5" /> Ver feedback
           </Button>
         ) : (
           <Button
             size="lg"
+            variant="secondary"
             disabled
             className="h-14 w-full gap-2 text-base font-semibold"
           >
-            <Video className="size-5" /> Fazer check-in
+            <MessageSquareText className="size-5" /> Sem feedbacks de momento
           </Button>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
-          <Button
-            render={<Link href="#agenda" />}
-            nativeButton={false}
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+          <p className="mb-2 text-sm font-medium">Agendar sessão de dúvidas</p>
+          <CalBookButton
+            calLink={`${calUser}/sessao-de-duvidas`}
+            namespace="sessao-de-duvidas"
+            eventType="sessao-de-duvidas"
+            label="Agendar sessão de dúvidas"
+            description=""
+            showExternalLink={false}
             size="lg"
-            variant="secondary"
-            className="h-14 gap-2 text-base font-semibold"
-          >
-            <CalendarPlus className="size-5" /> Agendar
-          </Button>
-          <Button
-            render={<Link href="/checkins" />}
-            nativeButton={false}
-            size="lg"
-            variant="secondary"
-            className={cn(
-              "relative h-14 gap-2 text-base font-semibold",
-            )}
-          >
-            <History className="size-5" /> Histórico
-            {revisionCount > 0 ? (
-              <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-[var(--neuma-coral)] px-1.5 text-[10px] font-semibold text-white">
-                {revisionCount > 9 ? "9+" : revisionCount}
-              </span>
-            ) : null}
-          </Button>
+          />
         </div>
 
-        {activeNode?.due_date ? (
-          <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-            <CalendarClock className="size-3.5" />
-            Prazo do bloco: {formatDate(activeNode.due_date)}
-          </p>
-        ) : null}
-      </section>
+        <Button
+          render={<Link href="/checkins" />}
+          nativeButton={false}
+          size="lg"
+          variant="secondary"
+          className={cn("relative h-14 w-full gap-2 text-base font-semibold")}
+        >
+          <History className="size-5" /> Ver histórico
+          {revisionCount > 0 ? (
+            <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-[var(--neuma-coral)] px-1.5 text-[10px] font-semibold text-white">
+              {revisionCount > 9 ? "9+" : revisionCount}
+            </span>
+          ) : null}
+        </Button>
 
-      <section id="agenda" className="scroll-mt-24 space-y-3 pb-4">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold tracking-tight">
-            Agendar chamada
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Sessão de 30 minutos
-            {mentor?.full_name ? ` com ${mentor.full_name}` : ""}.
-          </p>
-        </div>
-        <CalBookButton
-          calLink={`${calUser}/30min`}
-          namespace="30min"
-          eventType="30min"
-          description=""
-        />
+        <Button
+          render={
+            <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" />
+          }
+          nativeButton={false}
+          size="lg"
+          variant="secondary"
+          className="h-14 w-full gap-2 text-base font-semibold"
+        >
+          <MessageCircle className="size-5" /> WhatsApp
+        </Button>
+
+        <Button
+          render={<Link href="/session/review" />}
+          nativeButton={false}
+          size="lg"
+          variant="secondary"
+          className="h-14 w-full gap-2 text-base font-semibold"
+        >
+          <Star className="size-5" /> Deixar um feedback
+        </Button>
       </section>
     </div>
   );

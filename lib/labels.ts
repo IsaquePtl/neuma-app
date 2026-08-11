@@ -10,11 +10,20 @@ import type {
 } from "@/lib/types/database.types";
 
 export const nodeKindLabel: Record<NodeKind, string> = {
-  practice: "Pratica",
-  call: "Chamada",
-  milestone: "Marco",
-  lesson: "Aula",
-  resource: "Aula",
+  practice: "Prática",
+  call: "Sessão",
+  milestone: "Check-point",
+  lesson: "Gravação",
+  resource: "Gravação",
+};
+
+/** Hints curtos para o editor do mentor. */
+export const nodeKindHint: Record<NodeKind, string> = {
+  practice: "Prática — texto, vídeo e ficheiros de qualquer tipo",
+  call: "Sessão — foco no Meet/Cal.com; texto e anexo só como apoio",
+  milestone: "Check-point — quiz de escolha múltipla + material de apoio",
+  lesson: "Gravação — vídeo em destaque; texto e anexos abaixo",
+  resource: "Gravação (legado)",
 };
 
 export const nodeStatusLabel: Record<NodeStatus, string> = {
@@ -55,6 +64,16 @@ export const checkInKindLabel: Record<CheckInKind, string> = {
   text: "Texto",
   call: "Chamada",
 };
+
+/** Label de check-in sem nível no percurso. */
+export const ORPHAN_CHECKIN_LABEL = "Sem nível associado";
+
+export function checkInLevelTitle(
+  nodeTitle: string | null | undefined,
+  levelLabel: string | null | undefined,
+): string {
+  return nodeTitle?.trim() || levelLabel?.trim() || ORPHAN_CHECKIN_LABEL;
+}
 
 export const mentorCalendarEventKindLabel: Record<
   MentorCalendarEventKind,

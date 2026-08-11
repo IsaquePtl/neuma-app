@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { nodeKindHint, nodeKindLabel } from "@/lib/labels";
 import type { NodeKind } from "@/lib/types/database.types";
 
 export type TemplateNodeData = {
@@ -84,11 +85,21 @@ export function TemplateNodeEditor({
     fd.set("duration_weeks", String(durationWeeks));
     fd.set(
       "library_asset_id",
-      kind === "lesson" || kind === "practice" ? assetId : "",
+      kind === "lesson" ||
+        kind === "practice" ||
+        kind === "call" ||
+        kind === "milestone"
+        ? assetId
+        : "",
     );
     fd.set(
       "default_resource_url",
-      kind === "lesson" || kind === "practice" ? resourceUrl : "",
+      kind === "lesson" ||
+        kind === "practice" ||
+        kind === "call" ||
+        kind === "milestone"
+        ? resourceUrl
+        : "",
     );
     startTransition(async () => {
       try {
@@ -128,11 +139,12 @@ export function TemplateNodeEditor({
             }}
             className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
           >
-            <option value="practice">Prática</option>
-            <option value="call">Chamada</option>
-            <option value="milestone">Marco</option>
-            <option value="lesson">Aula</option>
+            <option value="practice">{nodeKindLabel.practice}</option>
+            <option value="call">{nodeKindLabel.call}</option>
+            <option value="milestone">{nodeKindLabel.milestone}</option>
+            <option value="lesson">{nodeKindLabel.lesson}</option>
           </select>
+          <p className="text-xs text-muted-foreground">{nodeKindHint[kind]}</p>
         </div>
 
         <LibraryAssetPicker
@@ -145,10 +157,11 @@ export function TemplateNodeEditor({
           onChange={(sel) => {
             if (!sel) {
               setAssetId("");
+              setResourceUrl("");
               return;
             }
             setAssetId(sel.assetId);
-            if (sel.url) setResourceUrl(sel.url);
+            setResourceUrl(sel.url ?? "");
             if (!title.trim()) setTitle(sel.title);
           }}
         />

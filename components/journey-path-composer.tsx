@@ -47,7 +47,7 @@ import {
   createLevelFeedback,
   extendLevelWeek,
 } from "@/lib/actions/journey-level";
-import { checkInKindLabel, formatDate, formatDateTime } from "@/lib/labels";
+import { checkInKindLabel, formatDate, formatDateTime, nodeKindLabel } from "@/lib/labels";
 import type { StudentNode, StudentPath } from "@/lib/students/queries";
 import type { CheckInKind, CheckInStatus, NodeKind } from "@/lib/types/database.types";
 import { cn } from "@/lib/utils";
@@ -95,20 +95,6 @@ function kindIcon(kind: NodeKind) {
       return Flag;
     default:
       return Dumbbell;
-  }
-}
-
-function kindLabel(kind: NodeKind) {
-  switch (kind) {
-    case "call":
-      return "Chamada";
-    case "lesson":
-    case "resource":
-      return "Aula";
-    case "milestone":
-      return "Marco";
-    default:
-      return "Prática";
   }
 }
 
@@ -334,7 +320,7 @@ export function JourneyPathComposer({
                     <div className="min-w-0 space-y-1">
                       <p className="inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--neuma-coral)]">
                         <Icon className="size-3" />
-                        {kindLabel(node.kind)}
+                        {nodeKindLabel[node.kind]}
                         {node.due_date
                           ? ` · limite ${formatDate(node.due_date)}`
                           : null}

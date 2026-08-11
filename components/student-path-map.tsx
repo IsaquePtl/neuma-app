@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 
 import type { StudentNode } from "@/lib/students/queries";
-import { formatDate } from "@/lib/labels";
+import { formatDate, nodeKindLabel } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import type { NodeKind } from "@/lib/types/database.types";
 
@@ -25,20 +25,6 @@ function kindIcon(kind: NodeKind) {
       return Flag;
     default:
       return Dumbbell;
-  }
-}
-
-function kindLabel(kind: NodeKind) {
-  switch (kind) {
-    case "call":
-      return "Chamada";
-    case "lesson":
-    case "resource":
-      return "Aula";
-    case "milestone":
-      return "Marco";
-    default:
-      return "Prática";
   }
 }
 
@@ -111,7 +97,7 @@ export function StudentPathMap({ nodes }: { nodes: StudentNode[] }) {
                     )}
                   >
                     <Icon className="size-3" />
-                    {kindLabel(node.kind)}
+                    {nodeKindLabel[node.kind]}
                     {node.week_number ? ` · Sem. ${node.week_number}` : null}
                   </span>
                 </div>

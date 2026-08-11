@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import { tallyEmbedUrl } from "@/components/tally-embed";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ORPHAN_CHECKIN_LABEL } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 
 export function CheckInTallyPanel({
@@ -16,19 +17,19 @@ export function CheckInTallyPanel({
   studentId,
 }: {
   formId: string;
-  nodeId: string;
-  nodeTitle: string;
+  nodeId?: string | null;
+  nodeTitle?: string | null;
   studentId: string;
 }) {
   const [ready, setReady] = useState(false);
+  const title = nodeTitle?.trim() || ORPHAN_CHECKIN_LABEL;
   const src = tallyEmbedUrl(formId, {
     student_id: studentId,
-    node_id: nodeId,
+    node_id: nodeId ?? undefined,
     source: "neuma",
   });
 
   useEffect(() => {
-    // Liberta o paint da shell antes de marcar o iframe como visível
     const id = requestAnimationFrame(() => setReady(true));
     return () => cancelAnimationFrame(id);
   }, []);
@@ -37,10 +38,10 @@ export function CheckInTallyPanel({
     <div className="mx-auto max-w-2xl space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
-          href="/home"
+          href="/session"
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="size-4" /> Geral
+          <ArrowLeft className="size-4" /> 1:1
         </Link>
         <Button
           render={<Link href="/checkins" />}
@@ -56,9 +57,11 @@ export function CheckInTallyPanel({
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
           Check-in
         </p>
-        <h1 className="text-2xl font-semibold tracking-tight">{nodeTitle}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         <p className="text-sm text-muted-foreground">
-          Preenche o formulário abaixo. Podes fechar e voltar quando quiseres.
+          {nodeId
+            ? "Preenche o formulário abaixo. Podes fechar e voltar quando quiseres."
+            : "Check-in geral — sem nível associado ao percurso."}
         </p>
       </header>
 
@@ -69,7 +72,7 @@ export function CheckInTallyPanel({
           ) : null}
           <iframe
             src={src}
-            title={`Check-in · ${nodeTitle}`}
+            title={`Check-in · ${title}`}
             loading="eager"
             className={cn(
               "block w-full border-0 bg-transparent transition-opacity duration-300",

@@ -212,35 +212,38 @@ export interface Database {
       check_ins: {
         Row: {
           id: string;
-          node_id: string;
+          node_id: string | null;
           student_id: string;
           video_url: string | null;
           notes: string | null;
           ai_summary: string | null;
           status: CheckInStatus;
           kind: CheckInKind;
+          level_label: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
-          node_id: string;
+          node_id?: string | null;
           student_id: string;
           video_url?: string | null;
           notes?: string | null;
           ai_summary?: string | null;
           status?: CheckInStatus;
           kind?: CheckInKind;
+          level_label?: string | null;
           created_at?: string;
         };
         Update: {
           id?: string;
-          node_id?: string;
+          node_id?: string | null;
           student_id?: string;
           video_url?: string | null;
           notes?: string | null;
           ai_summary?: string | null;
           status?: CheckInStatus;
           kind?: CheckInKind;
+          level_label?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -986,6 +989,130 @@ export interface Database {
             columns: ["library_asset_id"];
             isOneToOne: false;
             referencedRelation: "library_assets";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      node_quiz_questions: {
+        Row: {
+          id: string;
+          node_id: string;
+          order_index: number;
+          prompt: string;
+          options: Json;
+          correct_option_id: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          node_id: string;
+          order_index?: number;
+          prompt: string;
+          options?: Json;
+          correct_option_id: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          node_id?: string;
+          order_index?: number;
+          prompt?: string;
+          options?: Json;
+          correct_option_id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "node_quiz_questions_node_id_fkey";
+            columns: ["node_id"];
+            isOneToOne: false;
+            referencedRelation: "nodes";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      node_quiz_attempts: {
+        Row: {
+          id: string;
+          node_id: string;
+          student_id: string;
+          answers: Json;
+          score: number;
+          correct_count: number;
+          total: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          node_id: string;
+          student_id: string;
+          answers?: Json;
+          score: number;
+          correct_count: number;
+          total: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          node_id?: string;
+          student_id?: string;
+          answers?: Json;
+          score?: number;
+          correct_count?: number;
+          total?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "node_quiz_attempts_node_id_fkey";
+            columns: ["node_id"];
+            isOneToOne: false;
+            referencedRelation: "nodes";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "node_quiz_attempts_student_id_fkey";
+            columns: ["student_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      student_reviews: {
+        Row: {
+          id: string;
+          student_id: string;
+          topic: string;
+          rating: number | null;
+          body: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          student_id: string;
+          topic?: string;
+          rating?: number | null;
+          body: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          student_id?: string;
+          topic?: string;
+          rating?: number | null;
+          body?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "student_reviews_student_id_fkey";
+            columns: ["student_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];

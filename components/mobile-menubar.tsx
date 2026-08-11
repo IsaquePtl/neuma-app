@@ -12,7 +12,7 @@ export type MobileNavItem = {
   label: string;
   href: string;
   match: (path: string) => boolean;
-  icon?: LucideIcon;
+  icon?: LucideIcon | React.ComponentType<{ className?: string }>;
   profileAvatarUrl?: string | null;
   profileName?: string | null;
   profileEmail?: string | null;

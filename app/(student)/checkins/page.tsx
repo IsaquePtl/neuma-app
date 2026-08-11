@@ -12,7 +12,7 @@ import { PageHero } from "@/components/page-hero";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CheckInStatusBadge } from "@/components/status-badges";
-import { checkInKindLabel, formatDateTime } from "@/lib/labels";
+import { checkInKindLabel, checkInLevelTitle, formatDateTime } from "@/lib/labels";
 
 export default async function StudentCheckinsPage() {
   const supabase = await createClient();
@@ -24,7 +24,7 @@ export default async function StudentCheckinsPage() {
     supabase
       .from("check_ins")
       .select(
-        "id, status, kind, video_url, notes, created_at, node_id, node:nodes(title), feedback:feedbacks(notes, next_steps, video_url, approved, created_at)",
+        "id, status, kind, video_url, notes, created_at, node_id, level_label, node:nodes(title), feedback:feedbacks(notes, next_steps, video_url, approved, created_at)",
       )
       .eq("student_id", user!.id)
       .order("created_at", { ascending: false }),
@@ -69,7 +69,15 @@ export default async function StudentCheckinsPage() {
           >
             Novo check-in
           </Button>
-        ) : null}
+        ) : (
+          <Button
+            render={<Link href="/checkins/new" />}
+            nativeButton={false}
+            size="sm"
+          >
+            Novo check-in
+          </Button>
+        )}
       </PageHero>
 
       {!checkIns || checkIns.length === 0 ? (
@@ -78,12 +86,14 @@ export default async function StudentCheckinsPage() {
           <Button
             render={
               <Link
-                href={activeNode ? `/checkins/new?node=${activeNode.id}` : "/home"}
+                href={
+                  activeNode ? `/checkins/new?node=${activeNode.id}` : "/checkins/new"
+                }
               />
             }
             nativeButton={false}
           >
-            {activeNode ? "Fazer check-in" : "Ir ao Geral"}
+            Fazer check-in
           </Button>
         </Card>
       ) : (
@@ -101,7 +111,7 @@ export default async function StudentCheckinsPage() {
                       href={`/checkins/${c.id}`}
                       className="font-medium hover:underline"
                     >
-                      {node?.title ?? "Bloco"}
+                      {checkInLevelTitle(node?.title, c.level_label)}
                     </Link>
                     <p className="text-xs text-muted-foreground">
                       {checkInKindLabel[c.kind]} · {formatDateTime(c.created_at)}

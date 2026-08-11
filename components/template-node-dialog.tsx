@@ -24,6 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { nodeKindHint, nodeKindLabel } from "@/lib/labels";
 import type { NodeKind } from "@/lib/types/database.types";
 
 type TemplateNodeData = {
@@ -77,11 +78,21 @@ export function TemplateNodeDialog({
     fd.set("title", title);
     fd.set(
       "library_asset_id",
-      kind === "lesson" || kind === "practice" ? assetId : "",
+      kind === "lesson" ||
+        kind === "practice" ||
+        kind === "call" ||
+        kind === "milestone"
+        ? assetId
+        : "",
     );
     fd.set(
       "default_resource_url",
-      kind === "lesson" || kind === "practice" ? resourceUrl : "",
+      kind === "lesson" ||
+        kind === "practice" ||
+        kind === "call" ||
+        kind === "milestone"
+        ? resourceUrl
+        : "",
     );
     startTransition(async () => {
       try {
@@ -148,7 +159,8 @@ export function TemplateNodeDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? "Editar nível" : "Novo nível"}</DialogTitle>
           <DialogDescription>
-            O tipo filtra a biblioteca. Em Aula: categoria → tópico → aula.
+            Cada tipo tem um foco diferente. Em Gravação: categoria → tópico →
+            vídeo.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
@@ -168,11 +180,12 @@ export function TemplateNodeDialog({
               }}
               className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
             >
-              <option value="practice">Prática</option>
-              <option value="call">Chamada</option>
-              <option value="milestone">Marco</option>
-              <option value="lesson">Aula</option>
+              <option value="practice">{nodeKindLabel.practice}</option>
+              <option value="call">{nodeKindLabel.call}</option>
+              <option value="milestone">{nodeKindLabel.milestone}</option>
+              <option value="lesson">{nodeKindLabel.lesson}</option>
             </select>
+            <p className="text-xs text-muted-foreground">{nodeKindHint[kind]}</p>
           </div>
 
           <LibraryAssetPicker
@@ -185,10 +198,11 @@ export function TemplateNodeDialog({
             onChange={(sel) => {
               if (!sel) {
                 setAssetId("");
+                setResourceUrl("");
                 return;
               }
               setAssetId(sel.assetId);
-              if (sel.url) setResourceUrl(sel.url);
+              setResourceUrl(sel.url ?? "");
               if (!title.trim()) setTitle(sel.title);
             }}
           />

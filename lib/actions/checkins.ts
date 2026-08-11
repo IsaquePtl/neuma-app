@@ -17,7 +17,7 @@ export async function submitCheckIn(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Nao autenticado");
 
-  const nodeId = formData.get("node_id") as string;
+  const nodeId = ((formData.get("node_id") as string) || "").trim() || null;
   const kind = ((formData.get("kind") as CheckInKind) || "video");
   const videoUrl = ((formData.get("video_url") as string) || "").trim() || null;
   const notes = ((formData.get("notes") as string) || "").trim() || null;
@@ -33,6 +33,7 @@ export async function submitCheckIn(formData: FormData) {
     .from("check_ins")
     .insert({
       node_id: nodeId,
+      level_label: nodeId ? null : "Sem nível associado",
       student_id: user.id,
       kind,
       video_url: videoUrl,
