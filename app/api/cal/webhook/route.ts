@@ -57,15 +57,11 @@ export async function POST(request: Request) {
   }
 
   // Ignorar triggers que não são bookings de agenda
-  const handled = new Set([
-    "BOOKING_CREATED",
-    "BOOKING_RESCHEDULED",
-    "BOOKING_CANCELLED",
-    "BOOKING_REQUESTED",
-    "BOOKING_REJECTED",
-    "BOOKING_PAID",
-  ]);
-  if (!handled.has(parsed.triggerEvent)) {
+  // O Cal.com envia vários eventos (ACCEPTED/CONFIRMED/RESCHEDULED/etc.).
+  // O que interessa para a UI é: quando houver uma "booking" com start/end,
+  // guardar/atualizar `cal_bookings`.
+  // Ignoramos apenas eventos que não sejam do domínio de BOOKING_*.
+  if (!parsed.triggerEvent.startsWith("BOOKING_")) {
     return NextResponse.json({ ok: true, ignored: parsed.triggerEvent });
   }
 
