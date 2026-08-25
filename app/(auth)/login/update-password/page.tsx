@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { updatePassword } from "@/lib/actions/auth";
+import { PASSWORD_MIN_LENGTH } from "@/lib/auth/validation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,21 +16,21 @@ export default async function UpdatePasswordPage({
   const { error } = await searchParams;
 
   return (
-    <div className="flex w-full flex-col items-center">
+    <div className="flex w-full flex-col items-center desktop:items-stretch">
       <Image
         src="/brand/mark-white.png"
         alt="Neuma"
         width={96}
         height={96}
         priority
-        className="mb-8 h-24 w-24"
+        className="auth-mobile-mark mb-8 h-24 w-24 desktop:hidden"
       />
-      <Card className="w-full p-7 sm:p-8">
+      <Card className="auth-enter-form w-full p-7 sm:p-8">
         <form action={updatePassword} className="space-y-5">
           <div className="space-y-1">
-            <h1 className="text-xl font-semibold">Nova password</h1>
+            <h1 className="text-xl font-bold">Nova password</h1>
             <p className="text-base text-muted-foreground">
-              Define uma password com pelo menos 8 caracteres.
+              Define uma password com pelo menos {PASSWORD_MIN_LENGTH} caracteres.
             </p>
           </div>
           <div className="space-y-2">
@@ -41,7 +42,7 @@ export default async function UpdatePasswordPage({
               name="password"
               type="password"
               required
-              minLength={8}
+              minLength={PASSWORD_MIN_LENGTH}
               autoComplete="new-password"
               className="h-12 text-base"
             />
@@ -55,7 +56,7 @@ export default async function UpdatePasswordPage({
               name="confirm"
               type="password"
               required
-              minLength={8}
+              minLength={PASSWORD_MIN_LENGTH}
               autoComplete="new-password"
               className="h-12 text-base"
             />

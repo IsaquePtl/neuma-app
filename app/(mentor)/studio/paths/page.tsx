@@ -27,6 +27,12 @@ import {
   pathTemplateStatusLabel,
 } from "@/lib/labels";
 import type { LibraryAssetUsage } from "@/lib/types/database.types";
+import { CategoryThemeIcon } from "@/components/category-theme-icon";
+import {
+  CATEGORY_THEMES,
+  categoryThemeWash,
+  inferCategoryTheme,
+} from "@/lib/brand-themes";
 
 export default async function PathsHubPage({
   searchParams,
@@ -57,7 +63,7 @@ export default async function PathsHubPage({
       .order("updated_at", { ascending: false }),
     supabase
       .from("library_categories")
-      .select("id, name, slug, sort_index")
+      .select("id, name, slug, sort_index, theme")
       .order("sort_index", { ascending: true }),
     supabase
       .from("library_topics")
@@ -190,13 +196,26 @@ export default async function PathsHubPage({
             <div className="space-y-4">
               {cats.map((cat) => {
                 const catTopics = tops.filter((t) => t.category_id === cat.id);
+                const theme = inferCategoryTheme(cat);
+                const wash = theme
+                  ? categoryThemeWash(CATEGORY_THEMES[theme].color)
+                  : "linear-gradient(155deg, #1f1f1f 0%, #161616 100%)";
                 return (
                   <Card
                     key={cat.id}
-                    className="space-y-3 overflow-hidden border-white/10 p-4 shadow-none backdrop-blur-none [background:linear-gradient(155deg,#2f2a2e_0%,#252836_52%,#1e2636_100%)]"
+                    className="space-y-3 overflow-hidden border-white/10 p-4 shadow-none backdrop-blur-none"
+                    style={{ background: wash }}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <p className="min-w-0 truncate font-medium">{cat.name}</p>
+                      <p className="flex min-w-0 items-center gap-2 truncate font-medium">
+                        <CategoryThemeIcon
+                          theme={cat.theme}
+                          slug={cat.slug}
+                          name={cat.name}
+                          size={32}
+                        />
+                        <span className="truncate">{cat.name}</span>
+                      </p>
                       <LibraryCategoryActions category={cat} />
                     </div>
                     {catTopics.length === 0 ? (

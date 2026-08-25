@@ -163,7 +163,7 @@ export function PathTemplateComposer({
             onKeyDown={(e) => {
               if (e.key === "Enter") e.currentTarget.blur();
             }}
-            className="h-auto border-0 bg-transparent px-0 text-2xl font-semibold tracking-tight shadow-none focus-visible:ring-0"
+            className="h-auto border-0 bg-transparent px-0 text-2xl font-bold tracking-tight shadow-none focus-visible:ring-0"
             aria-label="Título do percurso"
             disabled={metaPending}
           />
@@ -266,7 +266,7 @@ export function PathTemplateComposer({
                         {nodeKindLabel[node.kind]}
                         {period ? ` · ${period}` : null}
                       </p>
-                      <p className="text-lg font-semibold tracking-tight">
+                      <p className="text-lg font-bold tracking-tight">
                         {node.title}
                       </p>
                       {node.description ? (

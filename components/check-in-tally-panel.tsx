@@ -35,7 +35,7 @@ export function CheckInTallyPanel({
   // Fallback se o iframe não disparar onLoad
   useEffect(() => {
     if (ready) return;
-    const t = window.setTimeout(() => setReady(true), 10000);
+    const t = window.setTimeout(() => setReady(true), 4000);
     return () => window.clearTimeout(t);
   }, [ready]);
 
@@ -63,7 +63,7 @@ export function CheckInTallyPanel({
                 {levelNumber}
               </span>
             ) : null}
-            <h1 className="min-w-0 text-2xl font-semibold tracking-tight sm:text-3xl">
+            <h1 className="font-heading min-w-0 text-2xl font-bold tracking-tight sm:text-3xl">
               {title}
             </h1>
           </div>
@@ -73,6 +73,7 @@ export function CheckInTallyPanel({
           formId={formId}
           title={`Check-in · ${title}`}
           height={500}
+          className={!ready ? "opacity-0" : "opacity-100 transition-opacity duration-200"}
           params={{
             student_id: studentId,
             node_id: nodeId ?? undefined,

@@ -33,6 +33,11 @@ export type CalBookingSuccessData = {
   status?: string;
   videoCallUrl?: string;
   isReschedule?: boolean;
+  previousUid?: string | null;
+};
+
+export type CalBookingCancelledData = {
+  uid?: string;
 };
 
 type CalLinkProps = {
@@ -54,9 +59,196 @@ function publicCalUrl(calLink: string) {
   return `https://cal.com/${calLink.replace(/^\//, "")}`;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function asString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const t = value.trim();
+  return t.length > 0 ? t : undefined;
+}
+
 function extractBookingData(e: unknown): CalBookingSuccessData {
-  const detail = (e as { detail?: { data?: CalBookingSuccessData } })?.detail;
-  return detail?.data ?? {};
+  const detail = asRecord((e as { detail?: unknown })?.detail);
+  const data = asRecord(detail?.data) ?? {};
+  const booking = asRecord(data.booking);
+
+  return {
+    uid:
+      asString(data.uid) ??
+      asString(booking?.uid) ??
+      asString(data.bookingUid),
+    title: asString(data.title) ?? asString(booking?.title),
+    startTime:
+      asString(data.startTime) ??
+      asString(booking?.startTime) ??
+      asString(data.date),
+    endTime: asString(data.endTime) ?? asString(booking?.endTime),
+    status: asString(data.status) ?? asString(booking?.status),
+    videoCallUrl:
+      asString(data.videoCallUrl) ??
+      asString(booking?.videoCallUrl) ??
+      asString(asRecord(booking?.metadata)?.videoCallUrl as string | undefined),
+    previousUid:
+      asString(data.rescheduleUid) ??
+      asString(data.previousUid) ??
+      asString(booking?.rescheduleUid) ??
+      asString(booking?.fromReschedule) ??
+      null,
+  };
+}
+
+function extractCancelledData(e: unknown): CalBookingCancelledData {
+  const detail = asRecord((e as { detail?: unknown })?.detail);
+  const data = asRecord(detail?.data) ?? asRecord(detail) ?? {};
+  const booking = asRecord(data.booking) ?? asRecord(data.data);
+
+  return {
+    uid:
+      asString(data.uid) ??
+      asString(booking?.uid) ??
+      asString(data.bookingUid) ??
+      asString(booking?.bookingUid) ??
+      asString(asRecord(data.event)?.uid),
+  };
+}
+
+/**
+ * Move o × do Cal (shadow DOM) para o canto do card no mobile.
+ * ≥768px: o × vai para o canto do ecrã (light DOM) — o modal do Cal tem
+ * transform e o `position:fixed` no shadow não chega ao viewport.
+ */
+const CAL_SCREEN_CLOSE_ID = "neuma-cal-screen-close";
+
+function getCalScreenCloseButton() {
+  return document.getElementById(CAL_SCREEN_CLOSE_ID);
+}
+
+function ensureCalScreenCloseButton() {
+  const existing = getCalScreenCloseButton();
+  if (existing instanceof HTMLButtonElement) return existing;
+
+  const button = document.createElement("button");
+  button.id = CAL_SCREEN_CLOSE_ID;
+  button.type = "button";
+  button.className = "neuma-cal-screen-close";
+  button.setAttribute("aria-label", "Fechar");
+  button.textContent = "×";
+  button.addEventListener("click", () => {
+    const host = document.querySelector("cal-modal-box");
+    const close = host?.shadowRoot?.querySelector(".close");
+    if (close instanceof HTMLElement) close.click();
+  });
+  document.body.appendChild(button);
+  return button;
+}
+
+function syncCalScreenClose(host: Element, embedReady: boolean) {
+  const desktop = window.matchMedia("(min-width: 768px)").matches;
+  const button = ensureCalScreenCloseButton();
+  button.dataset.visible = desktop && embedReady ? "true" : "false";
+}
+
+function pinCalModalCloseButton(host: Element) {
+  const root = (host as HTMLElement).shadowRoot;
+  if (!root) return;
+
+  const header = root.querySelector(".header");
+  const modal = root.querySelector(".modal-box");
+  if (!(header instanceof HTMLElement) || !(modal instanceof HTMLElement)) {
+    return;
+  }
+
+  if (header.parentElement !== modal) {
+    modal.style.position = "relative";
+    modal.prepend(header);
+  }
+
+  const state = host.getAttribute("state");
+  const embedReady = state === "loaded" || state === "reopening";
+  header.dataset.neumaVisible = embedReady ? "true" : "false";
+  syncCalScreenClose(host, embedReady);
+
+  let style = root.getElementById("neuma-cal-close-fix");
+  if (!style) {
+    style = document.createElement("style");
+    style.id = "neuma-cal-close-fix";
+    root.appendChild(style);
+  }
+  style.textContent = `
+      .header {
+        position: absolute !important;
+        float: none !important;
+        top: max(10px, env(safe-area-inset-top, 0px)) !important;
+        right: 10px !important;
+        left: auto !important;
+        z-index: 50 !important;
+        margin: 0 !important;
+        display: none !important;
+        pointer-events: none !important;
+      }
+      .header[data-neuma-visible="true"] {
+        display: block !important;
+        pointer-events: auto !important;
+      }
+      .close {
+        left: 0 !important;
+        position: relative !important;
+        font-size: 28px !important;
+        line-height: 1 !important;
+        width: 44px !important;
+        height: 44px !important;
+        display: grid !important;
+        place-items: center !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        color: rgba(255, 255, 255, 0.72) !important;
+        cursor: pointer !important;
+        padding: 0 !important;
+        transition: color 150ms ease !important;
+      }
+      .close:hover {
+        color: #fff !important;
+      }
+      @media (min-width: 768px) {
+        .header,
+        .header[data-neuma-visible="true"] {
+          display: none !important;
+          pointer-events: none !important;
+        }
+      }
+    `;
+}
+
+function watchCalModalCloseButtons() {
+  const scan = () => {
+    const hosts = document.querySelectorAll("cal-modal-box");
+    if (hosts.length === 0) {
+      const leftover = getCalScreenCloseButton();
+      if (leftover) leftover.dataset.visible = "false";
+      return;
+    }
+    hosts.forEach(pinCalModalCloseButton);
+  };
+  scan();
+  const mq = window.matchMedia("(min-width: 768px)");
+  mq.addEventListener("change", scan);
+  const obs = new MutationObserver(scan);
+  obs.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["state"],
+  });
+  return () => {
+    mq.removeEventListener("change", scan);
+    obs.disconnect();
+    getCalScreenCloseButton()?.remove();
+  };
 }
 
 type CalBookButtonProps = CalLinkProps & {
@@ -67,6 +259,7 @@ type CalBookButtonProps = CalLinkProps & {
   size?: "default" | "lg";
   variant?: "default" | "secondary";
   onBookingSuccess?: (data: CalBookingSuccessData) => void | Promise<void>;
+  onBookingCancelled?: (data: CalBookingCancelledData) => void | Promise<void>;
 };
 
 /**
@@ -84,13 +277,20 @@ export function CalBookButton({
   size = "default",
   variant = "default",
   onBookingSuccess,
+  onBookingCancelled,
 }: CalBookButtonProps) {
   const reactId = useId().replace(/:/g, "");
   const ns = namespace ?? eventType ?? `cal-${reactId}`;
   const resolvedLink = resolveCalLink({ calLink, eventType });
   const fallbackHref = publicCalUrl(resolvedLink);
   const onSuccessRef = useRef(onBookingSuccess);
+  const onCancelledRef = useRef(onBookingCancelled);
   onSuccessRef.current = onBookingSuccess;
+  onCancelledRef.current = onBookingCancelled;
+
+  useEffect(() => {
+    return watchCalModalCloseButtons();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,6 +318,22 @@ export function CalBookButton({
               ...extractBookingData(e),
               isReschedule: true,
             });
+          },
+        });
+        // API antiga / fallback
+        cal("on", {
+          action: "rescheduleBookingSuccessful",
+          callback: (e: unknown) => {
+            void onSuccessRef.current?.({
+              ...extractBookingData(e),
+              isReschedule: true,
+            });
+          },
+        });
+        cal("on", {
+          action: "bookingCancelled",
+          callback: (e: unknown) => {
+            void onCancelledRef.current?.(extractCancelledData(e));
           },
         });
       } catch (err) {

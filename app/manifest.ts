@@ -4,21 +4,22 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Neuma",
     short_name: "Neuma",
-    description: "Mentoria musical premium",
+    description:
+      "Plataforma e mentoria musical focada em expressão, autonomia e consciência musical. Evolui sem horários fixos através de um percurso personalizado e acompanhamento 1:1.",
     start_url: "/",
     display: "standalone",
-    background_color: "#06090e",
-    theme_color: "#06090e",
+    background_color: "#161616",
+    theme_color: "#161616",
     orientation: "portrait",
     icons: [
       {
         src: "/brand/app-icon.png",
-        sizes: "512x512",
+        sizes: "1024x1024",
         type: "image/png",
         purpose: "any",
       },
       {
-        src: "/brand/app-icon.png",
+        src: "/brand/app-icon-512.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",

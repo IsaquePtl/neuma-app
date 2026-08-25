@@ -73,7 +73,7 @@ export default async function SessionFeedbackPage() {
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
           Feedback
         </p>
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1 className="text-2xl font-bold tracking-tight">
           {activeNode.title}
         </h1>
         <p className="text-sm text-muted-foreground">

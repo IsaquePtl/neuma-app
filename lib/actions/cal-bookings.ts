@@ -14,7 +14,21 @@ export type EmbedBookingPayload = {
   meetUrl?: string | null;
   status?: string | null;
   isReschedule?: boolean;
+  /** UID do agendamento anterior (quando Cal cria um novo no reschedule). */
+  previousUid?: string | null;
 };
+
+export type EmbedCancelPayload = {
+  uid: string;
+};
+
+function revalidateBookingPaths() {
+  revalidatePath("/path", "layout");
+  revalidatePath("/home");
+  revalidatePath("/session");
+  revalidatePath("/studio");
+  revalidatePath("/studio/calendar");
+}
 
 /** Persiste marcação vinda do embed Cal (não espera pelo webhook). */
 export async function syncCalBookingFromEmbed(payload: EmbedBookingPayload) {
@@ -38,9 +52,7 @@ export async function syncCalBookingFromEmbed(payload: EmbedBookingPayload) {
     .maybeSingle();
 
   const statusRaw = (payload.status || "").toUpperCase();
-  let status: CalBookingStatus = payload.isReschedule
-    ? "rescheduled"
-    : "accepted";
+  let status: CalBookingStatus = "accepted";
   if (statusRaw.includes("PENDING")) status = "pending";
   if (statusRaw.includes("CANCEL")) status = "cancelled";
 
@@ -70,9 +82,65 @@ export async function syncCalBookingFromEmbed(payload: EmbedBookingPayload) {
 
   if (error) throw new Error(error.message);
 
-  revalidatePath("/path", "layout");
-  revalidatePath("/home");
-  revalidatePath("/session");
-  revalidatePath("/studio");
-  revalidatePath("/studio/calendar");
+  const previousUid = (payload.previousUid || "").trim();
+  if (previousUid && previousUid !== uid) {
+    await admin
+      .from("cal_bookings")
+      .update({
+        status: "cancelled",
+        trigger_event: "BOOKING_RESCHEDULED",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("cal_booking_uid", previousUid)
+      .eq("student_id", user.id);
+  }
+
+  revalidateBookingPaths();
+}
+
+/** Marca cancelamento vindo do embed Cal. */
+export async function cancelCalBookingFromEmbed(payload: EmbedCancelPayload) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Nao autenticado");
+
+  const uid = (payload.uid || "").trim();
+  if (!uid) throw new Error("UID em falta");
+
+  const admin = createAdminClient();
+  const now = new Date().toISOString();
+  const cancelPatch = {
+    status: "cancelled" as const,
+    trigger_event: "BOOKING_CANCELLED",
+    updated_at: now,
+  };
+
+  // Preferência: UID + aluno
+  let { data: updated, error } = await admin
+    .from("cal_bookings")
+    .update(cancelPatch)
+    .eq("cal_booking_uid", uid)
+    .eq("student_id", user.id)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+
+  // Fallback: só UID (row sem student_id)
+  if (!updated?.length) {
+    const retry = await admin
+      .from("cal_bookings")
+      .update({ ...cancelPatch, student_id: user.id })
+      .eq("cal_booking_uid", uid)
+      .select("id");
+    if (retry.error) throw new Error(retry.error.message);
+    updated = retry.data;
+  }
+
+  if (!updated?.length) {
+    throw new Error("Marcação não encontrada para cancelar");
+  }
+
+  revalidateBookingPaths();
 }

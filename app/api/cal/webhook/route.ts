@@ -33,6 +33,17 @@ async function notifyMentor({
   }
 }
 
+function revalidateCalPaths(studentId: string | null) {
+  revalidatePath("/studio");
+  revalidatePath("/studio/calendar");
+  revalidatePath("/session");
+  revalidatePath("/path", "layout");
+  revalidatePath("/home");
+  if (studentId) {
+    revalidatePath(`/studio/students/${studentId}`);
+  }
+}
+
 export async function POST(request: Request) {
   const rawBody = await request.text();
   const signature = request.headers.get("x-cal-signature-256");
@@ -56,11 +67,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // Ignorar triggers que não são bookings de agenda
-  // O Cal.com envia vários eventos (ACCEPTED/CONFIRMED/RESCHEDULED/etc.).
-  // O que interessa para a UI é: quando houver uma "booking" com start/end,
-  // guardar/atualizar `cal_bookings`.
-  // Ignoramos apenas eventos que não sejam do domínio de BOOKING_*.
   if (!parsed.triggerEvent.startsWith("BOOKING_")) {
     return NextResponse.json({ ok: true, ignored: parsed.triggerEvent });
   }
@@ -78,11 +84,142 @@ export async function POST(request: Request) {
     studentId = student?.id ?? null;
   }
 
+  // —— CANCEL ——
+  // Actualiza o row existente; não exige start/end no payload.
+  if (parsed.triggerEvent === "BOOKING_CANCELLED") {
+    const now = new Date().toISOString();
+    const cancelPatch = {
+      trigger_event: parsed.triggerEvent,
+      status: "cancelled" as const,
+      payload: parsed.payload,
+      updated_at: now,
+    };
+
+    // 1) Match por UID
+    let { data: existing } = await admin
+      .from("cal_bookings")
+      .select("id, student_id, start_time, end_time, cal_booking_uid")
+      .eq("cal_booking_uid", parsed.uid)
+      .maybeSingle();
+
+    // 2) Fallback: bookingId numérico
+    if (!existing && parsed.bookingId != null) {
+      const byId = await admin
+        .from("cal_bookings")
+        .select("id, student_id, start_time, end_time, cal_booking_uid")
+        .eq("cal_booking_id", parsed.bookingId)
+        .maybeSingle();
+      existing = byId.data;
+    }
+
+    // 3) Fallback: email + horário (quando o UID do cancel não bate com o create)
+    if (!existing && parsed.attendeeEmail && parsed.startTime) {
+      const bySlot = await admin
+        .from("cal_bookings")
+        .select("id, student_id, start_time, end_time, cal_booking_uid")
+        .ilike("attendee_email", parsed.attendeeEmail)
+        .eq("start_time", parsed.startTime)
+        .in("status", ["accepted", "pending", "rescheduled"])
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      existing = bySlot.data;
+    }
+
+    if (existing) {
+      const { error } = await admin
+        .from("cal_bookings")
+        .update(cancelPatch)
+        .eq("id", existing.id);
+
+      if (error) {
+        console.error("[cal:cancel]", error);
+        return NextResponse.json(
+          { ok: false, error: "persist_failed" },
+          { status: 500 },
+        );
+      }
+      studentId = studentId ?? existing.student_id;
+    } else {
+      // Sem row local — cria stub cancelado (times do payload ou now).
+      const start = parsed.startTime ?? now;
+      const end =
+        parsed.endTime ??
+        new Date(new Date(start).getTime() + 30 * 60_000).toISOString();
+      const { error } = await admin.from("cal_bookings").upsert(
+        {
+          cal_booking_uid: parsed.uid,
+          cal_booking_id: parsed.bookingId,
+          ...cancelPatch,
+          title: parsed.title,
+          event_type_slug: parsed.eventTypeSlug,
+          start_time: start,
+          end_time: end,
+          timezone: parsed.timezone,
+          meet_url: parsed.meetUrl,
+          organizer_email: parsed.organizerEmail,
+          organizer_name: parsed.organizerName,
+          attendee_email: parsed.attendeeEmail,
+          attendee_name: parsed.attendeeName,
+          student_id: studentId,
+          notes: parsed.notes,
+        },
+        { onConflict: "cal_booking_uid" },
+      );
+      if (error) {
+        console.error("[cal:cancel-upsert]", error);
+        return NextResponse.json(
+          { ok: false, error: "persist_failed" },
+          { status: 500 },
+        );
+      }
+    }
+
+    revalidateCalPaths(studentId);
+
+    after(async () => {
+      const who = parsed.attendeeName ?? parsed.attendeeEmail ?? "alguém";
+      const when = parsed.startTime
+        ? new Date(parsed.startTime).toLocaleString("pt-PT", {
+            dateStyle: "medium",
+            timeStyle: "short",
+          })
+        : "data indefinida";
+      await notifyMentor({
+        subject: `Marcação cancelada: ${who}`,
+        html: `<p>${who} cancelou ${parsed.title ?? "a sessão"} de ${when}.</p><p><a href="${appUrl("/studio")}">Abrir Centro de Comando</a></p>`,
+      });
+    });
+
+    return NextResponse.json({
+      ok: true,
+      uid: parsed.uid,
+      status: "cancelled",
+      studentLinked: Boolean(studentId),
+      matched: Boolean(existing),
+    });
+  }
+
+  // —— CREATE / RESCHEDULE / outros BOOKING_* ——
+  if (!parsed.startTime || !parsed.endTime) {
+    return NextResponse.json(
+      { ok: false, error: "missing_times" },
+      { status: 400 },
+    );
+  }
+
+  // O novo agendamento (após reschedule) é o activo → status accepted.
+  // O anterior (rescheduleUid) fica cancelled.
+  const activeStatus =
+    parsed.triggerEvent === "BOOKING_RESCHEDULED"
+      ? "accepted"
+      : parsed.status;
+
   const row = {
     cal_booking_uid: parsed.uid,
     cal_booking_id: parsed.bookingId,
     trigger_event: parsed.triggerEvent,
-    status: parsed.status,
+    status: activeStatus,
     title: parsed.title,
     event_type_slug: parsed.eventTypeSlug,
     start_time: parsed.startTime,
@@ -111,18 +248,30 @@ export async function POST(request: Request) {
     );
   }
 
-  revalidatePath("/studio");
-  revalidatePath("/session");
-  revalidatePath("/path", "layout");
-  if (studentId) {
-    revalidatePath(`/studio/students/${studentId}`);
-    revalidatePath("/home");
+  if (
+    parsed.triggerEvent === "BOOKING_RESCHEDULED" &&
+    parsed.rescheduleUid &&
+    parsed.rescheduleUid !== parsed.uid
+  ) {
+    const { error: cancelPrevError } = await admin
+      .from("cal_bookings")
+      .update({
+        status: "cancelled",
+        trigger_event: "BOOKING_RESCHEDULED",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("cal_booking_uid", parsed.rescheduleUid);
+
+    if (cancelPrevError) {
+      console.error("[cal:cancel-previous]", cancelPrevError);
+    }
   }
 
+  revalidateCalPaths(studentId);
+
   after(async () => {
-    const who =
-      parsed.attendeeName ?? parsed.attendeeEmail ?? "alguém";
-    const when = new Date(parsed.startTime).toLocaleString("pt-PT", {
+    const who = parsed.attendeeName ?? parsed.attendeeEmail ?? "alguém";
+    const when = new Date(parsed.startTime!).toLocaleString("pt-PT", {
       dateStyle: "medium",
       timeStyle: "short",
     });
@@ -131,11 +280,6 @@ export async function POST(request: Request) {
       await notifyMentor({
         subject: `Nova marcação: ${who}`,
         html: `<p>${who} marcou ${parsed.title ?? "uma sessão"} para ${when}.</p><p><a href="${appUrl("/studio")}">Abrir Centro de Comando</a></p>`,
-      });
-    } else if (parsed.triggerEvent === "BOOKING_CANCELLED") {
-      await notifyMentor({
-        subject: `Marcação cancelada: ${who}`,
-        html: `<p>${who} cancelou ${parsed.title ?? "a sessão"} de ${when}.</p><p><a href="${appUrl("/studio")}">Abrir Centro de Comando</a></p>`,
       });
     } else if (parsed.triggerEvent === "BOOKING_RESCHEDULED") {
       await notifyMentor({
@@ -148,7 +292,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     uid: parsed.uid,
-    status: parsed.status,
+    status: activeStatus,
     studentLinked: Boolean(studentId),
   });
 }

@@ -5,13 +5,24 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
+import {
+  isValidEmail,
+  isValidPassword,
+  PASSWORD_MIN_LENGTH,
+} from "@/lib/auth/validation";
 
 export async function login(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
 
-  if (!email || !password) {
-    redirect(`/login?error=${encodeURIComponent("Preenche email e password.")}`);
+  if (!isValidEmail(email)) {
+    redirect(`/login?error=${encodeURIComponent("Indica um email valido.")}`);
+  }
+
+  if (!isValidPassword(password)) {
+    redirect(
+      `/login?error=${encodeURIComponent(`A password precisa de pelo menos ${PASSWORD_MIN_LENGTH} caracteres.`)}`,
+    );
   }
 
   const supabase = await createClient();
@@ -29,7 +40,7 @@ export async function logout() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   revalidatePath("/", "layout");
-  redirect("/login");
+  redirect("/");
 }
 
 export async function requestPasswordReset(formData: FormData) {
@@ -66,9 +77,9 @@ export async function updatePassword(formData: FormData) {
   const password = String(formData.get("password") ?? "");
   const confirm = String(formData.get("confirm") ?? "");
 
-  if (password.length < 8) {
+  if (!isValidPassword(password)) {
     redirect(
-      `/login/update-password?error=${encodeURIComponent("A password precisa de pelo menos 8 caracteres.")}`,
+      `/login/update-password?error=${encodeURIComponent(`A password precisa de pelo menos ${PASSWORD_MIN_LENGTH} caracteres.`)}`,
     );
   }
   if (password !== confirm) {

@@ -22,7 +22,7 @@ export function CheckInForm({
     <div className="mx-auto max-w-xl space-y-6">
       <div className="space-y-1">
         <p className="text-sm text-muted-foreground">Check-in</p>
-        <h1 className="text-2xl font-semibold tracking-tight">{nodeTitle}</h1>
+        <h1 className="font-heading text-2xl font-bold tracking-tight">{nodeTitle}</h1>
       </div>
 
       <Card className="neuma-accent-top p-6">

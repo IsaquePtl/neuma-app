@@ -17,7 +17,7 @@ export function NeumaLogo({
         priority
       />
       {withWordmark ? (
-        <span className="font-heading text-xl font-semibold tracking-tight">
+        <span className="text-xl font-bold tracking-tight">
           Neuma
         </span>
       ) : null}

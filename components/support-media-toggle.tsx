@@ -4,16 +4,15 @@ import { useEffect, useState } from "react";
 import {
   ChevronDown,
   ExternalLink,
+  FileText,
   Loader2,
-  Paperclip,
   Play,
-  X,
 } from "lucide-react";
 
 import { toEmbedUrl } from "@/components/video-embed";
 import { cn } from "@/lib/utils";
 
-/** Botão estilo to-do: se for vídeo embeddável, expande só quando carregar; senão abre link. */
+/** Botão estilo to-do: vídeo embeddável expande; ficheiro abre link. */
 export function SupportMediaToggle({
   url,
   title,
@@ -27,6 +26,7 @@ export function SupportMediaToggle({
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
   const embed = toEmbedUrl(url);
+  const isVideo = Boolean(embed);
 
   useEffect(() => {
     if (!open) {
@@ -35,7 +35,7 @@ export function SupportMediaToggle({
     }
   }, [open]);
 
-  if (!embed) {
+  if (!isVideo) {
     return (
       <a
         href={url}
@@ -45,7 +45,7 @@ export function SupportMediaToggle({
       >
         <span className="inline-flex min-w-0 items-center gap-2.5">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30">
-            <Paperclip className="size-3.5 text-[var(--neuma-coral)]" />
+            <FileText className="size-3.5 text-[var(--neuma-coral)]" />
           </span>
           <span className="truncate font-medium">{label}</span>
         </span>
@@ -61,52 +61,50 @@ export function SupportMediaToggle({
       setReady(false);
       return;
     }
-    // Monta o iframe escondido; só revela o painel no onLoad
     setLoading(true);
     setReady(false);
     setOpen(true);
   }
 
   const expanded = open && ready;
+  const loadingState = loading && !ready;
 
   return (
     <div className="space-y-2">
       <button
         type="button"
         onClick={toggle}
-        disabled={loading && !ready}
+        disabled={loadingState}
         aria-expanded={expanded}
-        aria-busy={loading && !ready}
+        aria-busy={loadingState}
+        aria-label={expanded ? "Fechar anexo de apoio" : label}
         className="inline-flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-left text-sm transition-colors hover:bg-white/[0.07] disabled:opacity-80"
       >
-        <span className="inline-flex min-w-0 items-center gap-2.5">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30">
-            {loading && !ready ? (
-              <Loader2 className="size-3.5 animate-spin text-[var(--neuma-coral)]" />
-            ) : expanded ? (
-              <X className="size-3.5 text-[var(--neuma-coral)]" />
-            ) : (
-              <Play className="size-3.5 fill-current text-[var(--neuma-coral)]" />
-            )}
+        {expanded ? (
+          <span className="min-w-0 flex-1" aria-hidden />
+        ) : (
+          <span className="inline-flex min-w-0 items-center gap-2.5">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30">
+              {loadingState ? (
+                <Loader2 className="size-3.5 animate-spin text-[var(--neuma-coral)]" />
+              ) : (
+                <Play className="size-3.5 fill-current text-[var(--neuma-coral)]" />
+              )}
+            </span>
+            <span className="truncate font-medium">
+              {loadingState ? "A carregar…" : label}
+            </span>
           </span>
-          <span className="truncate font-medium">
-            {loading && !ready
-              ? "A carregar…"
-              : expanded
-                ? "Fechar"
-                : label}
-          </span>
-        </span>
+        )}
         <ChevronDown
           className={cn(
             "size-3.5 shrink-0 text-muted-foreground transition-transform",
             expanded && "rotate-180",
-            loading && !ready && "opacity-0",
+            loadingState && "opacity-0",
           )}
         />
       </button>
 
-      {/* Iframe escondido até onLoad — sem caixa cinzenta */}
       {open ? (
         <div
           className={cn(
@@ -118,7 +116,7 @@ export function SupportMediaToggle({
           aria-hidden={!ready}
         >
           <iframe
-            src={embed}
+            src={embed!}
             title={title ?? "Anexo de apoio"}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
             allowFullScreen

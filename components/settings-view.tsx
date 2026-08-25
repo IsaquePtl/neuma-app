@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import Image from "next/image";
-import { Camera, LogOut } from "lucide-react";
+import { Camera, LogOut, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -11,10 +10,16 @@ import {
   requestEmailChange,
 } from "@/lib/actions/profile";
 import { logout } from "@/lib/actions/auth";
+import { prepareAvatarFile } from "@/lib/images/prepare-avatar";
+import {
+  instagramProfileUrl,
+  normalizeInstagramHandle,
+  normalizeWhatsappNumber,
+  whatsappChatUrl,
+} from "@/lib/social-links";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { profileInitials } from "@/components/user-avatar";
 
@@ -24,12 +29,16 @@ export function SettingsView({
   role,
   avatarUrl,
   bio,
+  instagram: initialInstagram,
+  whatsapp: initialWhatsapp,
 }: {
   name: string | null;
   email: string;
   role: "mentor" | "student";
   avatarUrl?: string | null;
   bio?: string | null;
+  instagram?: string | null;
+  whatsapp?: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [avatarPending, startAvatarTransition] = useTransition();
@@ -38,12 +47,32 @@ export function SettingsView({
   const [status, setStatus] = useState<string | null>(null);
   const [savedBio, setSavedBio] = useState(bio ?? "");
   const [draftBio, setDraftBio] = useState(bio ?? "");
+  const [instagram, setInstagram] = useState(
+    normalizeInstagramHandle(initialInstagram ?? ""),
+  );
+  const [whatsapp, setWhatsapp] = useState(
+    normalizeWhatsappNumber(initialWhatsapp ?? ""),
+  );
+  const [savedInstagram, setSavedInstagram] = useState(
+    normalizeInstagramHandle(initialInstagram ?? ""),
+  );
+  const [savedWhatsapp, setSavedWhatsapp] = useState(
+    normalizeWhatsappNumber(initialWhatsapp ?? ""),
+  );
+  const [editingSocial, setEditingSocial] = useState<
+    null | "instagram" | "whatsapp"
+  >(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const socialInputRef = useRef<HTMLInputElement>(null);
 
   const displayAvatar = previewUrl ?? avatarUrl;
   const initials = profileInitials(name, email);
   const bioDirty = draftBio.trim() !== savedBio.trim();
+  const socialDirty =
+    normalizeInstagramHandle(instagram) !== savedInstagram ||
+    normalizeWhatsappNumber(whatsapp) !== savedWhatsapp;
+  const dirty = bioDirty || socialDirty;
 
   function showStatus(message: string) {
     setStatus(message);
@@ -57,16 +86,33 @@ export function SettingsView({
     };
   }, []);
 
-  function onSaveBio(e: React.FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    if (editingSocial) socialInputRef.current?.focus();
+  }, [editingSocial]);
+
+  function onSaveAll(e: React.FormEvent) {
     e.preventDefault();
-    if (!bioDirty) return;
-    const fd = new FormData(e.currentTarget);
+    setEditingSocial(null);
+
+    const nextIg = normalizeInstagramHandle(instagram);
+    const nextWa = normalizeWhatsappNumber(whatsapp);
+    setInstagram(nextIg);
+    setWhatsapp(nextWa);
+
+    if (!dirty) return;
+
+    const fd = new FormData();
+    fd.set("bio", draftBio);
+    fd.set("instagram", nextIg);
+    fd.set("whatsapp", nextWa);
+
     startTransition(async () => {
       try {
         await updateProfile(fd);
-        const next = draftBio.trim();
-        setSavedBio(next);
-        setDraftBio(next);
+        setSavedBio(draftBio.trim());
+        setDraftBio(draftBio.trim());
+        setSavedInstagram(nextIg);
+        setSavedWhatsapp(nextWa);
         showStatus("Perfil atualizado!");
       } catch (err) {
         toast.error(
@@ -81,17 +127,26 @@ export function SettingsView({
     if (!file) return;
     const local = URL.createObjectURL(file);
     setPreviewUrl(local);
-    const fd = new FormData();
-    fd.set("avatar", file);
     startAvatarTransition(async () => {
       try {
-        await uploadAvatar(fd);
+        const prepared = await prepareAvatarFile(file);
+        const fd = new FormData();
+        fd.set("avatar", prepared);
+        const url = await uploadAvatar(fd);
+        URL.revokeObjectURL(local);
+        setPreviewUrl(url);
         showStatus("Foto atualizada");
       } catch (err) {
+        URL.revokeObjectURL(local);
         setPreviewUrl(null);
-        toast.error(
-          err instanceof Error ? err.message : "Não foi possível carregar a foto",
-        );
+        const raw = err instanceof Error ? err.message : "";
+        const friendly =
+          /unexpected response|body exceeded|413/i.test(raw)
+            ? "Não foi possível carregar a foto. Tenta outra imagem."
+            : raw || "Não foi possível carregar a foto";
+        toast.error(friendly);
+      } finally {
+        e.target.value = "";
       }
     });
   }
@@ -115,21 +170,20 @@ export function SettingsView({
   return (
     <div
       className={cn(
-        "neuma-mobile-viewport mx-auto flex w-full max-w-2xl flex-col justify-center gap-8 overflow-y-auto pb-5",
-        "desktop:h-auto desktop:min-h-0 desktop:justify-start desktop:overflow-visible desktop:pb-4",
+        "neuma-mobile-viewport mx-auto flex w-full max-w-2xl flex-col justify-between gap-3 overflow-hidden overscroll-none pt-0.5 pb-1",
+        "desktop:h-auto desktop:min-h-0 desktop:justify-start desktop:gap-8 desktop:overflow-visible desktop:pb-4",
       )}
     >
-      <header className="shrink-0 space-y-1.5">
-        <h1 className="text-[1.75rem] font-semibold leading-tight tracking-tight sm:text-3xl">
+      <header className="shrink-0 space-y-3">
+        <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight sm:text-3xl">
           Perfil
         </h1>
-        <p className="text-[0.9375rem] text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           {role === "mentor" ? "A tua conta de mentor" : "A tua conta"}
         </p>
       </header>
 
-      <div className="shrink-0 space-y-6">
-      <div className="flex flex-col items-center gap-3.5">
+      <div className="flex min-h-0 shrink flex-col items-center gap-2">
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
@@ -139,19 +193,17 @@ export function SettingsView({
         >
           <span
             className={cn(
-              "relative grid size-32 place-items-center overflow-hidden rounded-full",
+              "relative grid size-[6.5rem] place-items-center overflow-hidden rounded-full",
               "bg-gradient-to-br from-[var(--neuma-coral)] to-[var(--neuma-blue)]",
               "ring-2 ring-white/10 transition-opacity group-hover:opacity-90",
             )}
           >
             {displayAvatar ? (
-              <Image
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
                 src={displayAvatar}
                 alt=""
-                fill
-                className="object-cover"
-                sizes="128px"
-                unoptimized
+                className="absolute inset-0 size-full object-cover"
               />
             ) : (
               <span className="text-3xl font-semibold text-white">
@@ -159,37 +211,54 @@ export function SettingsView({
               </span>
             )}
           </span>
-          <span className="absolute bottom-0.5 right-0.5 grid size-10 place-items-center rounded-full bg-background/90 text-foreground ring-1 ring-white/15 backdrop-blur-sm">
-            <Camera className="size-5" />
+          <span className="absolute bottom-0.5 right-0.5 grid size-9 place-items-center rounded-full bg-background/90 text-foreground ring-1 ring-white/15 backdrop-blur-sm">
+            <Camera className="size-4" />
           </span>
         </button>
         <input
           ref={fileRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/*"
           className="sr-only"
           onChange={onPickPhoto}
         />
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {avatarPending ? "A carregar foto…" : "Toca para alterar a fotografia"}
         </p>
 
-        <div className="text-center">
-          <p className="text-2xl font-semibold tracking-tight">
+        <div className="w-full max-w-sm space-y-1.5 text-center">
+          <p className="text-xl font-bold tracking-tight sm:text-2xl">
             {name ?? "Sem nome"}
           </p>
           {status ? (
             <p
               aria-live="polite"
-              className="mt-1 text-xs leading-tight text-emerald-400/90"
+              className="text-xs leading-tight text-emerald-400/90"
             >
               {status}
             </p>
           ) : null}
+
+          <textarea
+            id="bio"
+            name="bio"
+            value={draftBio}
+            onChange={(e) => setDraftBio(e.target.value)}
+            placeholder="Uma linha sobre ti…"
+            maxLength={280}
+            rows={2}
+            aria-label="Bio"
+            className={cn(
+              "mx-auto block h-[3.25rem] w-full max-w-sm resize-none overflow-hidden",
+              "border-0 bg-transparent p-0 text-center text-[0.9375rem] leading-relaxed",
+              "text-muted-foreground placeholder:text-muted-foreground/45",
+              "outline-none focus:text-foreground focus-visible:ring-0",
+            )}
+          />
         </div>
       </div>
 
-      <div className="space-y-6">
+      <div className="shrink-0 space-y-3">
         <div className="space-y-2">
           <div className="flex items-end justify-between gap-2">
             <Label htmlFor="email-display">Email</Label>
@@ -201,7 +270,13 @@ export function SettingsView({
               Alterar email
             </button>
           </div>
-          <Input id="email-display" value={email} disabled readOnly className="h-11 text-base" />
+          <Input
+            id="email-display"
+            value={email}
+            disabled
+            readOnly
+            className="h-11 text-base"
+          />
           {emailOpen ? (
             <form
               onSubmit={onChangeEmail}
@@ -232,48 +307,193 @@ export function SettingsView({
               </div>
             </form>
           ) : null}
+
+          <div className="flex flex-col gap-2 pt-0.5">
+            <SocialRow
+              kind="instagram"
+              value={instagram}
+              editing={editingSocial === "instagram"}
+              inputRef={
+                editingSocial === "instagram" ? socialInputRef : undefined
+              }
+              onEdit={() => setEditingSocial("instagram")}
+              onChange={setInstagram}
+              onDone={() => {
+                setInstagram(normalizeInstagramHandle(instagram));
+                setEditingSocial(null);
+              }}
+              icon={<InstagramMark className="size-5 shrink-0" />}
+            />
+            <SocialRow
+              kind="whatsapp"
+              value={whatsapp}
+              editing={editingSocial === "whatsapp"}
+              inputRef={
+                editingSocial === "whatsapp" ? socialInputRef : undefined
+              }
+              onEdit={() => setEditingSocial("whatsapp")}
+              onChange={setWhatsapp}
+              onDone={() => {
+                setWhatsapp(normalizeWhatsappNumber(whatsapp));
+                setEditingSocial(null);
+              }}
+              icon={<WhatsAppMark className="size-5 shrink-0" />}
+            />
+          </div>
         </div>
 
-        <form onSubmit={onSaveBio} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="bio">Bio</Label>
-            <Textarea
-              id="bio"
-              name="bio"
-              rows={5}
-              value={draftBio}
-              onChange={(e) => setDraftBio(e.target.value)}
-              placeholder="Uma linha sobre ti…"
-              maxLength={280}
-              className="min-h-[7.5rem] text-base"
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Máx. 280 caracteres
-            </p>
-          </div>
+        <form onSubmit={onSaveAll}>
           <Button
             type="submit"
-            disabled={pending || !bioDirty}
-            className="w-full sm:w-auto"
+            disabled={pending || !dirty}
+            className="h-11 w-full text-base font-semibold sm:w-auto sm:min-w-40"
           >
             {pending ? "A guardar…" : "Guardar"}
           </Button>
         </form>
       </div>
-      </div>
 
-      <div className="shrink-0 border-t border-white/10 pt-6">
+      <div className="shrink-0 border-t border-white/10 pt-3">
         <form action={logout}>
           <Button
             type="submit"
             variant="ghost"
-            size="sm"
-            className="gap-2 text-muted-foreground hover:text-destructive"
+            className="h-11 gap-2.5 px-4 text-base text-muted-foreground hover:text-destructive"
           >
-            <LogOut className="size-4" /> Terminar sessão
+            <LogOut className="size-5" /> Terminar sessão
           </Button>
         </form>
       </div>
     </div>
+  );
+}
+
+function SocialRow({
+  kind,
+  value,
+  editing,
+  inputRef,
+  onEdit,
+  onChange,
+  onDone,
+  icon,
+}: {
+  kind: "instagram" | "whatsapp";
+  value: string;
+  editing: boolean;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
+  onEdit: () => void;
+  onChange: (value: string) => void;
+  onDone: () => void;
+  icon: React.ReactNode;
+}) {
+  const isIg = kind === "instagram";
+  const href = isIg ? instagramProfileUrl(value) : whatsappChatUrl(value);
+  const placeholder = isIg ? "isaque.portilho" : "351912345678";
+  const emptyLabel = isIg ? "Instagram" : "WhatsApp";
+  const display = value
+    ? isIg
+      ? `@${value}`
+      : value
+    : emptyLabel;
+
+  const shellClass = cn(
+    "inline-flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-xl px-3.5",
+    "border border-white/10 bg-white/[0.04] text-sm font-medium text-foreground/90",
+    "transition-colors",
+    href && !editing && "hover:bg-white/[0.07]",
+  );
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        aria-label={`Editar ${emptyLabel}`}
+        onClick={onEdit}
+        className={cn(
+          "grid size-12 shrink-0 place-items-center rounded-xl",
+          "border border-white/10 bg-white/[0.04] text-muted-foreground",
+          "transition-colors hover:bg-white/[0.07] hover:text-foreground",
+        )}
+      >
+        <Pencil className="size-4" />
+      </button>
+
+      {editing ? (
+        <div className={shellClass}>
+          {icon}
+          <input
+            ref={inputRef}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onBlur={onDone}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === "Escape") {
+                e.preventDefault();
+                onDone();
+              }
+            }}
+            inputMode={isIg ? "text" : "tel"}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder={placeholder}
+            aria-label={emptyLabel}
+            className="min-w-0 flex-1 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/50"
+          />
+        </div>
+      ) : href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={shellClass}
+          aria-label={`Abrir ${emptyLabel}`}
+        >
+          {icon}
+          <span className="min-w-0 flex-1 truncate text-left">{display}</span>
+        </a>
+      ) : (
+        <button type="button" onClick={onEdit} className={shellClass}>
+          {icon}
+          <span className="min-w-0 flex-1 truncate text-left text-muted-foreground">
+            {display}
+          </span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function InstagramMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <rect
+        x="3"
+        y="3"
+        width="18"
+        height="18"
+        rx="5"
+        stroke="url(#ig-grad)"
+        strokeWidth="1.75"
+      />
+      <circle cx="12" cy="12" r="4" stroke="url(#ig-grad)" strokeWidth="1.75" />
+      <circle cx="17.2" cy="6.8" r="1.1" fill="url(#ig-grad)" />
+      <defs>
+        <linearGradient id="ig-grad" x1="4" y1="20" x2="20" y2="4">
+          <stop stopColor="#f58529" />
+          <stop offset="0.45" stopColor="#dd2a7b" />
+          <stop offset="1" stopColor="#8134af" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
+function WhatsAppMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden fill="#25D366">
+      <path d="M12.04 2C6.58 2 2.15 6.4 2.15 11.82c0 1.96.57 3.8 1.56 5.36L2 22l5.02-1.63a9.9 9.9 0 0 0 5.02 1.35h.01c5.46 0 9.89-4.4 9.89-9.82S17.5 2 12.04 2Zm5.76 13.99c-.24.68-1.4 1.24-1.93 1.32-.5.07-1.13.1-1.82-.11-.42-.13-.95-.31-1.64-.6-2.88-1.24-4.76-4.14-4.9-4.33-.14-.19-1.17-1.55-1.17-2.96 0-1.4.74-2.09 1-2.37.26-.28.57-.35.76-.35h.55c.17 0 .4-.07.63.48.24.57.81 1.98.88 2.12.07.14.12.31.02.5-.1.19-.14.31-.28.48-.14.17-.3.37-.42.5-.14.14-.28.29-.12.56.16.28.71 1.17 1.52 1.9 1.05.93 1.93 1.22 2.21 1.36.28.14.44.12.6-.07.17-.19.7-.81.89-1.09.19-.28.38-.23.63-.14.26.1 1.63.77 1.91.91.28.14.47.21.54.33.07.12.07.68-.17 1.36Z" />
+    </svg>
   );
 }

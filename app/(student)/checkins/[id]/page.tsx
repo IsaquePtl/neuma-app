@@ -58,7 +58,7 @@ export default async function CheckInDetailPage({
       <header className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm text-muted-foreground">Check-in</p>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="text-2xl font-bold tracking-tight">
             {checkInLevelTitle(node?.title, checkIn.level_label)}
           </h1>
           <p className="text-sm text-muted-foreground">

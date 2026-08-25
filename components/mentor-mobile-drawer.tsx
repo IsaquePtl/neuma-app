@@ -140,7 +140,9 @@ export function MentorMobileDrawer({
       <aside
         aria-busy={pending || undefined}
         className={cn(
-          "fixed left-0 top-0 z-50 flex h-dvh w-[min(18rem,88vw)] flex-col p-3 desktop:hidden",
+          "fixed left-0 z-50 flex w-[min(18rem,88vw)] flex-col p-3 desktop:hidden",
+          /* Alinhado ao header (logo / botão menu), não sob o status bar */
+          "top-[calc(env(safe-area-inset-top,0px)+0.5rem)] bottom-3",
           "transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform",
           open ? "translate-x-0" : "-translate-x-[110%]",
         )}
@@ -169,7 +171,7 @@ export function MentorMobileDrawer({
               <X className="size-4" />
             </button>
           </div>
-          <div className="neuma-hairline mx-2 mt-1 rounded-full opacity-70" />
+          <div className="neuma-hairline mx-2 mt-1" />
           <nav className="mt-4 flex-1 space-y-2 overflow-y-auto">
             {mainItems.map((item) => (
               <DrawerLink
@@ -184,7 +186,6 @@ export function MentorMobileDrawer({
           </nav>
           {footerItem ? (
             <div className="mt-2 shrink-0 space-y-2">
-              <div className="neuma-hairline mx-1 rounded-full opacity-70" />
               <DrawerLink
                 item={footerItem}
                 pathname={pathname}
@@ -232,7 +233,7 @@ function DrawerLink({
       className={cn(
         "flex items-center gap-3.5 rounded-2xl px-3.5 py-4 transition-colors",
         active
-          ? "neuma-gradient text-white shadow-md"
+          ? "bg-white/[0.12] text-foreground"
           : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
         pending && !isTarget && "pointer-events-none opacity-45",
       )}
@@ -276,7 +277,7 @@ function DrawerLink({
           <span
             className={cn(
               "block truncate text-sm",
-              active ? "text-white/75" : "text-muted-foreground",
+              active ? "text-foreground/70" : "text-muted-foreground",
             )}
           >
             {item.subtitle}

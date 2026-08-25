@@ -2,11 +2,19 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { cn } from "@/lib/utils";
+
 /**
- * Auth shell: fundo fixo (não sobe com o teclado) + levantamento do card
- * só o necessário para o input focado ficar acima do teclado.
+ * Auth: fundo absoluto (parede) + lift só do card quando o teclado tapa o input.
  */
-export function AuthViewport({ children }: { children: ReactNode }) {
+export function AuthViewport({
+  children,
+  scrollable = false,
+}: {
+  children: ReactNode;
+  /** Só para páginas públicas longas (ex. Soundworks). Login mantém overflow hidden. */
+  scrollable?: boolean;
+}) {
   const liftRef = useRef<HTMLDivElement>(null);
   const [liftY, setLiftY] = useState(0);
 
@@ -29,8 +37,6 @@ export function AuthViewport({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Com interactive-widget=overlays-content o layout não encolhe;
-      // vv.height é a área visível acima do teclado.
       const rect = active.getBoundingClientRect();
       const visibleBottom = vv.offsetTop + vv.height;
       const overflow = rect.bottom + GAP - visibleBottom;
@@ -38,7 +44,6 @@ export function AuthViewport({ children }: { children: ReactNode }) {
     };
 
     const onFocusOut = () => {
-      // Deixa o blur aplicar antes de recalcular
       window.setTimeout(update, 40);
     };
 
@@ -56,17 +61,19 @@ export function AuthViewport({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-10 flex h-[100dvh] max-h-[100dvh] w-screen touch-manipulation items-center justify-center overflow-hidden overscroll-none">
-      {/* Fundo próprio do auth — igual ao splash; não se move com o teclado */}
-      <div
-        aria-hidden
-        className="neuma-bg pointer-events-none !absolute !inset-0 !z-0 !h-full !w-full !min-h-full"
-      />
+    <div
+      className={cn(
+        "absolute inset-0 z-10 flex touch-manipulation items-center justify-center overscroll-none desktop:static desktop:z-auto desktop:h-full desktop:w-full",
+        scrollable
+          ? "overflow-x-hidden overflow-y-auto"
+          : "overflow-hidden",
+      )}
+    >
       <div
         ref={liftRef}
-        className="relative z-10 flex w-full max-w-md flex-col items-center px-4 py-6 transition-transform duration-200 ease-out will-change-transform"
+        className="relative z-10 flex w-full max-w-md flex-col items-center px-4 py-6 transition-transform duration-200 ease-out desktop:items-start desktop:px-10 desktop:py-10"
         style={{
-          transform: `translateY(${liftY}px)`,
+          transform: liftY ? `translateY(${liftY}px)` : undefined,
           paddingTop: "max(1.5rem, env(safe-area-inset-top, 0px))",
           paddingBottom: "max(1.5rem, env(safe-area-inset-bottom, 0px))",
         }}

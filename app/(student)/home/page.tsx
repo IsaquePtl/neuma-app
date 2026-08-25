@@ -66,7 +66,7 @@ function todoTagLabel(key: string) {
  * Desktop: fluxo normal no topo.
  */
 const HOME_VIEWPORT =
-  "neuma-mobile-viewport flex flex-col justify-center gap-5 overflow-hidden pb-5 " +
+  "neuma-mobile-viewport flex flex-col justify-center gap-5 overflow-hidden overscroll-none pb-5 " +
   "desktop:h-auto desktop:min-h-0 desktop:justify-start desktop:gap-3 desktop:overflow-visible desktop:pb-4";
 
 export default async function StudentHomePage() {
@@ -161,11 +161,9 @@ export default async function StudentHomePage() {
     return (
       <div className={HOME_VIEWPORT}>
         <div className="shrink-0 space-y-1">
-          <p className="text-[0.8125rem] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-            Geral
-          </p>
-          <h1 className="text-[1.75rem] font-semibold leading-tight tracking-tight sm:text-3xl">
-            Bem vindo, {studentName}
+          <h1 className="font-heading text-[1.75rem] leading-tight tracking-tight sm:text-3xl">
+            <span className="font-normal">Bem vindo, </span>
+            <span className="font-bold">{studentName}</span>
           </h1>
         </div>
 
@@ -253,11 +251,9 @@ export default async function StudentHomePage() {
   return (
     <div className={HOME_VIEWPORT}>
       <div className="shrink-0 space-y-1">
-        <p className="text-[0.8125rem] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-          Geral
-        </p>
-        <h1 className="text-[1.75rem] font-semibold leading-tight tracking-tight sm:text-3xl">
-          Bem vindo, {studentName}
+        <h1 className="font-heading text-[1.75rem] leading-tight tracking-tight sm:text-3xl">
+          <span className="font-normal">Bem vindo, </span>
+          <span className="font-bold">{studentName}</span>
         </h1>
       </div>
 
@@ -266,7 +262,7 @@ export default async function StudentHomePage() {
       <Link
         href={activeNode ? `/path/${activeNode.id}` : "/path"}
         prefetch
-        className="block min-w-0 shrink-0 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
+        className="relative z-[1] block min-w-0 shrink-0 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
       >
         <div className="student-path-step student-path-step--active !p-4 sm:!p-5">
           <div className="flex items-start justify-between gap-3">
@@ -285,7 +281,7 @@ export default async function StudentHomePage() {
                 </span>
               </div>
 
-              <p className="truncate text-lg font-semibold tracking-tight sm:text-xl">
+              <p className="font-heading truncate text-lg font-bold tracking-tight sm:text-xl">
                 {activeNode?.title ?? path.title}
               </p>
 

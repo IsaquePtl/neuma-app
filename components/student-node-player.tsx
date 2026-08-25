@@ -3,7 +3,7 @@ import {
   Video,
   MessageSquare,
   ExternalLink,
-  Paperclip,
+  FileText,
 } from "lucide-react";
 
 import type {
@@ -16,6 +16,7 @@ import { CheckpointQuiz } from "@/components/checkpoint-quiz";
 import { SessionBookingSection } from "@/components/session-booking-section";
 import { SupportMediaToggle } from "@/components/support-media-toggle";
 import { formatDate, nodeKindLabel } from "@/lib/labels";
+import { cn } from "@/lib/utils";
 
 /** Anexo de apoio (link externo) — usado quando não é vídeo. */
 function SupportAttachmentButton({
@@ -34,7 +35,7 @@ function SupportAttachmentButton({
     >
       <span className="inline-flex min-w-0 items-center gap-2.5">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30">
-          <Paperclip className="size-3.5 text-[var(--neuma-coral)]" />
+          <FileText className="size-3.5 text-[var(--neuma-coral)]" />
         </span>
         <span className="truncate font-medium">{label}</span>
       </span>
@@ -43,21 +44,44 @@ function SupportAttachmentButton({
   );
 }
 
-function NodeMeta({ node }: { node: StudentNode }) {
+function NodeLevelHeader({
+  node,
+  levelNumber,
+}: {
+  node: StudentNode;
+  levelNumber: number;
+}) {
   return (
-    <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-      <span>{nodeKindLabel[node.kind]}</span>
-      {node.due_date ? (
-        <>
-          <span aria-hidden className="text-white/25">
-            ·
-          </span>
-          <span className="normal-case tracking-normal text-muted-foreground/90">
-            Até {formatDate(node.due_date)}
-          </span>
-        </>
-      ) : null}
-    </p>
+    <header className="shrink-0">
+      <div className="flex items-center gap-3.5">
+        <span
+          className={cn(
+            "student-path-marker relative grid size-14 shrink-0 place-items-center rounded-full",
+            "neuma-gradient text-base font-semibold tabular-nums text-white",
+            "shadow-[0_0_28px_-4px_color-mix(in_oklch,var(--neuma-coral)_55%,transparent)]",
+          )}
+          aria-hidden
+        >
+          {levelNumber}
+        </span>
+        <div className="min-w-0 space-y-0.5">
+          <p className="text-xs font-medium uppercase leading-none tracking-[0.2em] text-muted-foreground">
+            {nodeKindLabel[node.kind]}
+            {node.due_date ? (
+              <>
+                <span aria-hidden className="mx-2 text-white/25">
+                  ·
+                </span>
+                Até {formatDate(node.due_date)}
+              </>
+            ) : null}
+          </p>
+          <h1 className="font-heading text-2xl font-bold leading-tight tracking-tight sm:text-3xl">
+            {node.title}
+          </h1>
+        </div>
+      </div>
+    </header>
   );
 }
 
@@ -95,28 +119,20 @@ function CheckInActions({
 
 function SessionLayout({
   node,
+  levelNumber,
   mentorName,
   calUser,
   upcomingBooking,
 }: {
   node: StudentNode;
+  levelNumber: number;
   mentorName?: string | null;
   calUser: string;
   upcomingBooking: StudentUpcomingBooking | null;
 }) {
   return (
-    <div className="space-y-6">
-      <NodeMeta node={node} />
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          {node.title}
-        </h1>
-        {node.description ? (
-          <p className="mt-3 whitespace-pre-wrap text-muted-foreground">
-            {node.description}
-          </p>
-        ) : null}
-      </div>
+    <div className="space-y-5">
+      <NodeLevelHeader node={node} levelNumber={levelNumber} />
 
       {node.content_body ? (
         <div className="whitespace-pre-wrap text-sm text-muted-foreground">
@@ -141,13 +157,16 @@ function SessionLayout({
   );
 }
 
-function RecordingLayout({ node }: { node: StudentNode }) {
+function RecordingLayout({
+  node,
+  levelNumber,
+}: {
+  node: StudentNode;
+  levelNumber: number;
+}) {
   return (
     <div className="space-y-6">
-      <NodeMeta node={node} />
-      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-        {node.title}
-      </h1>
+      <NodeLevelHeader node={node} levelNumber={levelNumber} />
 
       {node.resource_url ? (
         <VideoEmbed
@@ -162,12 +181,6 @@ function RecordingLayout({ node }: { node: StudentNode }) {
         </p>
       )}
 
-      {node.description ? (
-        <p className="whitespace-pre-wrap text-muted-foreground">
-          {node.description}
-        </p>
-      ) : null}
-
       {node.content_body ? (
         <div className="whitespace-pre-wrap rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
           {node.content_body}
@@ -179,22 +192,18 @@ function RecordingLayout({ node }: { node: StudentNode }) {
   );
 }
 
-function PracticeLayout({ node }: { node: StudentNode }) {
+function PracticeLayout({
+  node,
+  levelNumber,
+}: {
+  node: StudentNode;
+  levelNumber: number;
+}) {
   const hasVideo = Boolean(node.resource_url && toEmbedUrl(node.resource_url));
 
   return (
     <div className="space-y-6">
-      <NodeMeta node={node} />
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          {node.title}
-        </h1>
-        {node.description ? (
-          <p className="mt-3 whitespace-pre-wrap text-muted-foreground">
-            {node.description}
-          </p>
-        ) : null}
-      </div>
+      <NodeLevelHeader node={node} levelNumber={levelNumber} />
 
       {node.content_body ? (
         <div className="whitespace-pre-wrap rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
@@ -222,20 +231,16 @@ function PracticeLayout({ node }: { node: StudentNode }) {
   );
 }
 
-function CheckpointLayout({ node }: { node: StudentNode }) {
+function CheckpointLayout({
+  node,
+  levelNumber,
+}: {
+  node: StudentNode;
+  levelNumber: number;
+}) {
   return (
     <div className="space-y-6">
-      <NodeMeta node={node} />
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          {node.title}
-        </h1>
-        {node.description ? (
-          <p className="mt-3 whitespace-pre-wrap text-muted-foreground">
-            {node.description}
-          </p>
-        ) : null}
-      </div>
+      <NodeLevelHeader node={node} levelNumber={levelNumber} />
 
       {node.content_body ? (
         <div className="whitespace-pre-wrap rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
@@ -279,11 +284,13 @@ function CheckpointLayout({ node }: { node: StudentNode }) {
 
 export function StudentNodePlayer({
   node,
+  levelNumber,
   mentorName,
   calUsername,
   upcomingBooking = null,
 }: {
   node: StudentNode;
+  levelNumber: number;
   mentorName?: string | null;
   calUsername?: string | null;
   upcomingBooking?: StudentUpcomingBooking | null;
@@ -297,6 +304,7 @@ export function StudentNodePlayer({
     return (
       <SessionLayout
         node={node}
+        levelNumber={levelNumber}
         mentorName={mentorName}
         calUser={calUser}
         upcomingBooking={upcomingBooking}
@@ -305,12 +313,18 @@ export function StudentNodePlayer({
   }
 
   if (node.kind === "lesson" || node.kind === "resource") {
-    return <RecordingLayout node={node} />;
+    return (
+      <RecordingLayout node={node} levelNumber={levelNumber} />
+    );
   }
 
   if (node.kind === "milestone") {
-    return <CheckpointLayout node={node} />;
+    return (
+      <CheckpointLayout node={node} levelNumber={levelNumber} />
+    );
   }
 
-  return <PracticeLayout node={node} />;
+  return (
+    <PracticeLayout node={node} levelNumber={levelNumber} />
+  );
 }

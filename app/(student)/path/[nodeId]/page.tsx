@@ -45,13 +45,14 @@ export default async function StudentNodePage({
   return (
     <div
       className={
-        "neuma-mobile-viewport flex flex-col overflow-y-auto overscroll-contain pb-5 " +
-        "desktop:h-auto desktop:min-h-0 desktop:overflow-visible desktop:pb-4"
+        "neuma-mobile-viewport flex flex-col justify-center overflow-y-auto overscroll-contain pb-5 " +
+        "desktop:h-auto desktop:min-h-0 desktop:justify-start desktop:overflow-visible desktop:pb-4"
       }
     >
-      <div className="my-auto w-full space-y-6 py-2 desktop:my-0 desktop:py-0">
+      <div className="w-full space-y-5 py-2 desktop:space-y-6 desktop:py-0">
         <StudentNodePlayer
           node={node}
+          levelNumber={nodeIndex + 1}
           mentorName={mentor?.full_name}
           calUsername={mentor?.cal_username}
           upcomingBooking={node.kind === "call" ? upcomingBooking : null}

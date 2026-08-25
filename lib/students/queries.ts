@@ -261,6 +261,7 @@ export async function loadMentorCalUsername() {
 
 export type StudentUpcomingBooking = {
   id: string;
+  cal_booking_uid: string;
   start_time: string;
   end_time: string;
   title: string | null;
@@ -276,7 +277,7 @@ export async function loadMyUpcomingBooking(
   const nowIso = new Date().toISOString();
   const { data } = await supabase
     .from("cal_bookings")
-    .select("id, start_time, end_time, title, meet_url, status")
+    .select("id, cal_booking_uid, start_time, end_time, title, meet_url, status")
     .eq("student_id", studentId)
     .in("status", ["accepted", "pending", "rescheduled"])
     .gte("start_time", nowIso)
@@ -304,7 +305,7 @@ export async function loadMyUpcomingBooking(
 
   const { data: byEmail } = await supabase
     .from("cal_bookings")
-    .select("id, start_time, end_time, title, meet_url, status")
+    .select("id, cal_booking_uid, start_time, end_time, title, meet_url, status")
     // Usa % para tolerar variações de casing e possíveis espaços.
     .ilike("attendee_email", `%${email.trim()}%`)
     .in("status", ["accepted", "pending", "rescheduled"])

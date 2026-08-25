@@ -155,7 +155,7 @@ export function HarmonicField() {
             </span>
             <span
               className={cn(
-                "font-heading text-base font-semibold sm:text-lg",
+                "text-base font-semibold sm:text-lg",
                 degree.number === 1 && "text-[var(--neuma-coral)]",
               )}
             >

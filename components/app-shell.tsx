@@ -179,7 +179,16 @@ function shellBackHref(
   return "/studio";
 }
 
+function getAppScrollEl(): HTMLElement | null {
+  return document.querySelector("[data-neuma-ui]");
+}
+
 function scrollToTop() {
+  const shell = getAppScrollEl();
+  if (shell) {
+    shell.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    return;
+  }
   window.scrollTo({ top: 0, left: 0, behavior: "auto" });
 }
 
@@ -322,10 +331,11 @@ export function AppShell({
   }, [navPending]);
 
   useEffect(() => {
-    let lastY = window.scrollY;
+    const shell = getAppScrollEl();
+    let lastY = shell?.scrollTop ?? 0;
 
     const onScroll = () => {
-      const y = Math.max(0, window.scrollY);
+      const y = Math.max(0, shell?.scrollTop ?? window.scrollY);
       const delta = y - lastY;
 
       // Só compacta a menubar; o logo no topo fica estável para evitar overlap.
@@ -339,8 +349,9 @@ export function AppShell({
       lastY = y;
     };
 
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    const target: HTMLElement | Window = shell ?? window;
+    target.addEventListener("scroll", onScroll, { passive: true });
+    return () => target.removeEventListener("scroll", onScroll);
   }, []);
 
   function onNavClick(href?: string) {
@@ -369,7 +380,7 @@ export function AppShell({
           >
             <NeumaLogo withWordmark={false} />
           </Link>
-          <div className="neuma-hairline mx-2 mt-1 rounded-full opacity-70" />
+          <div className="neuma-hairline mx-2 mt-1" />
 
           <nav className="mt-4 flex-1 space-y-1">
             {nav.map((item) => {
@@ -392,7 +403,7 @@ export function AppShell({
                   className={cn(
                     "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
                     active
-                      ? "neuma-gradient text-white shadow-md"
+                      ? "bg-white/[0.12] text-foreground"
                       : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
                   )}
                 >
@@ -427,7 +438,7 @@ export function AppShell({
             className={cn(
               "mt-2 flex items-center gap-3 rounded-2xl p-2 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
               settingsActive
-                ? "neuma-gradient text-white shadow-md"
+                ? "bg-white/[0.12] text-foreground"
                 : "hover:bg-white/5",
             )}
           >
@@ -436,7 +447,7 @@ export function AppShell({
               email={email}
               avatarUrl={avatarUrl}
               size="md"
-              className={cn(settingsActive && "ring-2 ring-white/30")}
+              className={cn(settingsActive && "ring-2 ring-white/25")}
             />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{name ?? email}</p>
@@ -444,7 +455,7 @@ export function AppShell({
                 className={cn(
                   "truncate text-xs",
                   settingsActive
-                    ? "text-white/75"
+                    ? "text-foreground/70"
                     : "text-muted-foreground",
                 )}
               >
@@ -454,7 +465,7 @@ export function AppShell({
             <Settings
               className={cn(
                 "size-4",
-                settingsActive ? "text-white/80" : "text-muted-foreground",
+                settingsActive ? "text-foreground/70" : "text-muted-foreground",
               )}
             />
           </Link>
@@ -524,7 +535,7 @@ export function AppShell({
 
         <main
           className={cn(
-            "mx-auto flex w-full flex-1 flex-col px-4 pt-4 pb-[calc(5.75rem+8px)] desktop:px-10 desktop:pb-14 desktop:pt-10",
+            "mx-auto flex w-full flex-1 flex-col px-4 pt-4 pb-[calc(6.5rem+8px)] desktop:px-10 desktop:pb-14 desktop:pt-10",
             role === "mentor" ? "max-w-7xl" : "max-w-5xl",
           )}
         >

@@ -3,20 +3,28 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 
+import { NeumaBackgroundWall } from "@/components/neuma-background-wall";
+
 const HOLD_MS = 3000;
 const FADE_OUT_MS = 1200;
+const DESKTOP_MQ = "(min-width: 850px)";
 
 export function SplashScreen() {
   const [show, setShow] = useState(true);
   const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
-    const t1 = setTimeout(() => setLeaving(true), HOLD_MS);
-    const t2 = setTimeout(() => setShow(false), HOLD_MS + FADE_OUT_MS);
+    if (window.matchMedia(DESKTOP_MQ).matches) {
+      setShow(false);
+      return;
+    }
+
+    const t1 = window.setTimeout(() => setLeaving(true), HOLD_MS);
+    const t2 = window.setTimeout(() => setShow(false), HOLD_MS + FADE_OUT_MS);
 
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
     };
   }, []);
 
@@ -24,16 +32,13 @@ export function SplashScreen() {
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex h-[100dvh] w-screen max-h-[100dvh] touch-manipulation items-center justify-center overflow-hidden overscroll-none bg-background transition-opacity duration-[1200ms] ${
+      className={`splash-screen fixed inset-0 z-[100] flex h-[100dvh] w-screen max-h-[100dvh] touch-manipulation items-center justify-center overflow-hidden overscroll-none transition-opacity duration-[1200ms] desktop:hidden ${
         leaving ? "pointer-events-none opacity-0" : "opacity-100"
       }`}
     >
       {/* Mesmo fundo da app — edge-to-edge sob notch / home indicator */}
-      <div
-        aria-hidden
-        className="neuma-bg pointer-events-none !absolute !inset-0 !z-0 !h-full !w-full !min-h-full"
-      />
-      <div className="relative z-10 flex flex-col items-center gap-6">
+      <NeumaBackgroundWall className="pointer-events-none !absolute !inset-0 !z-0 !h-full !w-full !min-h-full" />
+      <div className="relative z-10 flex flex-col items-center gap-4">
         <Image
           src="/brand/wordmark-white.png"
           alt="Neuma"
@@ -41,10 +46,8 @@ export function SplashScreen() {
           height={103}
           priority
           className="h-auto w-[220px] animate-fade-up"
+          style={{ animationDelay: "180ms", opacity: 0 }}
         />
-        <span className="animate-fade-up delay-2 text-xs uppercase tracking-[0.3em] text-muted-foreground">
-          1:1 premium
-        </span>
       </div>
     </div>
   );

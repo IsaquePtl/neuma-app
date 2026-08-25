@@ -84,7 +84,7 @@ export default async function CheckinDetail({
               studentName
             )}
           </p>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="text-2xl font-bold tracking-tight">
             {node?.title ?? "Bloco"}
           </h1>
           <p className="text-sm text-muted-foreground">

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { loadMyPathWithNodes } from "@/lib/students/queries";
 import { StudentPathMap } from "@/components/student-path-map";
 import { Button } from "@/components/ui/button";
+import { CategoryThemeIcon } from "@/components/category-theme-icon";
 
 /**
  * Mobile/tablet: mais perto do centro (como Geral). Desktop: fluxo no topo.
@@ -31,7 +32,7 @@ export default async function StudentPathPage() {
           <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
             Percurso
           </p>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
             Ainda sem percurso
           </h1>
           <p className="max-w-md text-sm text-muted-foreground">
@@ -55,9 +56,10 @@ export default async function StudentPathPage() {
       {/* Cabeçalho leve — o foco é o mapa de níveis */}
       <div className="shrink-0 space-y-3">
         <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+          <CategoryThemeIcon theme={null} name={path.title} size={18} />
           <Route className="size-3.5" /> Percurso
         </p>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
           {path.title}
         </h1>
         {path.goal ? (

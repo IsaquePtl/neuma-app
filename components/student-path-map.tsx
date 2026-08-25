@@ -92,7 +92,7 @@ export function StudentPathMap({ nodes }: { nodes: StudentNode[] }) {
                     className={cn(
                       "inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em]",
                       isActive
-                        ? "text-[var(--neuma-coral)]"
+                        ? "text-[#ffffe9]"
                         : "text-muted-foreground",
                     )}
                   >
@@ -105,8 +105,8 @@ export function StudentPathMap({ nodes }: { nodes: StudentNode[] }) {
                   className={cn(
                     "leading-snug",
                     isActive
-                      ? "text-lg font-semibold tracking-tight sm:text-xl"
-                      : "font-medium",
+                      ? "font-heading text-lg font-bold tracking-tight sm:text-xl"
+                      : "font-heading font-medium",
                     isFuture && "text-muted-foreground",
                   )}
                 >
@@ -132,7 +132,7 @@ export function StudentPathMap({ nodes }: { nodes: StudentNode[] }) {
               ) : null}
             </div>
             {isActive ? (
-              <p className="mt-3 text-xs font-medium tracking-wide text-[var(--neuma-coral)]">
+              <p className="mt-3 text-xs font-medium tracking-wide text-[#ffffe9]/80">
                 Nível actual — toca para abrir
               </p>
             ) : null}

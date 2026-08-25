@@ -124,6 +124,12 @@ export async function createLibraryCategory(formData: FormData) {
   const name = (formData.get("name") as string)?.trim();
   if (!name) throw new Error("Nome obrigatório");
 
+  const themeRaw = ((formData.get("theme") as string) || "").trim();
+  const theme =
+    themeRaw === "acoustic" || themeRaw === "electric" || themeRaw === "piano"
+      ? themeRaw
+      : null;
+
   const { data: last } = await supabase
     .from("library_categories")
     .select("sort_index")
@@ -135,6 +141,7 @@ export async function createLibraryCategory(formData: FormData) {
     name,
     slug: slugify(name),
     sort_index: (last?.sort_index ?? -1) + 1,
+    theme,
   });
   if (error) throw new Error(error.message);
   revalidateLibrary();
@@ -145,10 +152,15 @@ export async function renameLibraryCategory(formData: FormData) {
   const id = formData.get("id") as string;
   const name = (formData.get("name") as string)?.trim();
   if (!id || !name) throw new Error("Nome obrigatório");
+  const themeRaw = ((formData.get("theme") as string) || "").trim();
+  const theme =
+    themeRaw === "acoustic" || themeRaw === "electric" || themeRaw === "piano"
+      ? themeRaw
+      : null;
 
   const { error } = await supabase
     .from("library_categories")
-    .update({ name, slug: slugify(name) })
+    .update({ name, slug: slugify(name), theme })
     .eq("id", id);
   if (error) throw new Error(error.message);
   revalidateLibrary();

@@ -15,19 +15,19 @@ export default async function ForgotPasswordPage({
   const { error, ok } = await searchParams;
 
   return (
-    <div className="flex w-full flex-col items-center">
+    <div className="flex w-full flex-col items-center desktop:items-stretch">
       <Image
         src="/brand/mark-white.png"
         alt="Neuma"
         width={96}
         height={96}
         priority
-        className="mb-8 h-24 w-24"
+        className="auth-mobile-mark mb-8 h-24 w-24 desktop:hidden"
       />
-      <Card className="w-full p-7 sm:p-8">
+      <Card className="auth-enter-form w-full p-7 sm:p-8">
         <form action={requestPasswordReset} className="space-y-5">
           <div className="space-y-1">
-            <h1 className="text-xl font-semibold">Recuperar password</h1>
+            <h1 className="text-xl font-bold">Recuperar password</h1>
             <p className="text-base text-muted-foreground">
               Enviamos um link para o teu email.
             </p>

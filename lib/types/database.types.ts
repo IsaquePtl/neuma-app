@@ -55,6 +55,8 @@ export interface Database {
           email: string | null;
           avatar_url: string | null;
           bio: string | null;
+          instagram: string | null;
+          whatsapp: string | null;
           onboarding_completed: boolean;
           cal_username: string | null;
           mentor_style_notes: string | null;
@@ -68,6 +70,8 @@ export interface Database {
           email?: string | null;
           avatar_url?: string | null;
           bio?: string | null;
+          instagram?: string | null;
+          whatsapp?: string | null;
           onboarding_completed?: boolean;
           cal_username?: string | null;
           mentor_style_notes?: string | null;
@@ -81,6 +85,8 @@ export interface Database {
           email?: string | null;
           avatar_url?: string | null;
           bio?: string | null;
+          instagram?: string | null;
+          whatsapp?: string | null;
           onboarding_completed?: boolean;
           cal_username?: string | null;
           mentor_style_notes?: string | null;
@@ -827,6 +833,7 @@ export interface Database {
           name: string;
           slug: string;
           sort_index: number;
+          theme: "acoustic" | "electric" | "piano" | null;
           created_at: string;
         };
         Insert: {
@@ -834,6 +841,7 @@ export interface Database {
           name: string;
           slug: string;
           sort_index?: number;
+          theme?: "acoustic" | "electric" | "piano" | null;
           created_at?: string;
         };
         Update: {
@@ -841,6 +849,7 @@ export interface Database {
           name?: string;
           slug?: string;
           sort_index?: number;
+          theme?: "acoustic" | "electric" | "piano" | null;
           created_at?: string;
         };
         Relationships: [];

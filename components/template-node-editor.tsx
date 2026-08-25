@@ -120,7 +120,7 @@ export function TemplateNodeEditor({
         {node ? <input type="hidden" name="id" value={node.id} /> : null}
 
         <div>
-          <p className="text-lg font-semibold tracking-tight">{levelLabel}</p>
+          <p className="text-lg font-bold tracking-tight">{levelLabel}</p>
           <p className="text-sm text-muted-foreground">
             Define o conteúdo e a duração deste nível.
           </p>

@@ -278,7 +278,7 @@ export function Metronome() {
                   e.currentTarget.blur();
                 }
               }}
-              className="font-heading min-w-[3.2ch] max-w-[4.5ch] bg-transparent text-center text-6xl font-semibold tabular-nums outline-none selection:bg-white/20"
+              className="min-w-[3.2ch] max-w-[4.5ch] bg-transparent text-center text-6xl font-semibold tabular-nums outline-none selection:bg-white/20"
             />
             <span className="text-xs uppercase tracking-widest text-muted-foreground">
               BPM

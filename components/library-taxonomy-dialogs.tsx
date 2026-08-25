@@ -29,6 +29,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  CategoryThemePicker,
+} from "@/components/category-theme-icon";
+import type { CategoryTheme } from "@/lib/brand-themes";
 
 export function LibraryCategoryDialog() {
   const [open, setOpen] = useState(false);
@@ -65,6 +69,7 @@ export function LibraryCategoryDialog() {
             <Label htmlFor="cat-name">Nome</Label>
             <Input id="cat-name" name="name" required autoFocus />
           </div>
+          <CategoryThemePicker />
           <DialogFooter>
             <Button type="submit" disabled={pending}>
               {pending ? "A criar..." : "Criar"}
@@ -79,7 +84,12 @@ export function LibraryCategoryDialog() {
 export function LibraryCategoryActions({
   category,
 }: {
-  category: { id: string; name: string };
+  category: {
+    id: string;
+    name: string;
+    slug?: string | null;
+    theme?: CategoryTheme | null;
+  };
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -161,7 +171,7 @@ export function LibraryCategoryActions({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Editar categoria</DialogTitle>
-            <DialogDescription>Altera só o nome da categoria.</DialogDescription>
+            <DialogDescription>Altera o nome e o tema visual.</DialogDescription>
           </DialogHeader>
           <form onSubmit={onRename} className="space-y-4">
             <div className="space-y-2">
@@ -174,6 +184,7 @@ export function LibraryCategoryActions({
                 defaultValue={category.name}
               />
             </div>
+            <CategoryThemePicker value={category.theme ?? null} />
             <DialogFooter>
               <Button type="submit" disabled={pending}>
                 {pending ? "A guardar…" : "Guardar"}

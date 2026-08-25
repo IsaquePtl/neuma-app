@@ -22,12 +22,12 @@ const WHATSAPP_URL =
  * como em Geral. Desktop: fluxo no topo.
  */
 const SESSION_VIEWPORT =
-  "neuma-mobile-viewport mx-auto flex w-full max-w-2xl flex-col justify-center gap-4 overflow-y-auto pb-5 " +
+  "neuma-mobile-viewport mx-auto flex w-full max-w-2xl flex-col justify-center gap-3 overflow-hidden overscroll-none pb-2 " +
   "desktop:h-auto desktop:min-h-0 desktop:justify-start desktop:gap-6 desktop:overflow-visible desktop:pb-4";
 
 /** Gradient discreto no botão de feedback (activo e vazio). */
 const FEEDBACK_BTN =
-  "h-14 w-full gap-2 border border-white/12 bg-gradient-to-br from-[var(--neuma-coral)]/22 via-[var(--neuma-lavender)]/12 to-[var(--neuma-blue)]/25 text-base font-semibold text-foreground shadow-none hover:from-[var(--neuma-coral)]/32 hover:via-[var(--neuma-lavender)]/16 hover:to-[var(--neuma-blue)]/35 hover:text-foreground disabled:pointer-events-none disabled:opacity-55 disabled:saturate-75";
+  "h-[3.75rem] w-full gap-2 border border-white/12 bg-gradient-to-br from-[var(--neuma-coral)]/22 via-[var(--neuma-lavender)]/12 to-[var(--neuma-blue)]/25 text-base font-semibold text-foreground shadow-none hover:from-[var(--neuma-coral)]/32 hover:via-[var(--neuma-lavender)]/16 hover:to-[var(--neuma-blue)]/35 hover:text-foreground disabled:pointer-events-none disabled:opacity-55 disabled:saturate-75";
 
 export default async function StudentSessionPage({
   searchParams,
@@ -119,21 +119,21 @@ export default async function StudentSessionPage({
           size="lg"
         />
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
             Mentor
           </p>
-          <h1 className="truncate text-lg font-semibold tracking-tight">
+          <h1 className="truncate text-[1.2rem] font-bold tracking-tight leading-snug">
             {mentor?.full_name ?? "O teu mentor"}
           </h1>
           {activeNode ? (
-            <p className="truncate text-xs text-muted-foreground">
+            <p className="truncate text-[0.8125rem] text-muted-foreground">
               Nível actual: {activeNode.title}
               {activeNode.due_date
                 ? ` · até ${formatDate(activeNode.due_date)}`
                 : ""}
             </p>
           ) : activePath ? (
-            <p className="truncate text-xs text-muted-foreground">
+            <p className="truncate text-[0.8125rem] text-muted-foreground">
               {activePath.title}
             </p>
           ) : null}
@@ -146,12 +146,12 @@ export default async function StudentSessionPage({
         </p>
       ) : null}
 
-      <section className="grid shrink-0 gap-3">
+      <section className="grid shrink-0 gap-2.5">
         <Button
           render={<Link href={checkInHref} />}
           nativeButton={false}
           size="lg"
-          className="h-14 w-full gap-2 text-base font-semibold"
+          className="h-[3.5rem] w-full gap-2 text-base font-semibold"
         >
           <Video className="size-5" /> Fazer check-in
         </Button>
@@ -167,7 +167,7 @@ export default async function StudentSessionPage({
             nativeButton={false}
             size="lg"
             variant="ghost"
-            className={FEEDBACK_BTN}
+            className={cn(FEEDBACK_BTN, "h-[3.5rem]")}
           >
             <MessageSquareText className="size-5" /> Ver feedback
           </Button>
@@ -176,7 +176,7 @@ export default async function StudentSessionPage({
             size="lg"
             variant="ghost"
             disabled
-            className={FEEDBACK_BTN}
+            className={cn(FEEDBACK_BTN, "h-[3.5rem]")}
           >
             <MessageSquareText className="size-5" /> Sem feedbacks de momento
           </Button>
@@ -189,6 +189,7 @@ export default async function StudentSessionPage({
           label="Agendar sessão de dúvidas"
           showExternalLink={false}
           size="lg"
+          className="[&_button]:h-[3.5rem]"
         />
 
         <Button
@@ -196,7 +197,9 @@ export default async function StudentSessionPage({
           nativeButton={false}
           size="lg"
           variant="secondary"
-          className={cn("relative h-14 w-full gap-2 text-base font-semibold")}
+          className={cn(
+            "relative h-[3.5rem] w-full gap-2 text-base font-semibold",
+          )}
         >
           <History className="size-5" /> Ver histórico
           {revisionCount > 0 ? (
@@ -213,7 +216,7 @@ export default async function StudentSessionPage({
           nativeButton={false}
           size="lg"
           variant="secondary"
-          className="h-14 w-full gap-2 text-base font-semibold"
+          className="h-[3.5rem] w-full gap-2 text-base font-semibold"
         >
           <MessageCircle className="size-5" /> WhatsApp
         </Button>
@@ -223,7 +226,7 @@ export default async function StudentSessionPage({
           nativeButton={false}
           size="lg"
           variant="secondary"
-          className="h-14 w-full gap-2 text-base font-semibold"
+          className="h-[3.5rem] w-full gap-2 text-base font-semibold"
         >
           <Star className="size-5" /> Deixar um feedback
         </Button>

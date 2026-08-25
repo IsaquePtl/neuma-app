@@ -8,6 +8,7 @@ const PUBLIC_PATHS = [
   "/login",
   "/login/forgot",
   "/login/update-password",
+  "/soundworks",
   "/api/tally/webhook",
   "/api/cal/webhook",
 ];

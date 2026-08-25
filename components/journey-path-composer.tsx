@@ -185,7 +185,7 @@ export function JourneyPathComposer({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-2xl font-semibold tracking-tight">
+              <h2 className="text-2xl font-bold tracking-tight">
                 {path.title}
               </h2>
               <PathStatusBadge status={path.status} />
@@ -328,7 +328,7 @@ export function JourneyPathComposer({
                           ? ` · ${pendingCount} check-in`
                           : null}
                       </p>
-                      <p className="text-lg font-semibold tracking-tight">
+                      <p className="text-lg font-bold tracking-tight">
                         {node.title}
                       </p>
                       {node.description ? (

@@ -15,12 +15,14 @@ export type ParsedCalWebhook = {
   triggerEvent: string;
   createdAt: string | null;
   uid: string;
+  /** UID do agendamento anterior (só em BOOKING_RESCHEDULED). */
+  rescheduleUid: string | null;
   bookingId: number | null;
   status: CalBookingStatus;
   title: string | null;
   eventTypeSlug: string | null;
-  startTime: string;
-  endTime: string;
+  startTime: string | null;
+  endTime: string | null;
   timezone: string | null;
   meetUrl: string | null;
   organizerEmail: string | null;
@@ -144,7 +146,13 @@ export function parseCalWebhook(rawBody: string): ParsedCalWebhook {
 
   const startTime = asString(payload.startTime);
   const endTime = asString(payload.endTime);
-  if (!startTime || !endTime) throw new Error("missing_times");
+  // Cancelamentos por vezes vêm sem times — o route trata isso.
+  if (
+    (!startTime || !endTime) &&
+    triggerEvent !== "BOOKING_CANCELLED"
+  ) {
+    throw new Error("missing_times");
+  }
 
   const organizer = asRecord(payload.organizer);
   const attendees = Array.isArray(payload.attendees)
@@ -169,10 +177,16 @@ export function parseCalWebhook(rawBody: string): ParsedCalWebhook {
     asString(payload.description) ??
     null;
 
+  const rescheduleUid =
+    asString(payload.rescheduleUid) ??
+    asString(payload.fromReschedule) ??
+    null;
+
   return {
     triggerEvent,
     createdAt,
     uid,
+    rescheduleUid,
     bookingId: asNumber(payload.bookingId) ?? asNumber(payload.id),
     status: statusFromTrigger(triggerEvent, asString(payload.status)),
     title: asString(payload.title) ?? asString(payload.eventTitle),
