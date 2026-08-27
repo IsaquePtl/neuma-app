@@ -22,6 +22,9 @@ const nextConfig: NextConfig = {
     proxyClientMaxBodySize: "12mb",
   },
   images: {
+    // Vercel Services (vercel.json services.web) does not expose /_next/image —
+    // optimizer returns HTML 404 (x-matched-path: /404) while /brand/* static works.
+    unoptimized: true,
     remotePatterns: [
       ...(supabaseHost
         ? [
