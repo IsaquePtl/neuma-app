@@ -15,7 +15,9 @@ async function MentorShell({
   if (!user) redirect("/login");
 
   const profile = await getCurrentProfile();
-  if (profile?.role !== "mentor") redirect("/");
+  if (profile?.role !== "mentor") {
+    redirect("/login?error=perfil-invalido");
+  }
 
   return (
     <AppShell

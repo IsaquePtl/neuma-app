@@ -20,7 +20,9 @@ export default async function StudentLayout({
   ]);
 
   if (profile?.role === "mentor") redirect("/studio");
-  if (profile?.role !== "student") redirect("/");
+  if (profile?.role !== "student") {
+    redirect("/login?error=perfil-invalido");
+  }
 
   return (
     <Suspense fallback={null}>
