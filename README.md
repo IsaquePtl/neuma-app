@@ -1,8 +1,12 @@
 # Neuma monorepo
 
-Aplicação Next.js (`apps/web`) + Agent LangGraph/FastAPI (`apps/agent`).
+Aplicação Next.js (`apps/web`) + Agent LangGraph/FastAPI (`apps/agent`), no **mesmo** projeto Vercel via [Services](https://vercel.com/docs/services).
 
-**Deploy Vercel:** Root Directory do projeto deve ser `apps/web` (ou, em fallback, a pasta `public/` na raiz espelha `apps/web/public` para logos/ícones). O modelo experimental `services` foi desativado temporariamente porque partia assets estáticos e login.
+**Deploy (importante):**
+- Root Directory do projeto = **vazio** / `.` (raiz do repo) — NÃO `apps/web`
+- `vercel.json` define `services.web` → `apps/web` e `services.agent` → `apps/agent`
+- O agent é **privado** (só via binding `AGENT_INTERNAL_URL`); todo o tráfego público vai para `web`
+- Mantém-se um espelho `public/` na raiz como rede de segurança para logos
 
 ## Desenvolvimento
 
