@@ -1,8 +1,14 @@
 # Source branding assets — not needed at runtime (web assets live in /public)
-branding/
-branding/**
+apps/web/branding/
+apps/web/branding/**
 
 # Local build / deps (Vercel builds remotely)
-.next/
-node_modules/
-*.tsbuildinfo
+apps/web/.next/
+apps/web/node_modules/
+apps/web/*.tsbuildinfo
+apps/agent/.venv/
+apps/agent/**/__pycache__/
+apps/agent/.pytest_cache/
+
+# Course reference material (not part of the deploy)
+ai-engineering-references

@@ -1,0 +1,142 @@
+"use client";
+
+import Image from "next/image";
+import { useMemo, useState } from "react";
+
+import { ChordBuilderControls } from "@/components/chord-builder-controls";
+import { brandAssets } from "@/lib/brand";
+import { cn } from "@/lib/utils";
+import {
+  DEFAULT_CHORD_SPEC,
+  PIANO_KEY_COUNT,
+  chordSymbol,
+  isBlackKey,
+  pianoVoicingNotes,
+  type ChordSpec,
+  type ChordToneRole,
+} from "@/lib/music/chords";
+
+/** C3 → C5 (duas oitavas + C final). */
+const START_MIDI = 48;
+
+/** Cores por papel: tríade coral; extensões em azuis distintos (2/9, 4/11, 6/13, 5, 7). */
+const ROLE_COLORS: Record<ChordToneRole, string> = {
+  triad: "var(--neuma-coral)",
+  ext29: "var(--neuma-blue)",
+  ext411: "#5eb0ff",
+  ext613: "#0a5cb8",
+  ext5: "#3d9fd9",
+  ext7: "#3b82f6",
+};
+
+export function PianoChordBuilder() {
+  const [spec, setSpec] = useState<ChordSpec>(DEFAULT_CHORD_SPEC);
+
+  const voicingByMidi = useMemo(() => {
+    const notes = pianoVoicingNotes(spec, START_MIDI, PIANO_KEY_COUNT);
+    return new Map(notes.map((n) => [n.midi, n]));
+  }, [spec]);
+
+  const keys = useMemo(
+    () =>
+      Array.from({ length: PIANO_KEY_COUNT }, (_, i) => {
+        const midi = START_MIDI + i;
+        const tone = voicingByMidi.get(midi);
+        return {
+          midi,
+          black: isBlackKey(midi),
+          active: Boolean(tone),
+          role: tone?.role ?? null,
+          root: tone?.interval === 0,
+        };
+      }),
+    [voicingByMidi],
+  );
+
+  const whites = keys.filter((k) => !k.black);
+  const blacks = keys.filter((k) => k.black);
+
+  /** Posição horizontal das pretas relativa às brancas (índice white). */
+  function blackLeftPercent(midi: number) {
+    const whiteBefore = keys.filter((k) => k.midi < midi && !k.black).length;
+    const width = 100 / whites.length;
+    return whiteBefore * width - width * 0.32;
+  }
+
+  function activeStyle(role: ChordToneRole | null) {
+    if (!role) return undefined;
+    return { backgroundColor: ROLE_COLORS[role] };
+  }
+
+  return (
+    <div className="flex w-full flex-col gap-6 rounded-2xl border bg-card p-6 sm:p-8 min-[1360px]:h-full min-[1360px]:flex-1">
+      <p className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+        <Image
+          src={brandAssets.iconPiano}
+          alt=""
+          width={22}
+          height={22}
+          className="size-8 opacity-80"
+        />
+        Construtor de acordes · Piano
+      </p>
+
+      {/* Always stacked: controls above keyboard (no side-by-side at any breakpoint). */}
+      <ChordBuilderControls
+        value={spec}
+        onChange={setSpec}
+        showSymbol={false}
+      />
+
+      <div className="relative mx-auto flex w-full max-w-2xl min-h-0 flex-col select-none min-[1360px]:flex-1">
+        <div className="mb-3 shrink-0 text-center">
+          <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+            Acorde
+          </p>
+          <p className="mt-1 font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+            {chordSymbol(spec)}
+          </p>
+        </div>
+
+        {/* At ≥1360px center a fixed-height keyboard so equal card height does not stretch keys. */}
+        <div className="min-[1360px]:flex min-[1360px]:flex-1 min-[1360px]:items-center min-[1360px]:justify-center">
+          <div className="relative flex h-36 w-full overflow-hidden rounded-xl border border-white/10 bg-zinc-100 sm:h-44">
+            {whites.map((key) => (
+              <div
+                key={key.midi}
+                style={key.active ? activeStyle(key.role) : undefined}
+                className={cn(
+                  "relative h-full flex-1 border-r border-black/10 last:border-r-0",
+                  !key.active && "bg-zinc-50",
+                )}
+              >
+                {key.active ? (
+                  <span
+                    className={cn(
+                      "absolute bottom-2 left-1/2 size-1.5 -translate-x-1/2 rounded-full sm:size-2",
+                      key.root ? "bg-white" : "bg-white/70",
+                    )}
+                  />
+                ) : null}
+              </div>
+            ))}
+
+            {blacks.map((key) => (
+              <div
+                key={key.midi}
+                style={{
+                  left: `${blackLeftPercent(key.midi)}%`,
+                  ...(key.active ? activeStyle(key.role) : undefined),
+                }}
+                className={cn(
+                  "absolute top-0 z-10 h-[58%] w-[4.6%] rounded-b-md border border-black/40 shadow-sm",
+                  !key.active && "bg-[#1a1a1a]",
+                )}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,36 +1,39 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Neuma monorepo
 
-## Getting Started
+Aplicação Next.js (`apps/web`) + Agent LangGraph/FastAPI (`apps/agent`), deployados juntos via [Vercel Services](https://vercel.com/docs/services).
 
-First, run the development server:
+## Desenvolvimento
 
 ```bash
+# Web (porta 3001)
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
+# Agent (porta 8765) — num segundo terminal
+cd apps/agent && python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # preencher keys
+uvicorn main:app --host 127.0.0.1 --port 8765 --reload
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Ou `vercel dev -L` na raiz para os dois serviços com binding.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts úteis
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+node apps/web/scripts/wipe-library.mjs            # dry-run
+node apps/web/scripts/wipe-library.mjs --confirm  # limpa biblioteca
+node apps/web/scripts/seed-marcio-eduardo.mjs     # briefs + propostas Percurso Márcio/Eduardo
+```
 
-## Learn More
+## Env
 
-To learn more about Next.js, take a look at the following resources:
+Ver `apps/web/.env.example` e `apps/agent/.env.example`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Tally webhook (onboarding / check-in)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Endpoint: `POST /api/tally/webhook`
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Produção: `https://neuma-app-topaz.vercel.app/api/tally/webhook` (ou o domínio custom)
+- Localhost **não** recebe webhooks do Tally — usa um tunnel (ngrok/cloudflared) ou aponta o webhook para produção
+- Configura em Tally → form `44RJrA` (onboarding) → Integrations → Webhooks
+- Signing secret (opcional): `TALLY_WEBHOOK_SECRET` / `TALLY_ONBOARDING_WEBHOOK_SECRET` / `TALLY_CHECKIN_WEBHOOK_SECRET`
