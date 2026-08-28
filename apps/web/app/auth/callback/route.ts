@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getAppOrigin } from "@/lib/auth/app-origin";
+import { redirectUrlForRequest } from "@/lib/auth/app-origin";
 import { ensureDefaultMentorForStudent } from "@/lib/auth/default-mentor";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/types/database.types";
@@ -11,6 +11,18 @@ type PendingCookie = { name: string; value: string; options: CookieOptions };
 function safeNextPath(next: string | null) {
   if (!next || !next.startsWith("/") || next.startsWith("//")) return "/";
   return next;
+}
+
+function redirectWithCookies(
+  request: NextRequest,
+  pathname: string,
+  pendingCookies: PendingCookie[],
+) {
+  const response = NextResponse.redirect(redirectUrlForRequest(request, pathname));
+  pendingCookies.forEach(({ name, value, options }) => {
+    response.cookies.set(name, value, options);
+  });
+  return response;
 }
 
 /**
@@ -24,20 +36,18 @@ export async function GET(request: NextRequest) {
   const next = safeNextPath(searchParams.get("next"));
   const intent = searchParams.get("intent") === "signup" ? "signup" : "login";
 
-  const requestOrigin = new URL(request.url).origin;
-  const origin =
-    requestOrigin.includes("localhost") || requestOrigin.includes("127.0.0.1")
-      ? requestOrigin
-      : getAppOrigin(requestOrigin);
-
   if (!code) {
-    return NextResponse.redirect(`${origin}/login?error=auth`);
+    return NextResponse.redirect(
+      redirectUrlForRequest(request, "/login?error=auth"),
+    );
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anonKey) {
-    return NextResponse.redirect(`${origin}/login?error=auth`);
+    return NextResponse.redirect(
+      redirectUrlForRequest(request, "/login?error=auth"),
+    );
   }
 
   const pendingCookies: PendingCookie[] = [];
@@ -67,9 +77,12 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     console.error("[auth.callback] exchangeCodeForSession falhou:", err);
     return NextResponse.redirect(
-      `${origin}/login?error=${encodeURIComponent(
-        "Não foi possível contactar o servidor de autenticação. Verifica a rede e tenta outra vez.",
-      )}`,
+      redirectUrlForRequest(
+        request,
+        `/login?error=${encodeURIComponent(
+          "Não foi possível contactar o servidor de autenticação. Verifica a rede e tenta outra vez.",
+        )}`,
+      ),
     );
   }
   if (error || !data.user) {
@@ -79,17 +92,18 @@ export async function GET(request: NextRequest) {
         error?.message ?? "",
       );
     return NextResponse.redirect(
-      `${origin}/login?error=${encodeURIComponent(
-        networkish
-          ? "Não foi possível contactar o servidor de autenticação. Verifica a rede e tenta outra vez."
-          : "Falha no login. Tenta outra vez.",
-      )}`,
+      redirectUrlForRequest(
+        request,
+        `/login?error=${encodeURIComponent(
+          networkish
+            ? "Não foi possível contactar o servidor de autenticação. Verifica a rede e tenta outra vez."
+            : "Falha no login. Tenta outra vez.",
+        )}`,
+      ),
     );
   }
 
   // Login social: só entra se já existir perfil (conta criada antes).
-  // O heurístico created_at < 2min era frágil e rejeitava contas reais
-  // (ex.: email/password + Google, ou re-login logo após o registo).
   if (intent === "login") {
     const userId = data.user.id;
     const email = data.user.email?.trim().toLowerCase() ?? null;
@@ -111,27 +125,22 @@ export async function GET(request: NextRequest) {
           .ilike("email", email)
           .maybeSingle();
         if (byEmail) {
-          // Conta existe com este email, mas o Google criou um auth user novo
-          // (identidades não ligadas). Não deixar entrar com o user órfão.
           await supabase.auth.signOut();
           try {
             await admin.auth.admin.deleteUser(userId);
           } catch {
             // ignore
           }
-          const response = NextResponse.redirect(
-            `${origin}/login?error=${encodeURIComponent(
-              "Já tens conta com este email. Entra com email e password (ou regista-te com Google a partir de Criar conta se ainda não o fizeste).",
+          return redirectWithCookies(
+            request,
+            `/login?error=${encodeURIComponent(
+              "Já tens conta com este email. Usa email e password, ou cria conta com Google em «Criar conta».",
             )}`,
+            pendingCookies,
           );
-          pendingCookies.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
-          });
-          return response;
         }
       }
     } catch {
-      // Sem admin: cai para o select com a sessão do user.
       const { data: byId } = await supabase
         .from("profiles")
         .select("id")
@@ -146,18 +155,16 @@ export async function GET(request: NextRequest) {
         const admin = createAdminClient();
         await admin.auth.admin.deleteUser(userId);
       } catch {
-        // Se a delete falhar, o user fica órfão — ainda assim não entra na app.
+        // ignore
       }
 
-      const response = NextResponse.redirect(
-        `${origin}/login/signup?error=${encodeURIComponent(
+      return redirectWithCookies(
+        request,
+        `/login/signup?error=${encodeURIComponent(
           "Esta conta Google ainda não está registada. Cria a tua conta primeiro.",
         )}`,
+        pendingCookies,
       );
-      pendingCookies.forEach(({ name, value, options }) => {
-        response.cookies.set(name, value, options);
-      });
-      return response;
     }
   }
 
@@ -171,6 +178,8 @@ export async function GET(request: NextRequest) {
     await ensureDefaultMentorForStudent(data.user.id);
   }
 
+  await supabase.auth.getSession();
+
   const destination =
     intent === "signup"
       ? next.includes("profile=1")
@@ -182,9 +191,5 @@ export async function GET(request: NextRequest) {
           : "/home"
         : next;
 
-  const response = NextResponse.redirect(`${origin}${destination}`);
-  pendingCookies.forEach(({ name, value, options }) => {
-    response.cookies.set(name, value, options);
-  });
-  return response;
+  return redirectWithCookies(request, destination, pendingCookies);
 }
