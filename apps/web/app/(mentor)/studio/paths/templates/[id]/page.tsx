@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 
-export default async function LegacyTemplateEditorPage({
+export default async function LegacyPathsTemplateRedirect({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  redirect(`/studio/paths?compose=${id}`);
+  redirect(`/studio/library?compose=${id}`);
 }

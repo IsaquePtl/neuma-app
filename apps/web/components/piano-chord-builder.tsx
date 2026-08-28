@@ -3,17 +3,27 @@
 import Image from "next/image";
 import { useMemo, useState } from "react";
 
+import {
+  ChordNoteEditorDialog,
+  type ChordNoteEditorState,
+} from "@/components/chord-note-editor-dialog";
 import { ChordBuilderControls } from "@/components/chord-builder-controls";
 import { brandAssets } from "@/lib/brand";
+import {
+  defaultPianoNotes,
+  resolvePianoNotes,
+  type ChordOverrideMap,
+  type PianoOverridePayload,
+} from "@/lib/music/chord-overrides";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_CHORD_SPEC,
   PIANO_KEY_COUNT,
   chordSymbol,
   isBlackKey,
-  pianoVoicingNotes,
   type ChordSpec,
   type ChordToneRole,
+  type PianoVoicingNote,
 } from "@/lib/music/chords";
 
 /** C3 → C5 (duas oitavas + C final). */
@@ -29,13 +39,32 @@ const ROLE_COLORS: Record<ChordToneRole, string> = {
   ext7: "#3b82f6",
 };
 
-export function PianoChordBuilder() {
-  const [spec, setSpec] = useState<ChordSpec>(DEFAULT_CHORD_SPEC);
+type PianoChordBuilderProps = {
+  editMode?: boolean;
+  overrides?: ChordOverrideMap;
+  onOverrideChange?: (spec: ChordSpec, payload: PianoOverridePayload) => void;
+};
 
-  const voicingByMidi = useMemo(() => {
-    const notes = pianoVoicingNotes(spec, START_MIDI, PIANO_KEY_COUNT);
-    return new Map(notes.map((n) => [n.midi, n]));
-  }, [spec]);
+export function PianoChordBuilder({
+  editMode = false,
+  overrides,
+  onOverrideChange,
+}: PianoChordBuilderProps) {
+  const [spec, setSpec] = useState<ChordSpec>(DEFAULT_CHORD_SPEC);
+  const [editorState, setEditorState] = useState<ChordNoteEditorState | null>(
+    null,
+  );
+  const [editorOpen, setEditorOpen] = useState(false);
+
+  const notes = useMemo(() => {
+    if (overrides) return resolvePianoNotes(spec, START_MIDI, overrides);
+    return defaultPianoNotes(spec, START_MIDI);
+  }, [spec, overrides]);
+
+  const voicingByMidi = useMemo(
+    () => new Map(notes.map((n) => [n.midi, n])),
+    [notes],
+  );
 
   const keys = useMemo(
     () =>
@@ -68,6 +97,50 @@ export function PianoChordBuilder() {
     return { backgroundColor: ROLE_COLORS[role] };
   }
 
+  function openKeyEditor(midi: number) {
+    if (!editMode) return;
+    const tone = voicingByMidi.get(midi);
+    setEditorState({
+      kind: "piano",
+      midi,
+      active: Boolean(tone),
+      role: tone?.role ?? "triad",
+    });
+    setEditorOpen(true);
+  }
+
+  function applyPianoEdit(next: ChordNoteEditorState) {
+    if (next.kind !== "piano" || !onOverrideChange) return;
+
+    const currentNotes = [...notes];
+    const withoutMidi = currentNotes.filter((n) => n.midi !== next.midi);
+
+    let nextNotes: PianoVoicingNote[];
+    if (next.active) {
+      const rootMidi =
+        currentNotes.find((n) => n.interval === 0)?.midi ??
+        currentNotes[0]?.midi ??
+        START_MIDI;
+      const existing = currentNotes.find((n) => n.midi === next.midi);
+      nextNotes = [
+        ...withoutMidi,
+        {
+          midi: next.midi,
+          role: next.role,
+          interval: existing?.interval ?? next.midi - rootMidi,
+        },
+      ].sort((a, b) => a.midi - b.midi);
+    } else {
+      nextNotes = withoutMidi;
+    }
+
+    onOverrideChange(spec, { notes: nextNotes });
+  }
+
+  const keyClasses = editMode
+    ? "cursor-pointer transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-foreground/40"
+    : "";
+
   return (
     <div className="flex w-full flex-col gap-6 rounded-2xl border bg-card p-6 sm:p-8 min-[1360px]:h-full min-[1360px]:flex-1">
       <p className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
@@ -79,9 +152,13 @@ export function PianoChordBuilder() {
           className="size-8 opacity-80"
         />
         Construtor de acordes · Piano
+        {editMode ? (
+          <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] normal-case tracking-normal text-amber-700 dark:text-amber-300">
+            Modo edição
+          </span>
+        ) : null}
       </p>
 
-      {/* Always stacked: controls above keyboard (no side-by-side at any breakpoint). */}
       <ChordBuilderControls
         value={spec}
         onChange={setSpec}
@@ -98,17 +175,27 @@ export function PianoChordBuilder() {
           </p>
         </div>
 
-        {/* At ≥1360px center a fixed-height keyboard so equal card height does not stretch keys. */}
         <div className="min-[1360px]:flex min-[1360px]:flex-1 min-[1360px]:items-center min-[1360px]:justify-center">
           <div className="relative flex h-36 w-full overflow-hidden rounded-xl border border-white/10 bg-zinc-100 sm:h-44">
             {whites.map((key) => (
-              <div
+              <button
                 key={key.midi}
+                type="button"
+                disabled={!editMode}
+                onClick={() => openKeyEditor(key.midi)}
                 style={key.active ? activeStyle(key.role) : undefined}
                 className={cn(
                   "relative h-full flex-1 border-r border-black/10 last:border-r-0",
                   !key.active && "bg-zinc-50",
+                  keyClasses,
                 )}
+                aria-label={
+                  editMode
+                    ? `Editar tecla ${key.midi}`
+                    : key.active
+                      ? "Nota activa"
+                      : "Tecla inactiva"
+                }
               >
                 {key.active ? (
                   <span
@@ -118,12 +205,15 @@ export function PianoChordBuilder() {
                     )}
                   />
                 ) : null}
-              </div>
+              </button>
             ))}
 
             {blacks.map((key) => (
-              <div
+              <button
                 key={key.midi}
+                type="button"
+                disabled={!editMode}
+                onClick={() => openKeyEditor(key.midi)}
                 style={{
                   left: `${blackLeftPercent(key.midi)}%`,
                   ...(key.active ? activeStyle(key.role) : undefined),
@@ -131,12 +221,27 @@ export function PianoChordBuilder() {
                 className={cn(
                   "absolute top-0 z-10 h-[58%] w-[4.6%] rounded-b-md border border-black/40 shadow-sm",
                   !key.active && "bg-[#1a1a1a]",
+                  keyClasses,
                 )}
+                aria-label={
+                  editMode
+                    ? `Editar tecla ${key.midi}`
+                    : key.active
+                      ? "Nota activa"
+                      : "Tecla inactiva"
+                }
               />
             ))}
           </div>
         </div>
       </div>
+
+      <ChordNoteEditorDialog
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        state={editorState}
+        onConfirm={applyPianoEdit}
+      />
     </div>
   );
 }

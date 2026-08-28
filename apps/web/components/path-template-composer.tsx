@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Dumbbell,
@@ -15,6 +16,7 @@ import {
 import { toast } from "sonner";
 
 import {
+  deletePathTemplate,
   deleteTemplateNode,
   upsertPathTemplate,
 } from "@/lib/actions/path-templates";
@@ -25,13 +27,22 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  initialPeriodMonths,
+  PeriodMonthsInput,
+} from "@/components/path-schedule-fields";
 import type {
   PickerAsset,
   PickerCategory,
   PickerTopic,
 } from "@/components/library-asset-picker";
 import { cn } from "@/lib/utils";
+import { LIBRARY_PATH } from "@/lib/library-routes";
 import { nodeKindLabel } from "@/lib/labels";
+import {
+  computeEndDate,
+  formatPathEndDate,
+} from "@/lib/path-period";
 import type { NodeKind, PathTemplateStatus } from "@/lib/types/database.types";
 
 type Template = {
@@ -52,8 +63,6 @@ type TemplateNode = TemplateNodeData & {
   asset_title: string | null;
 };
 
-const PERIOD_MONTHS = [2, 3, 4, 5, 6] as const;
-
 function kindIcon(kind: NodeKind) {
   switch (kind) {
     case "call":
@@ -66,21 +75,6 @@ function kindIcon(kind: NodeKind) {
     default:
       return Dumbbell;
   }
-}
-
-function addMonths(isoDate: string, months: number) {
-  const d = new Date(`${isoDate}T12:00:00`);
-  d.setMonth(d.getMonth() + months);
-  return d.toISOString().slice(0, 10);
-}
-
-function formatShortDate(iso: string) {
-  const d = new Date(`${iso}T12:00:00`);
-  return d.toLocaleDateString("pt-PT", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
 }
 
 function durationLabel(weeks: number | null) {
@@ -101,28 +95,44 @@ export function PathTemplateComposer({
   topics: PickerTopic[];
   assets: PickerAsset[];
 }) {
+  const router = useRouter();
   const [title, setTitle] = useState(template.title);
   const [startDate, setStartDate] = useState(template.start_date ?? "");
-  const [periodMonths, setPeriodMonths] = useState<number>(
-    template.period_months && template.period_months >= 2
-      ? template.period_months
-      : 3,
+  const [periodMonths, setPeriodMonths] = useState(() =>
+    initialPeriodMonths(
+      template.duration_label,
+      template.start_date,
+      template.end_date,
+      template.period_months,
+    ),
   );
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const [metaPending, startMetaTransition] = useTransition();
+  const [deletePending, startDeleteTransition] = useTransition();
 
   useEffect(() => {
     setTitle(template.title);
     setStartDate(template.start_date ?? "");
-    if (template.period_months && template.period_months >= 2) {
-      setPeriodMonths(template.period_months);
-    }
-  }, [template.title, template.start_date, template.period_months]);
+    setPeriodMonths(
+      initialPeriodMonths(
+        template.duration_label,
+        template.start_date,
+        template.end_date,
+        template.period_months,
+      ),
+    );
+  }, [
+    template.title,
+    template.start_date,
+    template.end_date,
+    template.period_months,
+    template.duration_label,
+  ]);
 
-  const endDate = useMemo(() => {
-    if (!startDate) return null;
-    return addMonths(startDate, periodMonths);
-  }, [startDate, periodMonths]);
+  const endDate = useMemo(
+    () => computeEndDate(startDate || null, periodMonths),
+    [startDate, periodMonths],
+  );
 
   function saveMeta(overrides?: {
     title?: string;
@@ -143,7 +153,7 @@ export function PathTemplateComposer({
       fd.set("suggested_node_count", String(template.suggested_node_count));
     }
     if (nextStart) fd.set("start_date", nextStart);
-    fd.set("period_months", String(nextPeriod));
+    if (nextPeriod && nextPeriod > 0) fd.set("period_months", String(nextPeriod));
 
     startMetaTransition(async () => {
       try {
@@ -154,16 +164,51 @@ export function PathTemplateComposer({
     });
   }
 
+  function onDeleteTemplate() {
+    if (
+      !window.confirm(
+        `Apagar o template “${template.title}”? Deixa de aparecer na lista.`,
+      )
+    ) {
+      return;
+    }
+    startDeleteTransition(async () => {
+      try {
+        const fd = new FormData();
+        fd.set("id", template.id);
+        fd.set("redirect", "0");
+        await deletePathTemplate(fd);
+        toast.success("Template apagado");
+        router.push(LIBRARY_PATH);
+      } catch {
+        toast.error("Não foi possível apagar o template");
+      }
+    });
+  }
+
   return (
     <div className="w-full space-y-8 pb-8">
       <div className="space-y-5">
-        <Link
-          href="/studio/journeys#templates"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="size-3.5" />
-          Voltar a Percursos
-        </Link>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Link
+            href="/studio/journeys#templates"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="size-3.5" />
+            Voltar a Percursos
+          </Link>
+          <Button
+            type="button"
+            size="sm"
+            variant="destructive"
+            className="gap-1.5"
+            disabled={deletePending}
+            onClick={onDeleteTemplate}
+          >
+            <Trash2 className="size-3.5" />
+            {deletePending ? "A apagar…" : "Apagar template"}
+          </Button>
+        </div>
         <div className="space-y-1">
           <Input
             value={title}
@@ -183,7 +228,7 @@ export function PathTemplateComposer({
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="path-start">Data de início</Label>
+            <Label htmlFor="path-start">Início do percurso (dia)</Label>
             <Input
               id="path-start"
               type="date"
@@ -198,23 +243,15 @@ export function PathTemplateComposer({
           </div>
           <div className="space-y-2">
             <Label htmlFor="path-period">Período</Label>
-            <select
+            <PeriodMonthsInput
               id="path-period"
               value={periodMonths}
               disabled={metaPending}
-              onChange={(e) => {
-                const next = Number(e.target.value);
+              onChange={(next) => {
                 setPeriodMonths(next);
                 saveMeta({ period_months: next });
               }}
-              className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm disabled:opacity-50"
-            >
-              {PERIOD_MONTHS.map((m) => (
-                <option key={m} value={m}>
-                  {m} meses
-                </option>
-              ))}
-            </select>
+            />
           </div>
         </div>
 
@@ -222,14 +259,14 @@ export function PathTemplateComposer({
           <p className="text-xs text-muted-foreground">
             Fim previsto:{" "}
             <span className="text-foreground/90">
-              {formatShortDate(endDate)}
+              {formatPathEndDate(endDate)}
             </span>
             {" · "}
             {periodMonths} meses
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Define a data de início para calcular o fim do percurso.
+            Define a data de início e o período para calcular o fim previsto.
           </p>
         )}
       </div>

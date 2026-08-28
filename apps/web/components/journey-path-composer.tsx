@@ -1,26 +1,14 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import {
-  Check,
   ChevronDown,
   ChevronUp,
-  Clock,
-  Dumbbell,
-  ExternalLink,
-  Flag,
-  FileText,
-  MessageSquare,
   Pencil,
-  Phone,
-  Play,
   Trash2,
-  Video,
 } from "lucide-react";
-import { toast } from "sonner";
 
-import { MentorFeedbackPanel } from "@/components/mentor-feedback-panel";
 import { NodeDialog } from "@/components/node-dialog";
 import { PathForm } from "@/components/path-form";
 import type {
@@ -29,60 +17,25 @@ import type {
   PickerTopic,
 } from "@/components/library-asset-picker";
 import {
-  CheckInStatusBadge,
   PathStatusBadge,
 } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   activateNode,
   deleteNode,
   moveNode,
 } from "@/lib/actions/nodes";
 import { deletePath, setPathStatus } from "@/lib/actions/paths";
-import {
-  advanceLevel,
-  createLevelFeedback,
-  extendLevelWeek,
-} from "@/lib/actions/journey-level";
-import { checkInKindLabel, formatDate, formatDateTime, nodeKindLabel } from "@/lib/labels";
+import { formatDate, nodeKindLabel } from "@/lib/labels";
 import type { StudentNode, StudentPath } from "@/lib/students/queries";
-import type { CheckInKind, CheckInStatus, NodeKind } from "@/lib/types/database.types";
+import type { NodeKind } from "@/lib/types/database.types";
 import { cn } from "@/lib/utils";
-
-export type JourneyCheckIn = {
-  id: string;
-  node_id: string;
-  status: CheckInStatus;
-  kind: CheckInKind;
-  created_at: string;
-  notes: string | null;
-  video_url: string | null;
-  feedback: {
-    notes: string | null;
-    next_steps: string | null;
-    video_url: string | null;
-    approved: boolean;
-  } | null;
-  draft: {
-    id: string;
-    body_notes: string | null;
-    body_next_steps: string | null;
-  } | null;
-};
-
-export type JourneyLevelFeedback = {
-  id: string;
-  node_id: string;
-  notes: string | null;
-  video_url: string | null;
-  file_url: string | null;
-  created_at: string;
-};
-
-type LevelTab = "checkin" | "feedback" | "decisao" | "editar";
+import {
+  Dumbbell,
+  Flag,
+  Phone,
+  Video,
+} from "lucide-react";
 
 function kindIcon(kind: NodeKind) {
   switch (kind) {
@@ -109,8 +62,6 @@ export function JourneyPathComposer({
   studentName,
   path,
   nodes,
-  checkIns,
-  levelFeedbacks,
   libraryCategories = [],
   libraryTopics = [],
   libraryAssets = [],
@@ -119,65 +70,12 @@ export function JourneyPathComposer({
   studentName: string;
   path: StudentPath;
   nodes: StudentNode[];
-  checkIns: JourneyCheckIn[];
-  levelFeedbacks: JourneyLevelFeedback[];
   libraryCategories?: PickerCategory[];
   libraryTopics?: PickerTopic[];
   libraryAssets?: PickerAsset[];
 }) {
   const activeId = nodes.find((n) => n.status === "active")?.id ?? null;
   const [expanded, setExpanded] = useState<string | null>(activeId);
-  const [tabByNode, setTabByNode] = useState<Record<string, LevelTab>>({});
-  const [extendWeeksByNode, setExtendWeeksByNode] = useState<
-    Record<string, number>
-  >({});
-  const [replyCheckInId, setReplyCheckInId] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-
-  const checkInsByNode = useMemo(() => {
-    const map = new Map<string, JourneyCheckIn[]>();
-    for (const c of checkIns) {
-      const list = map.get(c.node_id) ?? [];
-      list.push(c);
-      map.set(c.node_id, list);
-    }
-    return map;
-  }, [checkIns]);
-
-  const feedbackByNode = useMemo(() => {
-    const map = new Map<string, JourneyLevelFeedback[]>();
-    for (const f of levelFeedbacks) {
-      const list = map.get(f.node_id) ?? [];
-      list.push(f);
-      map.set(f.node_id, list);
-    }
-    return map;
-  }, [levelFeedbacks]);
-
-  function tabFor(nodeId: string): LevelTab {
-    return tabByNode[nodeId] ?? "checkin";
-  }
-
-  function setTab(nodeId: string, tab: LevelTab) {
-    setTabByNode((prev) => ({ ...prev, [nodeId]: tab }));
-  }
-
-  function runAction(
-    label: string,
-    action: (fd: FormData) => Promise<void>,
-    fields: Record<string, string>,
-  ) {
-    startTransition(async () => {
-      try {
-        const fd = new FormData();
-        for (const [k, v] of Object.entries(fields)) fd.set(k, v);
-        await action(fd);
-        toast.success(label);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Falhou");
-      }
-    });
-  }
 
   return (
     <div className="space-y-8">
@@ -200,6 +98,14 @@ export function JourneyPathComposer({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button
+              render={<Link href={`/studio/journeys/${path.id}`} />}
+              nativeButton={false}
+              variant="outline"
+              size="sm"
+            >
+              Ver percurso
+            </Button>
             <PathForm studentId={studentId} path={path} />
             <NodeDialog
               pathId={path.id}
@@ -248,6 +154,7 @@ export function JourneyPathComposer({
           >
             <input type="hidden" name="id" value={path.id} />
             <input type="hidden" name="student_id" value={studentId} />
+            <input type="hidden" name="redirect_to" value="/studio/journeys" />
             <Button type="submit" size="sm" variant="destructive">
               Eliminar
             </Button>
@@ -265,15 +172,6 @@ export function JourneyPathComposer({
             const Icon = kindIcon(node.kind);
             const levelNum = i + 1;
             const isOpen = expanded === node.id;
-            const tab = tabFor(node.id);
-            const nodeCheckIns = checkInsByNode.get(node.id) ?? [];
-            const pendingCount = nodeCheckIns.filter(
-              (c) => c.status === "pending",
-            ).length;
-            const notes = feedbackByNode.get(node.id) ?? [];
-            const replyTarget =
-              replyCheckInId &&
-              nodeCheckIns.find((c) => c.id === replyCheckInId);
 
             return (
               <li
@@ -308,24 +206,13 @@ export function JourneyPathComposer({
                     stepClass(node.status),
                   )}
                 >
-                  <button
-                    type="button"
-                    className="flex w-full items-start justify-between gap-2 text-left"
-                    onClick={() =>
-                      setExpanded((prev) =>
-                        prev === node.id ? null : node.id,
-                      )
-                    }
-                  >
+                  <div className="flex w-full items-start justify-between gap-2">
                     <div className="min-w-0 space-y-1">
                       <p className="inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--neuma-coral)]">
                         <Icon className="size-3" />
                         {nodeKindLabel[node.kind]}
                         {node.due_date
                           ? ` · limite ${formatDate(node.due_date)}`
-                          : null}
-                        {pendingCount > 0
-                          ? ` · ${pendingCount} check-in`
                           : null}
                       </p>
                       <p className="text-lg font-bold tracking-tight">
@@ -337,421 +224,108 @@ export function JourneyPathComposer({
                         </p>
                       ) : null}
                     </div>
-                    <ChevronDown
-                      className={cn(
-                        "mt-1 size-5 shrink-0 text-muted-foreground transition-transform",
-                        isOpen && "rotate-180",
-                      )}
-                    />
-                  </button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={isOpen ? "default" : "outline"}
+                      className="shrink-0 gap-1.5"
+                      onClick={() =>
+                        setExpanded((prev) =>
+                          prev === node.id ? null : node.id,
+                        )
+                      }
+                    >
+                      <Pencil className="size-3.5" />
+                      Editar
+                      <ChevronDown
+                        className={cn(
+                          "size-3.5 transition-transform",
+                          isOpen && "rotate-180",
+                        )}
+                      />
+                    </Button>
+                  </div>
 
                   {isOpen ? (
-                    <div className="mt-4 space-y-4 border-t border-white/10 pt-4">
-                      <div className="flex flex-wrap gap-1">
-                        {(
-                          [
-                            ["checkin", "Check-in", MessageSquare],
-                            ["feedback", "Feedback", FileText],
-                            ["decisao", "Decisão", Check],
-                            ["editar", "Editar", Pencil],
-                          ] as const
-                        ).map(([id, label, TabIcon]) => (
-                          <button
-                            key={id}
-                            type="button"
-                            onClick={() => setTab(node.id, id)}
-                            className={cn(
-                              "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
-                              tab === id
-                                ? "bg-white/15 text-foreground"
-                                : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-                            )}
-                          >
-                            <TabIcon className="size-3.5" />
-                            {label}
-                            {id === "checkin" && pendingCount > 0 ? (
-                              <span className="rounded-full bg-[var(--neuma-coral)] px-1.5 text-[10px] text-white">
-                                {pendingCount}
-                              </span>
-                            ) : null}
-                          </button>
-                        ))}
-                      </div>
-
-                      {tab === "checkin" ? (
-                        <div className="space-y-3">
-                          {replyTarget ? (
-                            <div className="space-y-3">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => setReplyCheckInId(null)}
-                              >
-                                ← Voltar à lista
-                              </Button>
-                              <MentorFeedbackPanel
-                                checkInId={replyTarget.id}
-                                studentName={studentName}
-                                existing={replyTarget.feedback}
-                                draft={replyTarget.draft}
-                                returnTo={`/studio/journeys/${path.id}`}
-                              />
-                            </div>
-                          ) : nodeCheckIns.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">
-                              Ainda sem check-ins neste nível.
-                            </p>
-                          ) : (
-                            <ul className="space-y-2">
-                              {nodeCheckIns.map((c) => (
-                                <li
-                                  key={c.id}
-                                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-black/20 px-3 py-2.5"
-                                >
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-medium">
-                                      {checkInKindLabel[c.kind]} ·{" "}
-                                      {formatDateTime(c.created_at)}
-                                    </p>
-                                    {c.notes ? (
-                                      <p className="line-clamp-2 text-xs text-muted-foreground">
-                                        {c.notes}
-                                      </p>
-                                    ) : null}
-                                  </div>
-                                  <div className="flex shrink-0 items-center gap-2">
-                                    <CheckInStatusBadge status={c.status} />
-                                    {c.status === "pending" ||
-                                    c.status === "needs_revision" ? (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        onClick={() =>
-                                          setReplyCheckInId(c.id)
-                                        }
-                                      >
-                                        Responder
-                                      </Button>
-                                    ) : (
-                                      <Button
-                                        render={
-                                          <Link
-                                            href={`/studio/checkins/${c.id}?from=journey&path=${path.id}`}
-                                          />
-                                        }
-                                        nativeButton={false}
-                                        size="sm"
-                                        variant="ghost"
-                                      >
-                                        Ver
-                                      </Button>
-                                    )}
-                                  </div>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      ) : null}
-
-                      {tab === "feedback" ? (
-                        <div className="space-y-4">
-                          <form
-                            className="space-y-3"
-                            onSubmit={(e) => {
-                              e.preventDefault();
-                              const form = e.currentTarget;
-                              const fd = new FormData(form);
-                              fd.set("node_id", node.id);
-                              fd.set("path_id", path.id);
-                              startTransition(async () => {
-                                try {
-                                  await createLevelFeedback(fd);
-                                  toast.success("Feedback guardado");
-                                  form.reset();
-                                } catch (err) {
-                                  toast.error(
-                                    err instanceof Error
-                                      ? err.message
-                                      : "Falhou",
-                                  );
-                                }
-                              });
-                            }}
-                          >
-                            <div className="space-y-1.5">
-                              <Label htmlFor={`notes-${node.id}`}>
-                                Texto / notas
-                              </Label>
-                              <Textarea
-                                id={`notes-${node.id}`}
-                                name="notes"
-                                rows={4}
-                                placeholder="Feedback livre para este nível…"
-                              />
-                            </div>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              <div className="space-y-1.5">
-                                <Label htmlFor={`video-${node.id}`}>
-                                  Link vídeo
-                                </Label>
-                                <Input
-                                  id={`video-${node.id}`}
-                                  name="video_url"
-                                  type="url"
-                                  placeholder="https://loom.com/…"
-                                />
-                              </div>
-                              <div className="space-y-1.5">
-                                <Label htmlFor={`file-${node.id}`}>
-                                  Link ficheiro
-                                </Label>
-                                <Input
-                                  id={`file-${node.id}`}
-                                  name="file_url"
-                                  type="url"
-                                  placeholder="Drive, PDF, áudio…"
-                                />
-                              </div>
-                            </div>
-                            <Button type="submit" disabled={pending} size="sm">
-                              {pending ? "A guardar…" : "Publicar feedback"}
-                            </Button>
-                          </form>
-
-                          {notes.length > 0 ? (
-                            <ul className="space-y-2 border-t border-white/10 pt-3">
-                              {notes.map((n) => (
-                                <li
-                                  key={n.id}
-                                  className="rounded-xl bg-black/20 px-3 py-2.5 text-sm"
-                                >
-                                  <p className="text-xs text-muted-foreground">
-                                    {formatDateTime(n.created_at)}
-                                  </p>
-                                  {n.notes ? (
-                                    <p className="mt-1 whitespace-pre-wrap">
-                                      {n.notes}
-                                    </p>
-                                  ) : null}
-                                  <div className="mt-2 flex flex-wrap gap-3 text-xs">
-                                    {n.video_url ? (
-                                      <a
-                                        href={n.video_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 text-[var(--neuma-coral)] hover:underline"
-                                      >
-                                        <Video className="size-3.5" /> Vídeo
-                                      </a>
-                                    ) : null}
-                                    {n.file_url ? (
-                                      <a
-                                        href={n.file_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 text-[var(--neuma-coral)] hover:underline"
-                                      >
-                                        <ExternalLink className="size-3.5" />{" "}
-                                        Ficheiro
-                                      </a>
-                                    ) : null}
-                                  </div>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : null}
-                        </div>
-                      ) : null}
-
-                      {tab === "decisao" ? (
-                        <div className="space-y-3">
-                          <p className="text-sm text-muted-foreground">
-                            Decide o que acontece a seguir neste nível — com ou
-                            sem check-in respondido.
-                          </p>
-                          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-                            <Button
-                              type="button"
-                              className="gap-1.5"
-                              disabled={pending || node.status === "completed"}
-                              onClick={() =>
-                                runAction(
-                                  "Nível concluído — a avançar",
-                                  advanceLevel,
-                                  { node_id: node.id, path_id: path.id },
-                                )
-                              }
-                            >
-                              <Check className="size-4" /> Avançar nível
-                            </Button>
-                            <div className="flex flex-wrap items-end gap-2">
-                              <label className="space-y-1">
-                                <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                                  Prolongar
-                                </span>
-                                <span className="inline-flex items-center gap-1.5">
-                                  <Input
-                                    type="number"
-                                    min={1}
-                                    max={52}
-                                    step={1}
-                                    value={extendWeeksByNode[node.id] ?? 1}
-                                    onChange={(e) => {
-                                      const n = Number(e.target.value);
-                                      setExtendWeeksByNode((prev) => ({
-                                        ...prev,
-                                        [node.id]: Number.isFinite(n)
-                                          ? n
-                                          : 1,
-                                      }));
-                                    }}
-                                    className="h-8 w-16"
-                                    aria-label="Semanas a prolongar"
-                                  />
-                                  <span className="text-xs text-muted-foreground">
-                                    semana
-                                    {(extendWeeksByNode[node.id] ?? 1) === 1
-                                      ? ""
-                                      : "s"}
-                                  </span>
-                                </span>
-                              </label>
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                className="gap-1.5"
-                                disabled={pending}
-                                onClick={() => {
-                                  const weeks = Math.max(
-                                    1,
-                                    Math.min(
-                                      52,
-                                      Math.floor(
-                                        extendWeeksByNode[node.id] ?? 1,
-                                      ),
-                                    ),
-                                  );
-                                  runAction(
-                                    weeks === 1
-                                      ? "Prazo prolongado 1 semana"
-                                      : `Prazo prolongado ${weeks} semanas`,
-                                    extendLevelWeek,
-                                    {
-                                      node_id: node.id,
-                                      path_id: path.id,
-                                      weeks: String(weeks),
-                                    },
-                                  );
-                                }}
-                              >
-                                <Clock className="size-4" /> Prolongar prazo
-                              </Button>
-                            </div>
-                            {node.status !== "active" ? (
-                              <form action={activateNode}>
-                                <input
-                                  type="hidden"
-                                  name="id"
-                                  value={node.id}
-                                />
-                                <input
-                                  type="hidden"
-                                  name="path_id"
-                                  value={path.id}
-                                />
-                                <Button
-                                  type="submit"
-                                  variant="outline"
-                                  className="gap-1.5"
-                                >
-                                  <Play className="size-4" /> Ativar este nível
-                                </Button>
-                              </form>
-                            ) : null}
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            Em check-ins pendentes podes também{" "}
-                            <button
-                              type="button"
-                              className="underline underline-offset-2"
-                              onClick={() => setTab(node.id, "checkin")}
-                            >
-                              responder com aprovar / pedir revisão
-                            </button>
-                            .
-                          </p>
-                        </div>
-                      ) : null}
-
-                      {tab === "editar" ? (
-                        <div className="flex flex-wrap items-center gap-1">
-                          <form action={moveNode}>
-                            <input type="hidden" name="id" value={node.id} />
-                            <input
-                              type="hidden"
-                              name="path_id"
-                              value={path.id}
-                            />
-                            <input type="hidden" name="direction" value="up" />
-                            <Button
-                              type="submit"
-                              variant="ghost"
-                              size="icon"
-                              disabled={i === 0}
-                              aria-label="Subir"
-                            >
-                              <ChevronUp className="size-4" />
-                            </Button>
-                          </form>
-                          <form action={moveNode}>
-                            <input type="hidden" name="id" value={node.id} />
-                            <input
-                              type="hidden"
-                              name="path_id"
-                              value={path.id}
-                            />
-                            <input
-                              type="hidden"
-                              name="direction"
-                              value="down"
-                            />
-                            <Button
-                              type="submit"
-                              variant="ghost"
-                              size="icon"
-                              disabled={i === nodes.length - 1}
-                              aria-label="Descer"
-                            >
-                              <ChevronDown className="size-4" />
-                            </Button>
-                          </form>
-                          <NodeDialog
-                            pathId={path.id}
-                            node={node}
-                            categories={libraryCategories}
-                            topics={libraryTopics}
-                            assets={libraryAssets}
+                    <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <form action={moveNode}>
+                          <input type="hidden" name="id" value={node.id} />
+                          <input
+                            type="hidden"
+                            name="path_id"
+                            value={path.id}
                           />
-                          <form action={deleteNode}>
+                          <input type="hidden" name="direction" value="up" />
+                          <Button
+                            type="submit"
+                            variant="ghost"
+                            size="icon"
+                            disabled={i === 0}
+                            aria-label="Subir"
+                          >
+                            <ChevronUp className="size-4" />
+                          </Button>
+                        </form>
+                        <form action={moveNode}>
+                          <input type="hidden" name="id" value={node.id} />
+                          <input
+                            type="hidden"
+                            name="path_id"
+                            value={path.id}
+                          />
+                          <input
+                            type="hidden"
+                            name="direction"
+                            value="down"
+                          />
+                          <Button
+                            type="submit"
+                            variant="ghost"
+                            size="icon"
+                            disabled={i === nodes.length - 1}
+                            aria-label="Descer"
+                          >
+                            <ChevronDown className="size-4" />
+                          </Button>
+                        </form>
+                        <NodeDialog
+                          pathId={path.id}
+                          node={node}
+                          categories={libraryCategories}
+                          topics={libraryTopics}
+                          assets={libraryAssets}
+                        />
+                        {node.status !== "active" ? (
+                          <form action={activateNode}>
                             <input type="hidden" name="id" value={node.id} />
                             <input
                               type="hidden"
                               name="path_id"
                               value={path.id}
                             />
-                            <Button
-                              type="submit"
-                              variant="ghost"
-                              size="icon"
-                              aria-label="Eliminar"
-                            >
-                              <Trash2 className="size-4" />
+                            <Button type="submit" variant="outline" size="sm">
+                              Ativar nível
                             </Button>
                           </form>
-                        </div>
-                      ) : null}
+                        ) : null}
+                        <form action={deleteNode}>
+                          <input type="hidden" name="id" value={node.id} />
+                          <input
+                            type="hidden"
+                            name="path_id"
+                            value={path.id}
+                          />
+                          <Button
+                            type="submit"
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Eliminar"
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </form>
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -763,3 +337,34 @@ export function JourneyPathComposer({
     </div>
   );
 }
+
+// Types shared with admin view and data loader
+export type JourneyCheckIn = {
+  id: string;
+  node_id: string;
+  status: import("@/lib/types/database.types").CheckInStatus;
+  kind: import("@/lib/types/database.types").CheckInKind;
+  created_at: string;
+  notes: string | null;
+  video_url: string | null;
+  feedback: {
+    notes: string | null;
+    next_steps: string | null;
+    video_url: string | null;
+    approved: boolean;
+  } | null;
+  draft: {
+    id: string;
+    body_notes: string | null;
+    body_next_steps: string | null;
+  } | null;
+};
+
+export type JourneyLevelFeedback = {
+  id: string;
+  node_id: string;
+  notes: string | null;
+  video_url: string | null;
+  file_url: string | null;
+  created_at: string;
+};

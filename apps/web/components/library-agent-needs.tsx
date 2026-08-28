@@ -39,11 +39,15 @@ export function LibraryAgentNeedsYou({
   assets,
   categories = [],
   libraryTopics = [],
+  pathId,
+  pathTitle,
 }: {
   topics: GapTopic[];
   assets: GapAsset[];
   categories?: Category[];
   libraryTopics?: Topic[];
+  pathId?: string;
+  pathTitle?: string;
 }) {
   if (topics.length === 0 && assets.length === 0) return null;
 
@@ -53,11 +57,13 @@ export function LibraryAgentNeedsYou({
         <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
         <div className="flex-1 space-y-3">
           <div>
-            <h2 className="font-medium">O Agent precisa de ti</h2>
+            <h2 className="font-medium">
+              {pathTitle ? `Cascas por preencher · ${pathTitle}` : "O Agent precisa de ti"}
+            </h2>
             <p className="text-sm text-muted-foreground">
-              Cascas vazias dos percursos — ainda não entram na Biblioteca.
-              Grava, anexa ou confirma no nível; só material pronto é
-              reutilizável.
+              {pathTitle
+                ? "Níveis deste percurso ainda sem material na Biblioteca. Grava, anexa ou confirma no nível."
+                : "Cascas vazias dos percursos — ainda não entram na Biblioteca. Grava, anexa ou confirma no nível; só material pronto é reutilizável."}
             </p>
           </div>
           {topics.length > 0 && (
@@ -120,10 +126,10 @@ export function LibraryAgentNeedsYou({
             </ul>
           )}
           <Link
-            href="/studio/journeys"
+            href={pathId ? `/studio/journeys/${pathId}` : "/studio/journeys#agent-paths"}
             className="text-sm underline underline-offset-4"
           >
-            Ver percursos
+            {pathId ? "Abrir percurso" : "Ver percursos do Agent"}
           </Link>
         </div>
       </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FolderPlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -12,6 +13,7 @@ import {
   deleteLibraryCategory,
   renameLibraryCategory,
 } from "@/lib/actions/library";
+import { LIBRARY_PATH } from "@/lib/library-routes";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -93,6 +95,8 @@ export function LibraryCategoryActions({
     theme?: CategoryTheme | null;
   };
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [editOpen, setEditOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -135,6 +139,11 @@ export function LibraryCategoryActions({
         fd.set("id", category.id);
         await deleteLibraryCategory(fd);
         toast.success("Categoria apagada");
+        if (searchParams.get("category") === category.id) {
+          router.push(LIBRARY_PATH);
+        } else {
+          router.refresh();
+        }
       } catch (err) {
         toast.error(
           err instanceof Error ? err.message : "Não foi possível apagar",
@@ -302,6 +311,7 @@ export function LibraryTopicDeleteButton({ topicId }: { topicId: string }) {
 }
 
 export function LibraryAssetDeleteButton({ assetId }: { assetId: string }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   return (
     <Button
@@ -318,6 +328,7 @@ export function LibraryAssetDeleteButton({ assetId }: { assetId: string }) {
           try {
             await deleteLibraryAsset(fd);
             toast.success("Asset eliminado");
+            router.refresh();
           } catch (err) {
             toast.error(err instanceof Error ? err.message : "Falha");
           }

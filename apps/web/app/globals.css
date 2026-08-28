@@ -236,18 +236,14 @@ html[data-neuma-bg="neon"] {
     backdrop-filter: blur(20px) saturate(160%);
     -webkit-backdrop-filter: blur(20px) saturate(160%);
     border: 1px solid oklch(1 0 0 / 10%);
-    box-shadow:
-      0 1px 0 0 oklch(1 0 0 / 6%) inset,
-      0 20px 40px -24px oklch(0 0 0 / 70%);
+    box-shadow: 0 20px 40px -24px oklch(0 0 0 / 70%);
   }
   .glass-panel {
     background: rgb(22 22 22 / 70%);
     backdrop-filter: blur(28px) saturate(160%);
     -webkit-backdrop-filter: blur(28px) saturate(160%);
     border: 1px solid oklch(1 0 0 / 10%);
-    box-shadow:
-      0 1px 0 0 oklch(1 0 0 / 6%) inset,
-      0 24px 60px -30px oklch(0 0 0 / 80%);
+    box-shadow: 0 24px 60px -30px oklch(0 0 0 / 80%);
   }
   .glass-nav {
     background: rgb(22 22 22 / 72%);
@@ -744,36 +740,9 @@ body:has(.auth-shell) .neuma-bg::before {
   background: transparent;
 }
 
-/* barra fina de gradiente no topo de superficies premium */
+/* barra fina de gradiente no topo de superficies premium (desactivada) */
 .neuma-accent-top {
   position: relative;
-}
-.neuma-accent-top::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: min(68%, 16.5rem);
-  height: 2px;
-  transform: translateX(-50%);
-  border-radius: 999px;
-  background-image: var(--neuma-gradient);
-  opacity: 0.68;
-  /* Fade nas pontas */
-  -webkit-mask-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    #000 18%,
-    #000 82%,
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    #000 18%,
-    #000 82%,
-    transparent 100%
-  );
 }
 
 /* safe-area helpers (conteúdo / sheets — não a menubar flutuante) */

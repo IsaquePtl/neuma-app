@@ -2,6 +2,7 @@ import type {
   CheckInKind,
   CheckInStatus,
   LibraryAssetKind,
+  LibraryAssetUsage,
   MentorCalendarEventKind,
   NodeKind,
   NodeStatus,
@@ -51,6 +52,11 @@ export const libraryAssetKindLabel: Record<LibraryAssetKind, string> = {
   image: "Imagem",
   file: "Ficheiro",
   link: "Link",
+};
+
+export const libraryAssetUsageLabel: Record<LibraryAssetUsage, string> = {
+  lesson: "Aula",
+  practice: "Prática",
 };
 
 export const checkInStatusLabel: Record<CheckInStatus, string> = {

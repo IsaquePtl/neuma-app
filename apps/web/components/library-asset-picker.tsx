@@ -51,6 +51,12 @@ function resolveInitial(
   };
 }
 
+function usageForNodeKind(nodeKind: NodeKind): LibraryAssetUsage | null {
+  if (nodeKind === "practice") return "practice";
+  if (nodeKind === "lesson" || nodeKind === "resource") return "lesson";
+  return null;
+}
+
 export function LibraryAssetPicker({
   nodeKind,
   categories,
@@ -65,10 +71,30 @@ export function LibraryAssetPicker({
   const [topicId, setTopicId] = useState(seed.topicId);
   const [search, setSearch] = useState("");
 
-  const practiceAssets = useMemo(() => {
+  const usageFilter = usageForNodeKind(nodeKind);
+
+  const topicsForCategory = useMemo(
+    () => topics.filter((t) => t.category_id === categoryId),
+    [topics, categoryId],
+  );
+
+  const itemsForTopic = useMemo(() => {
     const q = search.trim().toLowerCase();
     return assets.filter((a) => {
-      if (a.usage !== "practice") return false;
+      if (a.topic_id !== topicId) return false;
+      if (usageFilter && a.usage !== usageFilter) return false;
+      if (!q) return true;
+      return (
+        a.title.toLowerCase().includes(q) ||
+        a.tags.some((t) => t.includes(q))
+      );
+    });
+  }, [assets, topicId, usageFilter, search]);
+
+  const supportItems = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return assets.filter((a) => {
+      if (!a.topic_id) return false;
       if (!q) return true;
       return (
         a.title.toLowerCase().includes(q) ||
@@ -77,18 +103,13 @@ export function LibraryAssetPicker({
     });
   }, [assets, search]);
 
-  const topicsForCategory = useMemo(
-    () => topics.filter((t) => t.category_id === categoryId),
-    [topics, categoryId],
-  );
+  const pickerLabel =
+    nodeKind === "practice"
+      ? "Item de prática"
+      : nodeKind === "call" || nodeKind === "milestone"
+        ? "Anexo de apoio"
+        : "Item";
 
-  const lessonsForTopic = useMemo(
-    () =>
-      assets.filter((a) => a.usage === "lesson" && a.topic_id === topicId),
-    [assets, topicId],
-  );
-
-  // Sessão / Check-point: anexo opcional de apoio (qualquer material de prática)
   if (nodeKind === "call" || nodeKind === "milestone") {
     return (
       <div className="space-y-3">
@@ -98,7 +119,7 @@ export function LibraryAssetPicker({
             : "Material de apoio ao check-point (opcional)."}
         </p>
         <div className="space-y-2">
-          <Label htmlFor="picker-support">Anexo de apoio</Label>
+          <Label htmlFor="picker-support-search">Filtrar biblioteca</Label>
           <Input
             id="picker-support-search"
             value={search}
@@ -129,9 +150,9 @@ export function LibraryAssetPicker({
           className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
         >
           <option value="">— sem anexo —</option>
-          {practiceAssets.map((a) => (
+          {supportItems.map((a) => (
             <option key={a.id} value={a.id}>
-              [{a.kind}] {a.title}
+              [{a.usage}/{a.kind}] {a.title}
             </option>
           ))}
         </select>
@@ -139,49 +160,6 @@ export function LibraryAssetPicker({
     );
   }
 
-  if (nodeKind === "practice") {
-    return (
-      <div className="space-y-3">
-        <div className="space-y-2">
-          <Label htmlFor="picker-search">Recurso de prática</Label>
-          <Input
-            id="picker-search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filtrar por título ou tag..."
-          />
-        </div>
-        <select
-          value={value}
-          onChange={(e) => {
-            const id = e.target.value;
-            if (!id) {
-              onChange(null);
-              return;
-            }
-            const a = assets.find((x) => x.id === id);
-            onChange(a ? { assetId: a.id, title: a.title, url: a.url, body: a.body ?? null } : null);
-          }}
-          className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
-        >
-          <option value="">— escolher prática —</option>
-          {practiceAssets.map((a) => (
-            <option key={a.id} value={a.id}>
-              [{a.kind}] {a.title}
-            </option>
-          ))}
-        </select>
-        {practiceAssets.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
-            Sem materiais de prática na biblioteca. Adiciona em Percursos →
-            Prática.
-          </p>
-        ) : null}
-      </div>
-    );
-  }
-
-  // lesson (+ legacy resource)
   return (
     <div className="space-y-3">
       <div className="space-y-2">
@@ -227,9 +205,17 @@ export function LibraryAssetPicker({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="picker-lesson">Aula</Label>
+        <Label htmlFor="picker-item">{pickerLabel}</Label>
+        <Input
+          id="picker-search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Filtrar por título ou tag…"
+          disabled={!topicId}
+          className="mb-2 disabled:opacity-50"
+        />
         <select
-          id="picker-lesson"
+          id="picker-item"
           value={value}
           disabled={!topicId}
           onChange={(e) => {
@@ -239,12 +225,21 @@ export function LibraryAssetPicker({
               return;
             }
             const a = assets.find((x) => x.id === id);
-            onChange(a ? { assetId: a.id, title: a.title, url: a.url, body: a.body ?? null } : null);
+            onChange(
+              a
+                ? {
+                    assetId: a.id,
+                    title: a.title,
+                    url: a.url,
+                    body: a.body ?? null,
+                  }
+                : null,
+            );
           }}
           className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm disabled:opacity-50"
         >
-          <option value="">— escolher aula —</option>
-          {lessonsForTopic.map((a) => (
+          <option value="">— escolher item —</option>
+          {itemsForTopic.map((a) => (
             <option key={a.id} value={a.id}>
               [{a.kind}] {a.title}
             </option>
@@ -254,7 +249,11 @@ export function LibraryAssetPicker({
 
       {categories.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          Cria categorias e tópicos em Percursos → Biblioteca → Aulas.
+          Cria categorias e tópicos em Biblioteca, depois adiciona itens com + Item.
+        </p>
+      ) : itemsForTopic.length === 0 && topicId ? (
+        <p className="text-xs text-muted-foreground">
+          Sem itens compatíveis neste tópico. Adiciona um em Biblioteca → + Item.
         </p>
       ) : null}
     </div>

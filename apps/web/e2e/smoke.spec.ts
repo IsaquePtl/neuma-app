@@ -13,7 +13,7 @@ const STUDIO_ROUTES = [
   "/studio/journeys",
   "/studio/journeys/checkins",
   "/studio/journeys/onboardings",
-  "/studio/paths",
+  "/studio/library",
   "/studio/settings",
   "/studio/students",
   "/studio/tools",

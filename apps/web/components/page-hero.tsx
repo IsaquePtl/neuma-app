@@ -18,18 +18,10 @@ export function PageHero({
   return (
     <div
       className={cn(
-        "glass neuma-accent-top relative overflow-hidden rounded-3xl p-6 lg:p-7 animate-fade-up",
+        "glass relative overflow-hidden rounded-3xl p-6 lg:p-7 animate-fade-up",
         className,
       )}
     >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 opacity-70"
-        style={{
-          background:
-            "radial-gradient(90% 120% at 100% 0%, color-mix(in oklch, var(--neuma-blue) 26%, transparent), transparent 55%), radial-gradient(80% 120% at 0% 100%, color-mix(in oklch, var(--primary) 24%, transparent), transparent 55%)",
-        }}
-      />
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 -z-10 opacity-[0.04]"

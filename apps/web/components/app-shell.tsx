@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+
+import { requestJourneyEditLeave } from "@/lib/journey-path/edit-guard-store";
 import {
   Users,
   House,
@@ -25,6 +27,7 @@ import {
   MentorMobileDrawer,
   type MentorDrawerItem,
 } from "@/components/mentor-mobile-drawer";
+import { NavCountBadge } from "@/components/nav-count-badge";
 import { ScreenLoader } from "@/components/screen-loader";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
@@ -66,9 +69,10 @@ const mentorNavDesktop: NavItem[] = [
   },
   {
     label: "Biblioteca",
-    href: "/studio/paths",
+    href: "/studio/library",
     icon: Library,
-    match: (p) => p.startsWith("/studio/paths"),
+    match: (p) =>
+      p.startsWith("/studio/library") || p.startsWith("/studio/paths"),
   },
   {
     label: "Calendário",
@@ -140,7 +144,7 @@ const MENTOR_ROOT_PATHS = new Set([
   "/studio/journeys",
   "/studio/journeys/checkins",
   "/studio/journeys/onboardings",
-  "/studio/paths",
+  "/studio/library",
   "/studio/calendar",
   "/studio/agent",
   "/studio/tools",
@@ -169,8 +173,15 @@ function shellBackHref(
   }
 
   if (pathname.startsWith("/studio/students/")) return "/studio/students";
-  if (/^\/studio\/journeys\/[^/]+$/.test(pathname)) return "/studio/journeys";
-  if (pathname.startsWith("/studio/paths/")) return "/studio/paths";
+  if (/^\/studio\/journeys\/[^/]+(\/edit)?$/.test(pathname)) {
+    return "/studio/journeys";
+  }
+  if (
+    pathname.startsWith("/studio/library/") ||
+    pathname.startsWith("/studio/paths/")
+  ) {
+    return "/studio/library";
+  }
   if (pathname.startsWith("/studio/checkins")) {
     const from = searchParams?.get("from");
     const student = searchParams?.get("student");
@@ -223,7 +234,10 @@ export function AppShell({
   const searchParams = useSearchParams();
   const router = useRouter();
   const [navPending, startNavTransition] = useTransition();
-  const nav = role === "mentor" ? mentorNavDesktop : studentNav;
+  const nav =
+    role === "mentor"
+      ? [...mentorNavDesktop, ...mentorExtraNav]
+      : studentNav;
   /** Menubar: sem Recursos (fica só na sidebar). */
   const mobileNav =
     role === "mentor"
@@ -238,14 +252,16 @@ export function AppShell({
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [badges, setBadges] = useState({
     checkins: badgeCounts?.checkins ?? 0,
+    onboardings: 0,
     proposals: badgeCounts?.proposals ?? 0,
   });
 
   useEffect(() => {
-    setBadges({
+    setBadges((prev) => ({
+      ...prev,
       checkins: badgeCounts?.checkins ?? 0,
       proposals: badgeCounts?.proposals ?? 0,
-    });
+    }));
   }, [badgeCounts?.checkins, badgeCounts?.proposals]);
 
   useEffect(() => {
@@ -269,6 +285,8 @@ export function AppShell({
     };
   }, [hydrateBadges, role]);
 
+  const journeysBadge = badges.checkins + badges.onboardings;
+
   const mobileItems = useMemo<MobileNavItem[]>(() => {
     const items: MobileNavItem[] = mobileNav.map((item) => ({
       label: item.label,
@@ -276,12 +294,13 @@ export function AppShell({
       icon: item.icon,
       match: item.match,
       badge:
-        (item.href === "/session" || item.href === "/studio/journeys") &&
-        badges.checkins
-          ? badges.checkins
-          : item.href === "/studio/agent" && badges.proposals
-            ? badges.proposals
-            : undefined,
+        item.href === "/studio/journeys" && journeysBadge
+          ? journeysBadge
+          : item.href === "/session" && badges.checkins
+            ? badges.checkins
+            : item.href === "/studio/agent" && badges.proposals
+              ? badges.proposals
+              : undefined,
     }));
     items.push({
       label: "Perfil",
@@ -292,7 +311,7 @@ export function AppShell({
       profileEmail: email,
     });
     return items;
-  }, [mobileNav, settingsHref, name, email, avatarUrl, badges]);
+  }, [mobileNav, settingsHref, name, email, avatarUrl, badges, journeysBadge]);
 
   const mentorDrawerItems = useMemo<MentorDrawerItem[]>(() => {
     if (role !== "mentor") return [];
@@ -305,8 +324,8 @@ export function AppShell({
       icon: item.icon,
       match: item.match,
       badge:
-        item.href === "/studio/journeys" && badges.checkins
-          ? badges.checkins
+        item.href === "/studio/journeys" && journeysBadge
+          ? journeysBadge
           : item.href === "/studio/agent" && badges.proposals
             ? badges.proposals
             : undefined,
@@ -322,7 +341,7 @@ export function AppShell({
       profileEmail: email,
     });
     return core;
-  }, [role, settingsHref, name, email, avatarUrl, badges]);
+  }, [role, settingsHref, name, email, avatarUrl, badges, journeysBadge]);
 
   const studentDrawerItems = useMemo<MentorDrawerItem[]>(() => {
     if (role !== "student") return [];
@@ -413,6 +432,12 @@ export function AppShell({
     }
   }
 
+  function onBackClick(href: string) {
+    void requestJourneyEditLeave(href).then((proceed) => {
+      if (proceed) onNavClick(href);
+    });
+  }
+
   return (
     <div className="relative flex min-h-full flex-1 flex-col desktop:flex-row">
       <aside className="neuma-enter fixed left-0 top-0 z-30 hidden h-dvh w-64 p-3 desktop:block">
@@ -435,12 +460,13 @@ export function AppShell({
               const active = item.match(pathname);
               const Icon = item.icon;
               const badge =
-                    (item.href === "/session" || item.href === "/studio/journeys") &&
-                    badges.checkins
-                      ? badges.checkins
-                      : item.href === "/studio/agent" && badges.proposals
-                        ? badges.proposals
-                        : 0;
+                item.href === "/studio/journeys" && journeysBadge
+                  ? journeysBadge
+                  : item.href === "/session" && badges.checkins
+                    ? badges.checkins
+                    : item.href === "/studio/agent" && badges.proposals
+                      ? badges.proposals
+                      : 0;
               return (
                 <Link
                   key={item.href}
@@ -459,16 +485,7 @@ export function AppShell({
                 >
                   <span className="relative">
                     <Icon className="size-[18px]" />
-                    {badge > 0 ? (
-                      <span
-                        className={cn(
-                          "absolute -right-2 -top-1.5 grid min-w-4 place-items-center rounded-full px-1 text-[9px] font-semibold text-white",
-                          active ? "bg-white/25" : "bg-[var(--neuma-coral)]",
-                        )}
-                      >
-                        {badge > 9 ? "9+" : badge}
-                      </span>
-                    ) : null}
+                    <NavCountBadge count={badge} active={active} />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block">{item.label}</span>
@@ -569,7 +586,7 @@ export function AppShell({
               prefetch
               onClick={(e) => {
                 e.preventDefault();
-                onNavClick(backHref);
+                onBackClick(backHref);
               }}
               className="ml-0.5 grid size-12 place-items-center rounded-full text-foreground transition-colors active:bg-white/10"
             >
@@ -596,7 +613,7 @@ export function AppShell({
                     prefetch
                     onClick={(e) => {
                       e.preventDefault();
-                      onNavClick(backHref);
+                      onBackClick(backHref);
                     }}
                     className="-ml-2 inline-grid size-12 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
                   >

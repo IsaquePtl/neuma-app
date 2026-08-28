@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ClipboardList, Route, Sparkles } from "lucide-react";
 
+import { NavCountBadge } from "@/components/nav-count-badge";
+import { useMentorBadgeCounts } from "@/lib/mentor-badges-client";
 import { cn } from "@/lib/utils";
 
 const TABS = [
@@ -11,6 +13,7 @@ const TABS = [
     href: "/studio/journeys",
     label: "Percursos",
     icon: Route,
+    badgeKey: null,
     match: (p: string) =>
       p === "/studio/journeys" ||
       (/^\/studio\/journeys\/[^/]+$/.test(p) &&
@@ -21,24 +24,33 @@ const TABS = [
     href: "/studio/journeys/checkins",
     label: "Check-ins",
     icon: ClipboardList,
+    badgeKey: "checkins" as const,
     match: (p: string) => p.startsWith("/studio/journeys/checkins"),
   },
   {
     href: "/studio/journeys/onboardings",
     label: "Onboardings",
     icon: Sparkles,
+    badgeKey: "onboardings" as const,
     match: (p: string) => p.startsWith("/studio/journeys/onboardings"),
   },
 ] as const;
 
 export function JourneysTabs() {
   const pathname = usePathname();
+  const badges = useMentorBadgeCounts();
 
   return (
     <nav className="flex flex-wrap gap-1 border-b border-white/10 pb-px">
       {TABS.map((tab) => {
         const Icon = tab.icon;
         const active = tab.match(pathname);
+        const badge =
+          tab.badgeKey === "checkins"
+            ? badges.checkins
+            : tab.badgeKey === "onboardings"
+              ? badges.onboardings
+              : 0;
         return (
           <Link
             key={tab.href}
@@ -50,7 +62,10 @@ export function JourneysTabs() {
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <Icon className="size-3.5" />
+            <span className="relative">
+              <Icon className="size-3.5" />
+              <NavCountBadge count={badge} active={active} />
+            </span>
             {tab.label}
           </Link>
         );

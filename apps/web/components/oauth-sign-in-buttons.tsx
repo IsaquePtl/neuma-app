@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 
-import { createClient } from "@/lib/supabase/client";
 import { getBrowserAppOrigin } from "@/lib/auth/app-origin";
 import {
   parseAge,
@@ -10,6 +9,11 @@ import {
   type SignupProfileDraft,
   writeSignupProfileDraft,
 } from "@/lib/auth/signup-profile";
+import {
+  setSignupFinishingCookie,
+  writeSignupWizardStep,
+} from "@/lib/auth/signup-wizard";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -57,13 +61,14 @@ export function OAuthSignInButtons({
   nextPath = "/",
   dividerLabel = "ou continuar com",
   getSignupDraft,
+  onBeforeRedirect,
 }: {
-  /** login = só contas existentes; signup = criar conta (com formulário). */
   intent?: "login" | "signup";
   nextPath?: string;
   dividerLabel?: string;
-  /** Se definido (signup), exige rascunho válido antes do OAuth. */
   getSignupDraft?: () => SignupProfileDraft | null;
+  /** Chamado antes do redirect OAuth (ex.: guardar passo do wizard). */
+  onBeforeRedirect?: () => void;
 } = {}) {
   const [pending, setPending] = useState<OAuthProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -85,16 +90,19 @@ export function OAuthSignInButtons({
         return;
       }
       writeSignupProfileDraft(draft);
+      writeSignupWizardStep("profile");
+      setSignupFinishingCookie();
+      onBeforeRedirect?.();
     }
 
     const supabase = createClient();
     const redirectTo = `${getBrowserAppOrigin()}/auth/callback?intent=${intent}&next=${encodeURIComponent(nextPath)}`;
 
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+    const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
         redirectTo,
-        // Força o seletor de contas (senão o Google reutiliza a sessão e “salta” o ecrã).
+        skipBrowserRedirect: true,
         ...(provider === "google"
           ? { queryParams: { prompt: "select_account" } }
           : {}),
@@ -102,50 +110,56 @@ export function OAuthSignInButtons({
       },
     });
 
-    if (oauthError) {
+    if (oauthError || !data?.url) {
       setPending(null);
       setError("Não foi possível iniciar sessão. Tenta outra opção.");
+      return;
     }
+
+    // iOS/Android PWA: redirect na mesma janela mantém regresso ao mesmo origin
+    // (não há API web para OAuth 100% in-app sem browser chrome no iPhone).
+    requestAnimationFrame(() => {
+      window.location.assign(data.url);
+    });
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <div className="h-px flex-1 bg-white/10" />
-        <span className="text-sm text-muted-foreground">{dividerLabel}</span>
-        <div className="h-px flex-1 bg-white/10" />
-      </div>
-      <Button
-        type="button"
-        variant="outline"
-        disabled={pending !== null}
-        onClick={() => signIn("google")}
-        className={OAUTH_BUTTON_CLASS}
-      >
-        <GoogleIcon />
-        {pending === "google" ? "A redirecionar…" : "Google"}
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        disabled
-        aria-disabled="true"
-        title="Em breve"
-        className={cn(OAUTH_BUTTON_CLASS, "cursor-not-allowed opacity-40")}
-      >
-        <AppleIcon />
-        Apple
-      </Button>
-      {error ? (
-        <p className="text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
+        <div className="flex items-center gap-3">
+          <div className="h-px flex-1 bg-white/10" />
+          <span className="text-sm text-muted-foreground">{dividerLabel}</span>
+          <div className="h-px flex-1 bg-white/10" />
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={pending !== null}
+          onClick={() => signIn("google")}
+          className={OAUTH_BUTTON_CLASS}
+        >
+          <GoogleIcon />
+          {pending === "google" ? "A abrir…" : "Google"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled
+          aria-disabled="true"
+          title="Em breve"
+          className={cn(OAUTH_BUTTON_CLASS, "cursor-not-allowed opacity-40")}
+        >
+          <AppleIcon />
+          Apple
+        </Button>
+        {error ? (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
     </div>
   );
 }
 
-/** Helpers reutilizados no formulário de signup para validar o draft OAuth. */
 export function buildSignupDraftFromFields(fields: {
   firstName: string;
   lastName: string;

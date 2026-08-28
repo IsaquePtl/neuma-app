@@ -1,9 +1,11 @@
-import { Metronome } from "@/components/metronome";
+import { AdminChordBuilders } from "@/components/admin-chord-builders";
 import { HarmonicField } from "@/components/harmonic-field";
-import { PianoChordBuilder } from "@/components/piano-chord-builder";
-import { GuitarChordBuilder } from "@/components/guitar-chord-builder";
+import { Metronome } from "@/components/metronome";
+import { getChordVoicingOverrides } from "@/lib/actions/chord-overrides";
 
-export default function MentorToolsPage() {
+export default async function MentorToolsPage() {
+  const initialOverrides = await getChordVoicingOverrides();
+
   return (
     <div className="grid w-full grid-cols-1 gap-6 min-[1360px]:grid-cols-2 min-[1360px]:items-stretch">
       <div className="min-w-0 w-full min-[1360px]:flex min-[1360px]:h-full min-[1360px]:flex-col">
@@ -12,12 +14,7 @@ export default function MentorToolsPage() {
       <div className="min-w-0 w-full min-[1360px]:flex min-[1360px]:h-full min-[1360px]:flex-col">
         <HarmonicField />
       </div>
-      <div className="min-w-0 w-full min-[1360px]:flex min-[1360px]:h-full min-[1360px]:flex-col">
-        <PianoChordBuilder />
-      </div>
-      <div className="min-w-0 w-full min-[1360px]:flex min-[1360px]:h-full min-[1360px]:flex-col">
-        <GuitarChordBuilder />
-      </div>
+      <AdminChordBuilders initialOverrides={initialOverrides} />
     </div>
   );
 }

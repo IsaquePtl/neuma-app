@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {
+  ArrowRight,
   ClipboardList,
   ExternalLink,
   Inbox,
@@ -255,25 +256,26 @@ export function StudentPanorama({
             </div>
           </div>
         ) : (
-          <div className="space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 space-y-1">
+          <Link
+            href={`/studio/journeys/${path.id}`}
+            aria-label={`Abrir percurso ${path.title}`}
+            className="group flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3.5 transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <div className="flex items-start justify-between gap-3">
                 <h3 className="truncate text-base font-semibold">{path.title}</h3>
-                <p className="text-sm text-muted-foreground">
-                  {done}/{nodes.length} níveis
-                  {current ? ` · actual: ${current.title}` : ""}
-                </p>
+                <PathStatusBadge status={path.status} />
               </div>
-              <PathStatusBadge status={path.status} />
+              <p className="text-sm text-muted-foreground">
+                {done}/{nodes.length} níveis
+                {current ? ` · actual: ${current.title}` : ""}
+              </p>
             </div>
-            <Button
-              render={<Link href={`/studio/journeys/${path.id}`} />}
-              nativeButton={false}
-              className="w-full gap-1.5"
-            >
-              Abrir percurso <ExternalLink className="size-3.5" />
-            </Button>
-          </div>
+            <ArrowRight
+              aria-hidden
+              className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-foreground"
+            />
+          </Link>
         )}
       </Card>
     </div>

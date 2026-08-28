@@ -74,7 +74,7 @@ export async function createSignupAccount(
     email,
     password,
     options: {
-      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent("/login/signup?profile=1")}`,
+      emailRedirectTo: `${origin}/auth/callback?intent=signup&next=${encodeURIComponent("/login/signup")}`,
       data: userMeta,
     },
   });

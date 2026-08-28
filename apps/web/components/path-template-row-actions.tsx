@@ -56,7 +56,7 @@ export function PathTemplateRowActions({
     <>
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
         <Button
-          render={<Link href={`/studio/paths?compose=${template.id}`} />}
+          render={<Link href={`/studio/library?compose=${template.id}`} />}
           nativeButton={false}
           size="sm"
           variant="ghost"

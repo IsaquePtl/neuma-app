@@ -803,6 +803,44 @@ export interface Database {
           },
         ];
       };
+      chord_voicing_overrides: {
+        Row: {
+          id: string;
+          instrument: "piano" | "guitar";
+          chord_key: string;
+          voicing_id: string;
+          payload: Json;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          instrument: "piano" | "guitar";
+          chord_key: string;
+          voicing_id?: string;
+          payload: Json;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          instrument?: "piano" | "guitar";
+          chord_key?: string;
+          voicing_id?: string;
+          payload?: Json;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "chord_voicing_overrides_updated_by_fkey";
+            columns: ["updated_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       library_assets: {
         Row: {
           id: string;

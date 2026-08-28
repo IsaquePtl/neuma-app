@@ -112,6 +112,7 @@ function TodoRow({ item }: { item: StudentTodoItem }) {
     <li>
       <Link
         href={item.href}
+        prefetch={item.href === "/onboarding"}
         className="group flex min-h-[4.25rem] items-center rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3 transition-colors hover:bg-white/[0.06]"
       >
         <div className="flex w-full items-center justify-between gap-2">

@@ -4,6 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import {
+  addWeeksToDate,
+  resolvePathSchedule,
+  segmentNodeTimeline,
+  weeksBetweenDates,
+} from "@/lib/path-period";
 import type {
   NodeKind,
   PathStatus,
@@ -25,41 +31,72 @@ async function requireMentor() {
   return { supabase, user };
 }
 
+async function segmentTemplateNodes(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  templateId: string,
+  startDate: string,
+  endDate: string,
+) {
+  const { data: nodes } = await supabase
+    .from("path_template_nodes")
+    .select("id, order_index, duration_weeks")
+    .eq("template_id", templateId)
+    .order("order_index", { ascending: true });
+
+  if (!nodes?.length) return;
+
+  const totalWeeks = weeksBetweenDates(startDate, endDate);
+  const segments = segmentNodeTimeline(
+    nodes.length,
+    totalWeeks,
+    nodes.map((node) => node.duration_weeks),
+  );
+
+  await Promise.all(
+    nodes.map((node, i) => {
+      const segment = segments[i];
+      return supabase
+        .from("path_template_nodes")
+        .update({
+          week_number: segment.week_number,
+          duration_weeks: segment.duration_weeks,
+        })
+        .eq("id", node.id);
+    }),
+  );
+}
+
 export async function upsertPathTemplate(formData: FormData) {
   const { supabase, user } = await requireMentor();
   const id = (formData.get("id") as string) || null;
   const now = new Date().toISOString();
 
-  const startDate = ((formData.get("start_date") as string) || "").trim() || null;
   const periodRaw = (formData.get("period_months") as string) || "";
   const periodMonths = periodRaw ? Number(periodRaw) : null;
-  let endDate: string | null =
-    ((formData.get("end_date") as string) || "").trim() || null;
-  let durationLabel =
-    ((formData.get("duration_label") as string) || "").trim() || null;
-
-  if (startDate && periodMonths && periodMonths > 0) {
-    const start = new Date(`${startDate}T12:00:00`);
-    const end = new Date(start);
-    end.setMonth(end.getMonth() + periodMonths);
-    endDate = end.toISOString().slice(0, 10);
-    durationLabel = `${periodMonths} ${periodMonths === 1 ? "mês" : "meses"}`;
-  }
+  const schedule = resolvePathSchedule({
+    startDate: ((formData.get("start_date") as string) || "").trim() || null,
+    periodMonths: Number.isFinite(periodMonths) ? periodMonths : null,
+    durationLabel:
+      ((formData.get("duration_label") as string) || "").trim() || null,
+    endDate: ((formData.get("end_date") as string) || "").trim() || null,
+  });
 
   const payload = {
     title: (formData.get("title") as string)?.trim() || "Template",
     description: ((formData.get("description") as string) || "").trim() || null,
     goal: ((formData.get("goal") as string) || "").trim() || null,
-    duration_label: durationLabel,
+    duration_label: schedule.durationLabel,
     suggested_node_count: formData.get("suggested_node_count")
       ? Number(formData.get("suggested_node_count"))
       : null,
     status: ((formData.get("status") as PathTemplateStatus) || "draft"),
-    start_date: startDate,
-    end_date: endDate,
-    period_months: periodMonths && periodMonths > 0 ? periodMonths : null,
+    start_date: schedule.startDate,
+    end_date: schedule.endDate,
+    period_months: schedule.periodMonths,
     updated_at: now,
   };
+
+  let templateId = id;
 
   if (id) {
     const { error } = await supabase
@@ -67,7 +104,8 @@ export async function upsertPathTemplate(formData: FormData) {
       .update(payload)
       .eq("id", id);
     if (error) throw new Error(error.message);
-    revalidatePath(`/studio/paths/templates/${id}`);
+    templateId = id;
+    revalidatePath(`/studio/library/templates/${id}`);
   } else {
     const { data, error } = await supabase
       .from("path_templates")
@@ -75,14 +113,24 @@ export async function upsertPathTemplate(formData: FormData) {
       .select("id")
       .single();
     if (error) throw new Error(error.message);
-    revalidatePath("/studio/paths");
+    templateId = data.id;
+    revalidatePath("/studio/library");
     revalidatePath("/studio/journeys");
-    return data.id as string;
   }
 
-  revalidatePath("/studio/paths");
+  if (templateId && schedule.startDate && schedule.endDate) {
+    await segmentTemplateNodes(
+      supabase,
+      templateId,
+      schedule.startDate,
+      schedule.endDate,
+    );
+    revalidatePath(`/studio/library/templates/${templateId}`);
+  }
+
+  revalidatePath("/studio/library");
   revalidatePath("/studio/journeys");
-  return id;
+  return templateId;
 }
 
 export async function deletePathTemplate(formData: FormData) {
@@ -97,11 +145,86 @@ export async function deletePathTemplate(formData: FormData) {
     })
     .eq("id", id);
   if (error) throw new Error(error.message);
-  revalidatePath("/studio/paths");
+  revalidatePath("/studio/library");
   revalidatePath("/studio/journeys");
-  if (formData.get("redirect") !== "0") {
-    redirect("/studio/journeys");
+
+  const redirectTo = (formData.get("redirect_to") as string)?.trim();
+  if (redirectTo?.startsWith("/studio/")) {
+    redirect(redirectTo);
   }
+  if (formData.get("redirect") !== "0") {
+    redirect("/studio/library");
+  }
+}
+
+/** Copia um percurso existente para a lista de templates. */
+export async function savePathAsTemplate(formData: FormData) {
+  const { supabase, user } = await requireMentor();
+  const pathId = (formData.get("path_id") as string)?.trim();
+  if (!pathId) throw new Error("Percurso em falta");
+
+  const [{ data: path, error: pathErr }, { data: nodes, error: nodesErr }] =
+    await Promise.all([
+      supabase
+        .from("paths")
+        .select(
+          "id, title, description, goal, duration_label, start_date, end_date",
+        )
+        .eq("id", pathId)
+        .maybeSingle(),
+      supabase
+        .from("nodes")
+        .select(
+          "title, description, kind, week_number, order_index, resource_url",
+        )
+        .eq("path_id", pathId)
+        .order("order_index", { ascending: true }),
+    ]);
+
+  if (pathErr || !path) throw new Error(pathErr?.message ?? "Percurso não encontrado");
+  if (nodesErr) throw new Error(nodesErr.message);
+
+  const now = new Date().toISOString();
+  const { data: template, error: templateErr } = await supabase
+    .from("path_templates")
+    .insert({
+      title: path.title,
+      description: path.description,
+      goal: path.goal,
+      duration_label: path.duration_label,
+      start_date: path.start_date,
+      end_date: path.end_date,
+      suggested_node_count: nodes?.length ?? null,
+      status: "draft",
+      created_by: user.id,
+      updated_at: now,
+    })
+    .select("id")
+    .single();
+
+  if (templateErr || !template) {
+    throw new Error(templateErr?.message ?? "Falha ao criar template");
+  }
+
+  if (nodes?.length) {
+    const rows = nodes.map((n, i) => ({
+      template_id: template.id,
+      title: n.title,
+      description: n.description,
+      kind: n.kind,
+      week_number: n.week_number,
+      order_index: n.order_index ?? i,
+      default_resource_url: n.resource_url,
+    }));
+    const { error: insertErr } = await supabase
+      .from("path_template_nodes")
+      .insert(rows);
+    if (insertErr) throw new Error(insertErr.message);
+  }
+
+  revalidatePath("/studio/journeys");
+  revalidatePath("/studio/library");
+  return template.id as string;
 }
 
 export async function setPathTemplateStatus(formData: FormData) {
@@ -113,9 +236,9 @@ export async function setPathTemplateStatus(formData: FormData) {
     .update({ status, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(error.message);
-  revalidatePath("/studio/paths");
+  revalidatePath("/studio/library");
   revalidatePath("/studio/journeys");
-  revalidatePath(`/studio/paths/templates/${id}`);
+  revalidatePath(`/studio/library/templates/${id}`);
 }
 
 export async function upsertTemplateNode(formData: FormData) {
@@ -162,8 +285,8 @@ export async function upsertTemplateNode(formData: FormData) {
     if (error) throw new Error(error.message);
   }
 
-  revalidatePath(`/studio/paths/templates/${templateId}`);
-  revalidatePath("/studio/paths");
+  revalidatePath(`/studio/library/templates/${templateId}`);
+  revalidatePath("/studio/library");
   revalidatePath("/studio/journeys");
 }
 
@@ -176,8 +299,8 @@ export async function deleteTemplateNode(formData: FormData) {
     .delete()
     .eq("id", id);
   if (error) throw new Error(error.message);
-  revalidatePath(`/studio/paths/templates/${templateId}`);
-  revalidatePath("/studio/paths");
+  revalidatePath(`/studio/library/templates/${templateId}`);
+  revalidatePath("/studio/library");
   revalidatePath("/studio/journeys");
 }
 
@@ -214,8 +337,8 @@ export async function moveTemplateNode(formData: FormData) {
     .update({ order_index: b.order_index })
     .eq("id", a.id);
 
-  revalidatePath(`/studio/paths/templates/${templateId}`);
-  revalidatePath("/studio/paths");
+  revalidatePath(`/studio/library/templates/${templateId}`);
+  revalidatePath("/studio/library");
   revalidatePath("/studio/journeys");
 }
 
@@ -229,7 +352,7 @@ export async function applyPathTemplate(formData: FormData) {
   const { data: template, error: tErr } = await supabase
     .from("path_templates")
     .select(
-      "id, title, description, goal, duration_label, path_template_nodes(id, order_index, title, description, kind, week_number, default_resource_url, library_asset_id, library_assets(url, body))",
+      "id, title, description, goal, duration_label, period_months, start_date, end_date, path_template_nodes(id, order_index, title, description, kind, week_number, duration_weeks, default_resource_url, library_asset_id, library_assets(url, body))",
     )
     .eq("id", templateId)
     .single();
@@ -243,11 +366,22 @@ export async function applyPathTemplate(formData: FormData) {
     template.description;
   const goal =
     ((formData.get("goal") as string) || "").trim() || template.goal;
-  const duration_label =
-    ((formData.get("duration_label") as string) || "").trim() ||
-    template.duration_label;
-  const start_date = (formData.get("start_date") as string) || null;
-  const end_date = (formData.get("end_date") as string) || null;
+
+  const periodRaw = (formData.get("period_months") as string) || "";
+  const periodMonths = periodRaw
+    ? Number(periodRaw)
+    : template.period_months;
+  const schedule = resolvePathSchedule({
+    startDate:
+      ((formData.get("start_date") as string) || "").trim() ||
+      template.start_date,
+    periodMonths: Number.isFinite(periodMonths) ? periodMonths : null,
+    durationLabel:
+      ((formData.get("duration_label") as string) || "").trim() ||
+      template.duration_label,
+    endDate:
+      ((formData.get("end_date") as string) || "").trim() || template.end_date,
+  });
 
   const { data: path, error: pErr } = await supabase
     .from("paths")
@@ -257,9 +391,9 @@ export async function applyPathTemplate(formData: FormData) {
       title,
       description,
       goal,
-      duration_label,
-      start_date,
-      end_date,
+      duration_label: schedule.durationLabel,
+      start_date: schedule.startDate,
+      end_date: schedule.endDate,
       status,
       source_template_id: template.id,
     })
@@ -281,17 +415,40 @@ export async function applyPathTemplate(formData: FormData) {
     : [];
 
   if (rawNodes.length > 0) {
+    let segments: ReturnType<typeof segmentNodeTimeline> | null = null;
+    if (schedule.startDate && schedule.endDate) {
+      const totalWeeks = weeksBetweenDates(
+        schedule.startDate,
+        schedule.endDate,
+      );
+      segments = segmentNodeTimeline(
+        rawNodes.length,
+        totalWeeks,
+        rawNodes.map((n) => n.duration_weeks),
+      );
+    }
+
     const rows = rawNodes.map((n, i) => {
       const asset = Array.isArray(n.library_assets)
         ? n.library_assets[0]
         : n.library_assets;
       const status: "active" | "locked" = i === 0 ? "active" : "locked";
+      const segment = segments?.[i];
+      const week_number = segment?.week_number ?? n.week_number;
+      const due_date =
+        schedule.startDate && segment
+          ? addWeeksToDate(
+              schedule.startDate,
+              segment.week_number + segment.duration_weeks - 1,
+            )
+          : null;
       return {
         path_id: path.id,
         title: n.title,
         description: n.description,
         kind: n.kind,
-        week_number: n.week_number,
+        week_number,
+        due_date,
         order_index: i,
         status,
         resource_url: asset?.url ?? n.default_resource_url ?? null,
@@ -307,6 +464,6 @@ export async function applyPathTemplate(formData: FormData) {
   revalidatePath("/studio/students");
   revalidatePath("/home");
   revalidatePath("/session");
-  revalidatePath("/studio/paths");
+  revalidatePath("/studio/library");
   revalidatePath("/studio/journeys");
 }

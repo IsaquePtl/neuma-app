@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 import type {
@@ -42,8 +43,8 @@ function slugify(value: string) {
 }
 
 function revalidateLibrary() {
-  revalidatePath("/studio/paths");
-  revalidatePath("/studio/paths", "layout");
+  revalidatePath("/studio/library");
+  revalidatePath("/studio/library", "layout");
   revalidatePath("/studio/agent");
 }
 
@@ -52,13 +53,10 @@ export async function upsertLibraryAsset(formData: FormData) {
   const id = (formData.get("id") as string) || null;
   const now = new Date().toISOString();
   const usage = ((formData.get("usage") as LibraryAssetUsage) || "lesson");
-  const topicId =
-    usage === "lesson"
-      ? ((formData.get("topic_id") as string) || "").trim() || null
-      : null;
+  const topicId = ((formData.get("topic_id") as string) || "").trim() || null;
 
-  if (usage === "lesson" && !topicId) {
-    throw new Error("Escolhe categoria e tópico para uma aula");
+  if (!topicId) {
+    throw new Error("Escolhe categoria e tópico");
   }
 
   // Mentor save = confirmação → entra na Biblioteca como ready.
@@ -112,6 +110,11 @@ export async function archiveLibraryAsset(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidateLibrary();
+
+  const redirectTo = (formData.get("redirect_to") as string)?.trim();
+  if (redirectTo?.startsWith("/studio/")) {
+    redirect(redirectTo);
+  }
 }
 
 export async function deleteLibraryAsset(formData: FormData) {
@@ -120,6 +123,11 @@ export async function deleteLibraryAsset(formData: FormData) {
   const { error } = await supabase.from("library_assets").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidateLibrary();
+
+  const redirectTo = (formData.get("redirect_to") as string)?.trim();
+  if (redirectTo?.startsWith("/studio/")) {
+    redirect(redirectTo);
+  }
 }
 
 export async function createLibraryCategory(formData: FormData) {

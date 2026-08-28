@@ -1,9 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  initialPeriodMonths,
+  PathScheduleFields,
+  PeriodMonthsInput,
+} from "@/components/path-schedule-fields";
 import { upsertPath } from "@/lib/actions/paths";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +49,27 @@ export function PathForm({
   const [pending, startTransition] = useTransition();
   const isEdit = Boolean(path);
 
+  const [startDate, setStartDate] = useState(path?.start_date ?? "");
+  const [periodMonths, setPeriodMonths] = useState(() =>
+    initialPeriodMonths(
+      path?.duration_label,
+      path?.start_date,
+      path?.end_date,
+    ),
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    setStartDate(path?.start_date ?? "");
+    setPeriodMonths(
+      initialPeriodMonths(
+        path?.duration_label,
+        path?.start_date,
+        path?.end_date,
+      ),
+    );
+  }, [open, path?.duration_label, path?.start_date, path?.end_date]);
+
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -53,7 +79,7 @@ export function PathForm({
         toast.success(isEdit ? "Percurso atualizado" : "Percurso criado");
         setOpen(false);
       } catch {
-        toast.error("Nao foi possivel guardar o percurso");
+        toast.error("Não foi possível guardar o percurso");
       }
     });
   }
@@ -95,7 +121,7 @@ export function PathForm({
           {path ? <input type="hidden" name="id" value={path.id} /> : null}
 
           <div className="space-y-2">
-            <Label htmlFor="path-title">Titulo</Label>
+            <Label htmlFor="path-title">Título</Label>
             <Input
               id="path-title"
               name="title"
@@ -107,7 +133,7 @@ export function PathForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="path-description">Descricao</Label>
+            <Label htmlFor="path-description">Descrição</Label>
             <Textarea
               id="path-description"
               name="description"
@@ -123,19 +149,19 @@ export function PathForm({
               id="path-goal"
               name="goal"
               defaultValue={path?.goal ?? ""}
-              placeholder="Onde queremos chegar — ex: tocar 3 standards com solidez ritmica"
+              placeholder="Onde queremos chegar — ex: tocar 3 standards com solidez rítmica"
               rows={3}
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="path-duration">Duracao</Label>
-              <Input
+              <Label htmlFor="path-duration">Duração</Label>
+              <PeriodMonthsInput
                 id="path-duration"
-                name="duration_label"
-                defaultValue={path?.duration_label ?? ""}
-                placeholder="6 meses"
+                value={periodMonths}
+                disabled={pending}
+                onChange={setPeriodMonths}
               />
             </div>
             <div className="space-y-2">
@@ -149,31 +175,18 @@ export function PathForm({
                 <option value="draft">Rascunho</option>
                 <option value="active">Ativo</option>
                 <option value="paused">Em pausa</option>
-                <option value="completed">Concluido</option>
+                <option value="completed">Concluído</option>
               </select>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="path-start">Inicio</Label>
-              <Input
-                id="path-start"
-                name="start_date"
-                type="date"
-                defaultValue={path?.start_date ?? ""}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="path-end">Fim previsto</Label>
-              <Input
-                id="path-end"
-                name="end_date"
-                type="date"
-                defaultValue={path?.end_date ?? ""}
-              />
-            </div>
-          </div>
+          <PathScheduleFields
+            startDate={startDate}
+            periodMonths={periodMonths}
+            onStartDateChange={setStartDate}
+            onPeriodMonthsChange={setPeriodMonths}
+            disabled={pending}
+          />
 
           <DialogFooter>
             <Button type="submit" disabled={pending} className="w-full sm:w-auto">

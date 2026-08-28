@@ -10,7 +10,10 @@ import {
   TallyEmbed,
   type TallyFormSubmittedPayload,
 } from "@/components/tally-embed";
-import { confirmOnboardingSubmission } from "@/lib/actions/onboarding";
+import {
+  confirmOnboardingSubmission,
+  getOnboardingSubmissionStatus,
+} from "@/lib/actions/onboarding";
 import { cn } from "@/lib/utils";
 
 const ONBOARDING_FORM_ID =
@@ -32,24 +35,34 @@ type Phase = "form" | "fadingOut" | "thankYou";
  */
 export function OnboardingNeumaEmbed({
   studentId,
-  alreadySubmitted = false,
   backHref = "/home",
   backLabel = "Ir para a app",
 }: {
   studentId?: string | null;
-  alreadySubmitted?: boolean;
   backHref?: string;
   backLabel?: string;
 }) {
   const router = useRouter();
   const isLoggedIn = Boolean(studentId);
-  const [ready, setReady] = useState(alreadySubmitted || isLoggedIn);
-  const [phase, setPhase] = useState<Phase>(
-    alreadySubmitted ? "thankYou" : "form",
-  );
-  const [thanksVisible, setThanksVisible] = useState(alreadySubmitted);
-
+  const [ready, setReady] = useState(!isLoggedIn);
+  const [phase, setPhase] = useState<Phase>("form");
+  const [thanksVisible, setThanksVisible] = useState(false);
+  const [returningSubmitted, setReturningSubmitted] = useState(false);
   const [holdAfterSubmit, setHoldAfterSubmit] = useState(false);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    let cancelled = false;
+    void getOnboardingSubmissionStatus().then((submitted) => {
+      if (cancelled || !submitted) return;
+      setReturningSubmitted(true);
+      setPhase("thankYou");
+      setThanksVisible(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn]);
 
   useEffect(() => {
     if (ready || isLoggedIn) return;
@@ -183,7 +196,7 @@ export function OnboardingNeumaEmbed({
           <CheckCircle2 className="size-12 text-foreground" />
           <div className="space-y-2">
             <h1 className="font-heading text-2xl font-semibold tracking-tight">
-              {alreadySubmitted
+              {returningSubmitted
                 ? "Já preencheste o onboarding"
                 : "Onboarding enviado"}
             </h1>

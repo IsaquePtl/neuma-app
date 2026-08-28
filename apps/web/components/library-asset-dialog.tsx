@@ -121,7 +121,7 @@ export function LibraryAssetDialog({
     fd.set("storage_path", storagePath);
     fd.set("kind", kind);
     fd.set("usage", usage);
-    fd.set("topic_id", usage === "lesson" ? topicId : "");
+    fd.set("topic_id", topicId);
     startTransition(async () => {
       try {
         await upsertLibraryAsset(fd);
@@ -187,26 +187,19 @@ export function LibraryAssetDialog({
             {isEdit ? "Editar item" : "Novo item na biblioteca"}
           </DialogTitle>
           <DialogDescription>
-            Aulas vão para a árvore Categoria → Tópico. Prática fica na secção
-            prática.
+            Itens vivem na árvore Categoria → Tópico. O tipo (aula, prática…)
+            define que níveis os podem usar.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
           {asset ? <input type="hidden" name="id" value={asset.id} /> : null}
 
           <div className="space-y-2">
-            <Label htmlFor="asset-usage">Uso</Label>
+            <Label htmlFor="asset-usage">Tipo de item</Label>
             <select
               id="asset-usage"
               value={usage}
-              onChange={(e) => {
-                const next = e.target.value as LibraryAssetUsage;
-                setUsage(next);
-                if (next === "practice") {
-                  setCategoryId("");
-                  setTopicId("");
-                }
-              }}
+              onChange={(e) => setUsage(e.target.value as LibraryAssetUsage)}
               className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
             >
               <option value="lesson">Aula</option>
@@ -214,48 +207,44 @@ export function LibraryAssetDialog({
             </select>
           </div>
 
-          {usage === "lesson" ? (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="asset-cat">Categoria</Label>
-                <select
-                  id="asset-cat"
-                  value={categoryId}
-                  onChange={(e) => {
-                    setCategoryId(e.target.value);
-                    setTopicId("");
-                  }}
-                  required
-                  className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
-                >
-                  <option value="">— escolher —</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="asset-topic">Tópico</Label>
-                <select
-                  id="asset-topic"
-                  value={topicId}
-                  onChange={(e) => setTopicId(e.target.value)}
-                  required
-                  disabled={!categoryId}
-                  className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm disabled:opacity-50"
-                >
-                  <option value="">— escolher —</option>
-                  {topicsForCategory.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </>
-          ) : null}
+          <div className="space-y-2">
+            <Label htmlFor="asset-cat">Categoria</Label>
+            <select
+              id="asset-cat"
+              value={categoryId}
+              onChange={(e) => {
+                setCategoryId(e.target.value);
+                setTopicId("");
+              }}
+              required
+              className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+            >
+              <option value="">— escolher —</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="asset-topic">Tópico</Label>
+            <select
+              id="asset-topic"
+              value={topicId}
+              onChange={(e) => setTopicId(e.target.value)}
+              required
+              disabled={!categoryId}
+              className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm disabled:opacity-50"
+            >
+              <option value="">— escolher —</option>
+              {topicsForCategory.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="asset-title">Título</Label>

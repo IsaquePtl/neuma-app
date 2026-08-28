@@ -1,14 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Camera, LogOut, Pencil } from "lucide-react";
+import { Camera, Check, LogOut, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
-import {
-  updateProfile,
-  uploadAvatar,
-  requestEmailChange,
-} from "@/lib/actions/profile";
+import { updateProfile, uploadAvatar } from "@/lib/actions/profile";
 import { logout } from "@/lib/actions/auth";
 import { prepareAvatarFile } from "@/lib/images/prepare-avatar";
 import {
@@ -19,7 +15,6 @@ import {
 } from "@/lib/social-links";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { profileInitials } from "@/components/user-avatar";
 
@@ -41,8 +36,8 @@ export function SettingsView({
   whatsapp?: string | null;
 }) {
   const [pending, startTransition] = useTransition();
+  const [bioPending, startBioTransition] = useTransition();
   const [avatarPending, startAvatarTransition] = useTransition();
-  const [emailOpen, setEmailOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [savedName, setSavedName] = useState(name ?? "");
@@ -69,6 +64,7 @@ export function SettingsView({
   const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const socialInputRef = useRef<HTMLInputElement>(null);
   const bioRef = useRef<HTMLTextAreaElement>(null);
+  const bioSectionRef = useRef<HTMLDivElement>(null);
 
   const displayAvatar = previewUrl ?? avatarUrl;
   const displayName = savedName.trim() || null;
@@ -96,13 +92,54 @@ export function SettingsView({
     if (editingSocial) socialInputRef.current?.focus();
   }, [editingSocial]);
 
-  useEffect(() => {
-    if (!editingBio) return;
-    const el = bioRef.current;
-    if (!el) return;
-    el.focus();
-    el.click();
-  }, [editingBio]);
+  function startBioEdit() {
+    setEditingBio(true);
+    requestAnimationFrame(() => {
+      const el = bioRef.current;
+      if (!el) return;
+      el.focus();
+      const len = el.value.length;
+      el.setSelectionRange(len, len);
+    });
+  }
+
+  function onBioBlur(e: React.FocusEvent) {
+    const related = e.relatedTarget as Node | null;
+    if (bioSectionRef.current?.contains(related)) return;
+    setDraftBio(savedBio);
+    setEditingBio(false);
+  }
+
+  function onCancelBio() {
+    setDraftBio(savedBio);
+    setEditingBio(false);
+    bioRef.current?.blur();
+  }
+
+  function onSaveBio() {
+    const trimmed = draftBio.trim();
+    if (trimmed === savedBio.trim()) {
+      setEditingBio(false);
+      return;
+    }
+
+    const fd = new FormData();
+    fd.set("bio", trimmed);
+
+    startBioTransition(async () => {
+      try {
+        await updateProfile(fd);
+        setSavedBio(trimmed);
+        setDraftBio(trimmed);
+        setEditingBio(false);
+        showStatus("Bio atualizada!");
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Não foi possível guardar a bio",
+        );
+      }
+    });
+  }
 
   function onSaveAll(e: React.FormEvent) {
     e.preventDefault();
@@ -169,44 +206,17 @@ export function SettingsView({
     });
   }
 
-  function onChangeEmail(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    startTransition(async () => {
-      try {
-        const msg = await requestEmailChange(fd);
-        showStatus(msg);
-        setEmailOpen(false);
-      } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : "Não foi possível alterar o email",
-        );
-      }
-    });
-  }
-
   return (
     <div
       className={cn(
-        "neuma-mobile-viewport flex w-full flex-col justify-start gap-3 overflow-hidden overscroll-none pt-0.5 pb-1",
-        "desktop:h-auto desktop:min-h-0 desktop:gap-8 desktop:overflow-visible desktop:pb-4",
+        "flex min-h-0 w-full flex-1 flex-col gap-3 overflow-hidden overscroll-none pt-0.5",
+        "desktop:h-auto desktop:min-h-0 desktop:flex-none desktop:gap-8 desktop:overflow-visible desktop:pb-4",
       )}
     >
       <header className="shrink-0 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="min-w-0 text-[1.75rem] font-bold leading-tight tracking-tight sm:text-3xl">
-            Perfil
-          </h1>
-          <form action={logout} className="shrink-0">
-            <Button
-              type="submit"
-              variant="ghost"
-              className="h-11 gap-2.5 px-4 text-base text-muted-foreground hover:text-destructive"
-            >
-              <LogOut className="size-5" /> Terminar sessão
-            </Button>
-          </form>
-        </div>
+        <h1 className="min-w-0 text-[1.75rem] font-bold leading-tight tracking-tight sm:text-3xl">
+          Perfil
+        </h1>
         <p className="text-sm text-muted-foreground">
           {role === "mentor" ? "A tua conta de mentor" : "A tua conta"}
         </p>
@@ -268,48 +278,81 @@ export function SettingsView({
             </p>
           ) : null}
 
-          <div className="flex w-full flex-col items-center">
-            <textarea
-              ref={bioRef}
-              id="bio"
-              name="bio"
-              value={draftBio}
-              onChange={(e) => setDraftBio(e.target.value)}
-              onBlur={() => setEditingBio(false)}
-              readOnly={!editingBio}
-              placeholder="Uma linha sobre ti…"
-              maxLength={280}
-              rows={2}
-              aria-label="Bio"
+          <div
+            ref={bioSectionRef}
+            className="flex w-full flex-col items-center"
+          >
+            <div
+              onClick={() => !editingBio && startBioEdit()}
               className={cn(
-                "mx-auto block h-[3.25rem] w-full max-w-sm resize-none overflow-hidden",
-                "border-0 bg-transparent p-0 text-center text-[0.9375rem] leading-relaxed",
-                "text-muted-foreground placeholder:text-muted-foreground/45",
-                "outline-none focus:text-foreground focus-visible:ring-0",
-                !editingBio && "cursor-default",
-              )}
-            />
-            <button
-              type="button"
-              aria-label="Editar bio"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setEditingBio(true)}
-              className={cn(
-                "mt-0.5 grid size-7 shrink-0 place-items-center rounded-md",
-                "text-muted-foreground/55 transition-colors",
-                "hover:text-muted-foreground",
+                "relative w-full max-w-sm rounded-xl border px-3 py-2.5",
+                "border-white/[0.06] transition-colors",
+                editingBio ? "border-white/10 pb-9" : "cursor-text",
               )}
             >
-              <Pencil className="size-3.5" strokeWidth={1.75} />
-            </button>
+              <textarea
+                ref={bioRef}
+                id="bio"
+                name="bio"
+                value={draftBio}
+                onChange={(e) => setDraftBio(e.target.value)}
+                onBlur={onBioBlur}
+                onFocus={() => !editingBio && setEditingBio(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    onCancelBio();
+                  }
+                }}
+                readOnly={!editingBio}
+                placeholder="Uma linha sobre ti…"
+                maxLength={280}
+                rows={2}
+                aria-label="Bio"
+                className={cn(
+                  "block w-full resize-none overflow-hidden bg-transparent",
+                  "text-center text-[0.9375rem] leading-relaxed outline-none",
+                  "placeholder:text-muted-foreground/45",
+                  editingBio
+                    ? "h-[3.25rem] cursor-text pr-8 text-foreground"
+                    : "h-[3.25rem] cursor-text text-muted-foreground",
+                )}
+              />
+              {editingBio ? (
+                <>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={onCancelBio}
+                    className="absolute bottom-2 left-3 text-xs text-muted-foreground/80 transition-colors hover:text-foreground"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={onSaveBio}
+                    disabled={bioPending}
+                    aria-label={bioPending ? "A guardar bio" : "Guardar bio"}
+                    className={cn(
+                      "absolute bottom-1.5 right-1.5 grid size-7 place-items-center rounded-full",
+                      "border border-white/10 bg-white/[0.06] text-muted-foreground",
+                      "transition-colors hover:bg-white/[0.1] hover:text-foreground",
+                      "disabled:cursor-not-allowed disabled:opacity-50",
+                    )}
+                  >
+                    <Check className="size-3.5" strokeWidth={2.5} />
+                  </button>
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="shrink-0 space-y-3 pt-5 desktop:pt-2">
+      <div className="mt-auto shrink-0 space-y-3 pt-3 desktop:mt-0 desktop:pt-2">
         <div className="space-y-2">
           <div className="space-y-2">
-            <Label htmlFor="full_name">Nome</Label>
             <Input
               id="full_name"
               name="full_name"
@@ -317,62 +360,19 @@ export function SettingsView({
               onChange={(e) => setDraftName(e.target.value)}
               autoComplete="name"
               placeholder="O teu nome"
+              aria-label="Nome"
               className="h-11 text-base"
             />
           </div>
 
-          <div className="flex items-end justify-between gap-2">
-            <Label htmlFor="email-display">Email</Label>
-            <button
-              type="button"
-              onClick={() => setEmailOpen((v) => !v)}
-              className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-            >
-              Alterar email
-            </button>
-          </div>
           <Input
             id="email-display"
             value={email}
             disabled
             readOnly
-            className="h-11 text-base"
+            aria-label="Email"
+            className="h-11 cursor-not-allowed text-base"
           />
-          {emailOpen ? (
-            <form
-              onSubmit={onChangeEmail}
-              className="space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-3"
-            >
-              <p className="text-xs text-muted-foreground">
-                Enviamos um link de confirmação para o novo endereço.
-              </p>
-              <Input
-                name="email"
-                type="email"
-                placeholder="novo@email.com"
-                required
-                autoComplete="email"
-                className="h-11 text-base"
-              />
-              <div className="flex gap-2">
-                <Button
-                  type="submit"
-                  disabled={pending}
-                  className="h-11 px-5 text-base"
-                >
-                  Confirmar
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => setEmailOpen(false)}
-                  className="h-11 px-5 text-base"
-                >
-                  Cancelar
-                </Button>
-              </div>
-            </form>
-          ) : null}
 
           <div className="flex flex-col gap-2 pt-0.5">
             <SocialRow
@@ -408,15 +408,26 @@ export function SettingsView({
           </div>
         </div>
 
-        <form onSubmit={onSaveAll}>
-          <Button
-            type="submit"
-            disabled={pending || !dirty}
-            className="h-11 w-full text-base font-semibold sm:w-auto sm:min-w-40"
-          >
-            {pending ? "A guardar…" : "Guardar"}
-          </Button>
-        </form>
+        <div className="flex flex-col items-start gap-2">
+          <form onSubmit={onSaveAll} className="w-full">
+            <Button
+              type="submit"
+              disabled={pending || !dirty}
+              className="h-11 w-full text-base font-semibold"
+            >
+              {pending ? "A guardar…" : "Guardar"}
+            </Button>
+          </form>
+          <form action={logout}>
+            <Button
+              type="submit"
+              variant="ghost"
+              className="h-9 gap-2 px-3 text-sm text-muted-foreground hover:text-destructive"
+            >
+              <LogOut className="size-4" /> Terminar sessão
+            </Button>
+          </form>
+        </div>
       </div>
     </div>
   );

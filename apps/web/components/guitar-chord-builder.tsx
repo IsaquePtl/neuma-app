@@ -4,8 +4,19 @@ import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+import {
+  ChordNoteEditorDialog,
+  type ChordNoteEditorState,
+} from "@/components/chord-note-editor-dialog";
 import { ChordBuilderControls } from "@/components/chord-builder-controls";
 import { brandAssets } from "@/lib/brand";
+import {
+  fingeringToOverridePayload,
+  guitarVoicingStorageId,
+  resolveGuitarFingeringWithOverrides,
+  type ChordOverrideMap,
+  type GuitarOverridePayload,
+} from "@/lib/music/chord-overrides";
 import {
   DEFAULT_CHORD_SPEC,
   GUITAR_STRING_LABELS,
@@ -30,24 +41,50 @@ const PAD_B = 10;
 const NUT_W = 5;
 const VIEW_W = PAD_L + NUT_W + BOARD_W + PAD_R;
 const VIEW_H = PAD_T + BOARD_H + PAD_B;
-export function GuitarChordBuilder() {
+
+type GuitarChordBuilderProps = {
+  editMode?: boolean;
+  overrides?: ChordOverrideMap;
+  onOverrideChange?: (
+    spec: ChordSpec,
+    voicingId: string,
+    payload: GuitarOverridePayload,
+  ) => void;
+};
+
+export function GuitarChordBuilder({
+  editMode = false,
+  overrides,
+  onOverrideChange,
+}: GuitarChordBuilderProps) {
   const [spec, setSpec] = useState<ChordSpec>(DEFAULT_CHORD_SPEC);
   const [voicingIndex, setVoicingIndex] = useState(0);
+  const [editorState, setEditorState] = useState<ChordNoteEditorState | null>(
+    null,
+  );
+  const [editorOpen, setEditorOpen] = useState(false);
 
-  const voicings = useMemo(() => resolveGuitarVoicings(spec), [spec]);
+  const defaultVoicings = useMemo(() => resolveGuitarVoicings(spec), [spec]);
+  const voicings = useMemo(() => {
+    if (!overrides) return defaultVoicings;
+    return resolveGuitarFingeringWithOverrides(spec, defaultVoicings, overrides);
+  }, [spec, defaultVoicings, overrides]);
 
   useEffect(() => {
     setVoicingIndex(0);
   }, [spec]);
 
   const safeIndex =
-    voicings.length === 0 ? 0 : ((voicingIndex % voicings.length) + voicings.length) % voicings.length;
+    voicings.length === 0
+      ? 0
+      : ((voicingIndex % voicings.length) + voicings.length) % voicings.length;
   const fingering = voicings[safeIndex] ?? {
     frets: [null, null, null, null, null, null],
     baseFret: 1,
     fretSpan: 3,
     source: "algorithmic" as const,
   };
+  const voicingId = guitarVoicingStorageId(fingering, safeIndex);
 
   const total = voicings.length;
   const canNavigate = total > 1;
@@ -65,6 +102,34 @@ export function GuitarChordBuilder() {
   const baseFret = fingering.baseFret ?? 1;
   const showPosition = baseFret > 0;
 
+  function openStringEditor(stringIdx: number) {
+    if (!editMode) return;
+    const fret = fingering.frets[stringIdx];
+    setEditorState({
+      kind: "guitar",
+      stringIdx,
+      state: fret == null ? "muted" : fret === 0 ? "open" : "fretted",
+      fret: fret != null && fret > 0 ? fret : 1,
+    });
+    setEditorOpen(true);
+  }
+
+  function applyGuitarEdit(next: ChordNoteEditorState) {
+    if (next.kind !== "guitar" || !onOverrideChange) return;
+
+    const nextFrets = [...fingering.frets] as (number | null)[];
+    if (next.state === "muted") nextFrets[next.stringIdx] = null;
+    else if (next.state === "open") nextFrets[next.stringIdx] = 0;
+    else nextFrets[next.stringIdx] = next.fret;
+
+    const nextFingering: GuitarFingering = {
+      ...fingering,
+      frets: nextFrets,
+    };
+
+    onOverrideChange(spec, voicingId, fingeringToOverridePayload(nextFingering));
+  }
+
   return (
     <div className="@container flex w-full flex-col gap-6 rounded-2xl border bg-card p-6 sm:p-8 min-[1360px]:h-full min-[1360px]:flex-1">
       <p className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
@@ -76,13 +141,13 @@ export function GuitarChordBuilder() {
           className="size-8 opacity-80"
         />
         Construtor de acordes · Guitarra
+        {editMode ? (
+          <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] normal-case tracking-normal text-amber-700 dark:text-amber-300">
+            Modo edição
+          </span>
+        ) : null}
       </p>
 
-      {/*
-        Side-by-side via @container when the card is wide.
-        At ≥1360px the 2×2 grid makes each card wide enough for @min-[32rem]:flex-row,
-        and that rule wins cascade over plain min-[1360px]:flex-col — use ! to force stack.
-      */}
       <div className="flex min-h-0 flex-col gap-8 @min-[32rem]:flex-row @min-[32rem]:items-start @min-[32rem]:gap-10 min-[1360px]:!flex-col min-[1360px]:!items-stretch min-[1360px]:!gap-8 min-[1360px]:flex-1">
         <div className="min-w-0 flex-1 min-[1360px]:flex-none">
           <ChordBuilderControls
@@ -103,14 +168,17 @@ export function GuitarChordBuilder() {
           </div>
 
           <div className="flex shrink-0 select-none flex-col items-stretch px-1">
-            {/* Altura fixa; alinhado ao canto esquerdo do board (nut gutter sempre reservado). */}
             <p
               className="flex h-7 w-full items-end justify-start text-sm text-muted-foreground"
               style={{ paddingLeft: PAD_L + NUT_W }}
             >
               {showPosition ? `${baseFret}ª casa` : "\u00a0"}
             </p>
-            <GuitarNeck fingering={fingering} />
+            <GuitarNeck
+              fingering={fingering}
+              editMode={editMode}
+              onStringClick={openStringEditor}
+            />
           </div>
 
           <div className="mt-3 flex flex-col items-center gap-1">
@@ -142,24 +210,40 @@ export function GuitarChordBuilder() {
               </button>
             </div>
             <p className="text-center text-xs text-muted-foreground">
-              {fingering.source === "algorithmic"
-                ? "Voicing estimado · ○ aberta · × abafada · ● dedo"
-                : "○ aberta · × abafada · ● dedo"}
+              {editMode
+                ? "Clica numa corda ou bolinha para editar · ○ aberta · × abafada · ● dedo"
+                : fingering.source === "algorithmic"
+                  ? "Voicing estimado · ○ aberta · × abafada · ● dedo"
+                  : "○ aberta · × abafada · ● dedo"}
             </p>
           </div>
         </div>
       </div>
+
+      <ChordNoteEditorDialog
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        state={editorState}
+        onConfirm={applyGuitarEdit}
+      />
     </div>
   );
 }
 
-function GuitarNeck({ fingering }: { fingering: GuitarFingering }) {
+function GuitarNeck({
+  fingering,
+  editMode = false,
+  onStringClick,
+}: {
+  fingering: GuitarFingering;
+  editMode?: boolean;
+  onStringClick?: (stringIdx: number) => void;
+}) {
   const frets = fingering.frets;
   const baseFret = fingering.baseFret ?? 1;
   const atNut = baseFret <= 1;
 
   const stringCount = DISPLAY_ORDER.length;
-  /** Sempre reserva a faixa da pestana — o board não desloca entre voicings. */
   const nutX = PAD_L;
   const boardLeft = nutX + NUT_W;
   const boardRight = boardLeft + BOARD_W;
@@ -173,7 +257,6 @@ function GuitarNeck({ fingering }: { fingering: GuitarFingering }) {
     return topY + (row / (stringCount - 1)) * BOARD_H;
   }
 
-  /** Map absolute fret → x centre within the fixed 3-casa window. */
   function fretX(absoluteFret: number) {
     const local = atNut ? absoluteFret : absoluteFret - baseFret + 1;
     const span = boardRight - boardLeft;
@@ -242,6 +325,9 @@ function GuitarNeck({ fingering }: { fingering: GuitarFingering }) {
             ? fret >= 1 && fret <= FRET_SPAN
             : fret >= baseFret && fret < baseFret + FRET_SPAN);
 
+        const hitX = muted || open ? boardLeft - 8 : fretted && inWindow ? fretX(fret) : boardLeft + (boardRight - boardLeft) / 2;
+        const hitR = editMode ? 14 : 0;
+
         return (
           <g key={stringIdx}>
             <text
@@ -266,6 +352,17 @@ function GuitarNeck({ fingering }: { fingering: GuitarFingering }) {
               strokeWidth={1 + row * 0.12}
             />
 
+            {editMode ? (
+              <circle
+                cx={hitX}
+                cy={y}
+                r={hitR}
+                fill="transparent"
+                className="cursor-pointer"
+                onClick={() => onStringClick?.(stringIdx)}
+              />
+            ) : null}
+
             {muted ? (
               <text
                 x={boardLeft - 8}
@@ -274,6 +371,8 @@ function GuitarNeck({ fingering }: { fingering: GuitarFingering }) {
                 fill="currentColor"
                 opacity={0.55}
                 style={{ fontSize: 13 }}
+                className={editMode ? "cursor-pointer" : undefined}
+                onClick={editMode ? () => onStringClick?.(stringIdx) : undefined}
               >
                 ×
               </text>
@@ -287,11 +386,20 @@ function GuitarNeck({ fingering }: { fingering: GuitarFingering }) {
                 fill="none"
                 stroke="#fff"
                 strokeWidth={1.5}
+                className={editMode ? "cursor-pointer" : undefined}
+                onClick={editMode ? () => onStringClick?.(stringIdx) : undefined}
               />
             ) : null}
 
             {fretted && inWindow ? (
-              <circle cx={fretX(fret)} cy={y} r={7} fill="#fff" />
+              <circle
+                cx={fretX(fret)}
+                cy={y}
+                r={7}
+                fill="#fff"
+                className={editMode ? "cursor-pointer" : undefined}
+                onClick={editMode ? () => onStringClick?.(stringIdx) : undefined}
+              />
             ) : null}
           </g>
         );

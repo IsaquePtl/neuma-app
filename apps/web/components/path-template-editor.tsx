@@ -124,6 +124,7 @@ export function PathTemplateEditor({
             }}
           >
             <input type="hidden" name="id" value={template.id} />
+            <input type="hidden" name="redirect_to" value="/studio/library" />
             <Button type="submit" size="sm" variant="destructive">
               Apagar
             </Button>

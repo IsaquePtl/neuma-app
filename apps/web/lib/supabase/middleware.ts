@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 import type { Database } from "@/lib/types/database.types";
+import { SIGNUP_FINISHING_COOKIE } from "@/lib/auth/signup-wizard";
 
 const PUBLIC_PATHS = [
   "/",
@@ -83,11 +84,11 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  // Após credenciais/OAuth OK: passo de foto/bio na mesma rota signup.
+  // Autenticado a terminar registo (passo 3) — cookie definido antes do OAuth ou ao criar conta.
   if (user && path === "/login/signup") {
-    const completingProfile =
-      request.nextUrl.searchParams.get("profile") === "1";
-    if (!completingProfile) {
+    const finishing =
+      request.cookies.get(SIGNUP_FINISHING_COOKIE)?.value === "1";
+    if (!finishing) {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/";
       return NextResponse.redirect(redirectUrl);

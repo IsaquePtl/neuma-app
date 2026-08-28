@@ -62,7 +62,7 @@ export default async function StudentDetailPage({
       supabase
         .from("path_templates")
         .select(
-          "id, title, description, goal, duration_label, path_template_nodes(count)",
+          "id, title, description, goal, duration_label, period_months, path_template_nodes(count)",
         )
         .eq("status", "ready")
         .order("title", { ascending: true }),
@@ -160,6 +160,7 @@ export default async function StudentDetailPage({
       description: t.description,
       goal: t.goal,
       duration_label: t.duration_label,
+      period_months: t.period_months,
       node_count,
     };
   });

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import {
   claimOnboardingByEmail,
   findLinkedOnboarding,
+  studentHasOnboardingSubmission,
 } from "@/lib/onboarding/submission";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -16,6 +17,21 @@ import {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Non-blocking status check for logged-in onboarding (claim + link in background). */
+export async function getOnboardingSubmissionStatus(): Promise<boolean> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return false;
+
+  return studentHasOnboardingSubmission({
+    studentId: user.id,
+    email: user.email,
+  });
 }
 
 function revalidateOnboardingPaths(studentId: string) {

@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -152,7 +151,7 @@ export async function removeStudent(input: {
   revalidatePath("/studio");
   revalidatePath("/studio/journeys");
   revalidatePath(`/studio/students/${studentId}`);
-  redirect("/studio/students?removed=1");
+  return { ok: true as const };
 }
 
 async function removeStudentStorage(

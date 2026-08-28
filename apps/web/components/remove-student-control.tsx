@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { removeStudent } from "@/lib/actions/students";
@@ -31,6 +32,7 @@ export function RemoveStudentControl({
   student: StudentProfile;
   embedded?: boolean;
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [confirmEmail, setConfirmEmail] = useState("");
@@ -58,10 +60,12 @@ export function RemoveStudentControl({
         studentId: student.id,
         confirmEmail,
       });
-      // redirect no servidor → normalmente não chega aqui
-      if (result && !result.ok) {
-        toast.error(result.error);
+      if (result.ok) {
+        toast.success("Aluno removido");
+        router.push("/studio/students?removed=1");
+        return;
       }
+      toast.error(result.error);
     });
   }
 

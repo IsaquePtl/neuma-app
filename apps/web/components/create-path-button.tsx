@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
-import { upsertPathTemplate } from "@/lib/actions/path-templates";
+import { createDraftPath } from "@/lib/actions/paths";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -24,10 +24,8 @@ export function CreatePathButton({
       try {
         const fd = new FormData();
         fd.set("title", "Novo percurso");
-        fd.set("status", "draft");
-        const id = await upsertPathTemplate(fd);
-        if (!id) throw new Error("Sem id");
-        router.push(`/studio/paths?compose=${id}`);
+        const id = await createDraftPath(fd);
+        router.push(`/studio/journeys/${id}/edit?new=1`);
       } catch {
         toast.error("Não foi possível criar o percurso");
       }

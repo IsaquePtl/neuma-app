@@ -1,10 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Library } from "lucide-react";
 import { toast } from "sonner";
 
 import { applyPathTemplate } from "@/lib/actions/path-templates";
+import {
+  initialPeriodMonths,
+  PathScheduleFields,
+} from "@/components/path-schedule-fields";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,6 +29,7 @@ export type ReadyTemplate = {
   description: string | null;
   goal: string | null;
   duration_label: string | null;
+  period_months?: number | null;
   node_count: number;
 };
 
@@ -38,7 +43,16 @@ export function ApplyTemplateDialog({
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
+  const [startDate, setStartDate] = useState("");
+  const [periodMonths, setPeriodMonths] = useState(3);
   const selected = templates.find((t) => t.id === templateId);
+
+  useEffect(() => {
+    if (!selected) return;
+    setPeriodMonths(
+      initialPeriodMonths(selected.duration_label, null, null, selected.period_months),
+    );
+  }, [selected]);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -76,7 +90,10 @@ export function ApplyTemplateDialog({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (next) setTemplateId(templates[0]?.id ?? "");
+        if (next) {
+          setTemplateId(templates[0]?.id ?? "");
+          setStartDate("");
+        }
       }}
     >
       <DialogTrigger render={<Button size="sm" className="gap-2" />}>
@@ -133,40 +150,28 @@ export function ApplyTemplateDialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="apply-duration">Duração</Label>
-              <Input
-                id="apply-duration"
-                name="duration_label"
-                key={`dur-${selected?.id}`}
-                defaultValue={selected?.duration_label ?? ""}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="apply-status">Estado inicial</Label>
-              <select
-                id="apply-status"
-                name="status"
-                defaultValue="draft"
-                className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
-              >
-                <option value="draft">Rascunho</option>
-                <option value="active">Activo</option>
-              </select>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="apply-status">Estado inicial</Label>
+            <select
+              id="apply-status"
+              name="status"
+              defaultValue="draft"
+              className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+            >
+              <option value="draft">Rascunho</option>
+              <option value="active">Activo</option>
+            </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="apply-start">Início</Label>
-              <Input id="apply-start" name="start_date" type="date" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="apply-end">Fim previsto</Label>
-              <Input id="apply-end" name="end_date" type="date" />
-            </div>
-          </div>
+          <PathScheduleFields
+            startId="apply-start"
+            periodId="apply-period"
+            startDate={startDate}
+            periodMonths={periodMonths}
+            disabled={pending}
+            onStartDateChange={setStartDate}
+            onPeriodMonthsChange={setPeriodMonths}
+          />
 
           <input
             type="hidden"

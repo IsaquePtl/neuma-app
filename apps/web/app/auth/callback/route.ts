@@ -5,6 +5,7 @@ import { redirectUrlForRequest } from "@/lib/auth/app-origin";
 import { ensureDefaultMentorForStudent } from "@/lib/auth/default-mentor";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/types/database.types";
+import { SIGNUP_FINISHING_COOKIE } from "@/lib/auth/signup-wizard";
 
 type PendingCookie = { name: string; value: string; options: CookieOptions };
 
@@ -17,18 +18,26 @@ function redirectWithCookies(
   request: NextRequest,
   pathname: string,
   pendingCookies: PendingCookie[],
+  options?: { signupFinishing?: boolean },
 ) {
   const response = NextResponse.redirect(redirectUrlForRequest(request, pathname));
-  pendingCookies.forEach(({ name, value, options }) => {
-    response.cookies.set(name, value, options);
+  pendingCookies.forEach(({ name, value, options: cookieOptions }) => {
+    response.cookies.set(name, value, cookieOptions);
   });
+  if (options?.signupFinishing) {
+    response.cookies.set(SIGNUP_FINISHING_COOKIE, "1", {
+      path: "/",
+      maxAge: 1800,
+      sameSite: "lax",
+    });
+  }
   return response;
 }
 
 /**
  * Troca o code OAuth/magic-link por sessão.
  * - intent=login: só contas já existentes (perfil em `profiles`); conta nova → signup
- * - intent=signup: cria/entra e volta a /login/signup?profile=1 (foto/bio)
+ * - intent=signup: cria/entra e volta a /login/signup (passo foto/bio)
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -182,14 +191,14 @@ export async function GET(request: NextRequest) {
 
   const destination =
     intent === "signup"
-      ? next.includes("profile=1")
-        ? next
-        : "/login/signup?profile=1"
+      ? "/login/signup"
       : next === "/"
         ? profile?.role === "mentor"
           ? "/studio"
           : "/home"
         : next;
 
-  return redirectWithCookies(request, destination, pendingCookies);
+  return redirectWithCookies(request, destination, pendingCookies, {
+    signupFinishing: intent === "signup",
+  });
 }

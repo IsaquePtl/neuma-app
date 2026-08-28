@@ -34,22 +34,34 @@ export const getCurrentProfile = cache(async () => {
   return data;
 });
 
+/** Check-ins pendentes de revisão (mentor). */
+export const getMentorPendingCheckInsCount = cache(async () => {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("check_ins")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pending");
+  return count ?? 0;
+});
+
+/** Onboardings por tratar (mentor). */
+export const getMentorPendingOnboardingsCount = cache(async () => {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("tally_submissions")
+    .select("id", { count: "exact", head: true })
+    .eq("submission_kind", "onboarding")
+    .in("status", ["pending", "linked"]);
+  return count ?? 0;
+});
+
 /** Badge leve: check-ins pending + onboardings por tratar (mentor). */
 export const getMentorNavBadge = cache(async () => {
-  const supabase = await createClient();
-  const [{ count: pendingCheckIns }, { count: pendingOnboardings }] =
-    await Promise.all([
-      supabase
-        .from("check_ins")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "pending"),
-      supabase
-        .from("tally_submissions")
-        .select("id", { count: "exact", head: true })
-        .eq("submission_kind", "onboarding")
-        .in("status", ["pending", "linked"]),
-    ]);
-  return (pendingCheckIns ?? 0) + (pendingOnboardings ?? 0);
+  const [pendingCheckIns, pendingOnboardings] = await Promise.all([
+    getMentorPendingCheckInsCount(),
+    getMentorPendingOnboardingsCount(),
+  ]);
+  return pendingCheckIns + pendingOnboardings;
 });
 
 /** Badge: propostas do Agent à espera de validação. */

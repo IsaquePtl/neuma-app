@@ -13,6 +13,18 @@ function supabaseHostname() {
 const supabaseHost = supabaseHostname();
 
 const nextConfig: NextConfig = {
+  async rewrites() {
+    return [
+      {
+        source: "/studio/library",
+        destination: "/studio/paths",
+      },
+      {
+        source: "/studio/library/:path*",
+        destination: "/studio/paths/:path*",
+      },
+    ];
+  },
   experimental: {
     // Default Server Actions = 1 MB → fotos iPhone → "unexpected response"
     serverActions: {

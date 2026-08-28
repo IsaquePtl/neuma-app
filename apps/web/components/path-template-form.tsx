@@ -1,10 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  initialPeriodMonths,
+  PeriodMonthsInput,
+} from "@/components/path-schedule-fields";
 import { upsertPathTemplate } from "@/lib/actions/path-templates";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,6 +49,14 @@ export function PathTemplateForm({
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const isEdit = Boolean(template);
+  const [periodMonths, setPeriodMonths] = useState(() =>
+    initialPeriodMonths(template?.duration_label),
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    setPeriodMonths(initialPeriodMonths(template?.duration_label));
+  }, [open, template?.duration_label]);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -54,7 +66,7 @@ export function PathTemplateForm({
         const id = await upsertPathTemplate(fd);
         toast.success(isEdit ? "Template atualizado" : "Template criado");
         setOpen(false);
-        if (!isEdit && id) router.push(`/studio/paths?compose=${id}`);
+        if (!isEdit && id) router.push(`/studio/library?compose=${id}`);
       } catch {
         toast.error("Não foi possível guardar o template");
       }
@@ -129,11 +141,12 @@ export function PathTemplateForm({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="tpl-duration">Duração sugerida</Label>
-              <Input
+              <PeriodMonthsInput
                 id="tpl-duration"
-                name="duration_label"
-                defaultValue={template?.duration_label ?? ""}
-                placeholder="3 meses"
+                name="period_months"
+                value={periodMonths}
+                disabled={pending}
+                onChange={setPeriodMonths}
               />
             </div>
             <div className="space-y-2">

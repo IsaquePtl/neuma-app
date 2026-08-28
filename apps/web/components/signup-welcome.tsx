@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 import { completeSignupProfile } from "@/lib/actions/auth";
@@ -29,6 +30,11 @@ export function SignupWelcome({
     firstNameFromFullName(fullName) ?? "aí",
   );
   const [syncing, setSyncing] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    router.prefetch("/onboarding");
+  }, [router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,6 +81,7 @@ export function SignupWelcome({
       <div className="space-y-3">
         <Link
           href="/onboarding"
+          prefetch
           aria-disabled={syncing}
           className={cn(
             buttonVariants({ size: "lg" }),

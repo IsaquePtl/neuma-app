@@ -1,10 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { applyPathTemplate } from "@/lib/actions/path-templates";
+import {
+  initialPeriodMonths,
+  PathScheduleFields,
+} from "@/components/path-schedule-fields";
 import type { StudentOption } from "@/components/tally-submission-row-actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +28,7 @@ type TemplateSummary = {
   description: string | null;
   goal: string | null;
   duration_label: string | null;
+  period_months?: number | null;
 };
 
 export function LinkTemplateToStudentDialog({
@@ -40,6 +45,28 @@ export function LinkTemplateToStudentDialog({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [studentId, setStudentId] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [periodMonths, setPeriodMonths] = useState(() =>
+    initialPeriodMonths(
+      template.duration_label,
+      null,
+      null,
+      template.period_months,
+    ),
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    setStartDate("");
+    setPeriodMonths(
+      initialPeriodMonths(
+        template.duration_label,
+        null,
+        null,
+        template.period_months,
+      ),
+    );
+  }, [open, template.duration_label, template.period_months]);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -128,49 +155,30 @@ export function LinkTemplateToStudentDialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor={`link-tpl-duration-${template.id}`}>Duração</Label>
-              <Input
-                id={`link-tpl-duration-${template.id}`}
-                name="duration_label"
-                defaultValue={template.duration_label ?? ""}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`link-tpl-status-${template.id}`}>
-                Estado inicial
-              </Label>
-              <select
-                id={`link-tpl-status-${template.id}`}
-                name="status"
-                defaultValue="draft"
-                className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
-              >
-                <option value="draft">Rascunho</option>
-                <option value="active">Activo</option>
-              </select>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor={`link-tpl-status-${template.id}`}>
+              Estado inicial
+            </Label>
+            <select
+              id={`link-tpl-status-${template.id}`}
+              name="status"
+              defaultValue="draft"
+              className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+            >
+              <option value="draft">Rascunho</option>
+              <option value="active">Activo</option>
+            </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor={`link-tpl-start-${template.id}`}>Início</Label>
-              <Input
-                id={`link-tpl-start-${template.id}`}
-                name="start_date"
-                type="date"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`link-tpl-end-${template.id}`}>Fim previsto</Label>
-              <Input
-                id={`link-tpl-end-${template.id}`}
-                name="end_date"
-                type="date"
-              />
-            </div>
-          </div>
+          <PathScheduleFields
+            startId={`link-tpl-start-${template.id}`}
+            periodId={`link-tpl-period-${template.id}`}
+            startDate={startDate}
+            periodMonths={periodMonths}
+            disabled={pending}
+            onStartDateChange={setStartDate}
+            onPeriodMonthsChange={setPeriodMonths}
+          />
 
           <DialogFooter>
             <Button type="submit" disabled={pending || students.length === 0}>
