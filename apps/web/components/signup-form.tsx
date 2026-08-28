@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 
 import { createSignupAccount } from "@/lib/actions/auth";
 import {
@@ -43,6 +43,14 @@ export function SignupForm({
   const [gender, setGender] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  useEffect(() => {
+    if (step !== "profile") return;
+    document.documentElement.classList.add("auth-signup-profile-step");
+    return () => {
+      document.documentElement.classList.remove("auth-signup-profile-step");
+    };
+  }, [step]);
 
   const canSubmit =
     firstName.trim().length > 0 &&

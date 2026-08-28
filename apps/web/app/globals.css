@@ -841,6 +841,32 @@ body:has(.auth-shell) > .neuma-bg .neuma-bg-neuma {
   animation: auth-enter 0.55s ease-out 220ms both;
 }
 
+/* Transição interna (signup passo 2, onboarding in-app) — sem stagger */
+.auth-enter-form--instant,
+.auth-flow-instant .auth-enter-form {
+  animation: none;
+  opacity: 1;
+}
+
+.auth-shell:has(.auth-flow-instant) .auth-mobile-mark,
+.auth-shell:has(.auth-flow-instant) .auth-shell-panel--form {
+  animation: none;
+  opacity: 1;
+}
+
+body:has(.auth-flow-instant) > .neuma-bg .neuma-bg-photo,
+body:has(.auth-flow-instant) > .neuma-bg .neuma-bg-neuma {
+  animation: none;
+  opacity: var(--auth-enter-opacity, 1);
+}
+
+html.auth-signup-profile-step .auth-mobile-mark,
+html.auth-signup-profile-step .auth-enter-form,
+html.auth-signup-profile-step .auth-shell-panel--form {
+  animation: none;
+  opacity: 1;
+}
+
 /* Soundworks: zero scroll na página — iframe preenche o resto do ecrã */
 .soundworks-embed-frame {
   width: 100%;

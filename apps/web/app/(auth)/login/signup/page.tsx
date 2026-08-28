@@ -34,17 +34,31 @@ export default async function SignupPage({
   }
 
   return (
-    <div className="flex w-full flex-col items-center desktop:items-stretch">
-      <Image
-        src="/brand/mark-white.png"
-        alt="Neuma"
-        width={96}
-        height={96}
-        priority
-        className="auth-mobile-mark mb-6 h-20 w-20 animate-float desktop:hidden"
-      />
+    <div
+      className={
+        profileStep
+          ? "auth-flow-instant flex w-full flex-col items-center desktop:items-stretch"
+          : "flex w-full flex-col items-center desktop:items-stretch"
+      }
+    >
+      {!profileStep ? (
+        <Image
+          src="/brand/mark-white.png"
+          alt="Neuma"
+          width={96}
+          height={96}
+          priority
+          className="auth-mobile-mark mb-6 h-20 w-20 animate-float desktop:hidden"
+        />
+      ) : null}
 
-      <Card className="auth-enter-form w-full animate-fade-up p-6 sm:p-8">
+      <Card
+        className={
+          profileStep
+            ? "auth-enter-form--instant w-full p-6 sm:p-8"
+            : "auth-enter-form w-full animate-fade-up p-6 sm:p-8"
+        }
+      >
         <div className="mb-5">
           <h1 className="font-heading text-2xl font-bold tracking-tight">
             {profileStep ? "O teu perfil" : "Criar conta"}

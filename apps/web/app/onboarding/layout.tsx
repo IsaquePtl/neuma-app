@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 
-import { SplashScreen } from "@/components/splash-screen";
 import { NeumaBackgroundWall } from "@/components/neuma-background-wall";
 
 export const metadata: Metadata = {
@@ -14,7 +13,6 @@ export default function OnboardingLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <>
-      <SplashScreen />
       <div className="auth-shell auth-shell--soundworks">
         <div className="auth-shell-panel auth-shell-panel--form relative min-h-0 overflow-hidden">
           {children}

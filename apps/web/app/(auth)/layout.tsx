@@ -1,6 +1,7 @@
 import Image from "next/image";
+import { Suspense } from "react";
 
-import { SplashScreen } from "@/components/splash-screen";
+import { AuthSplashGate } from "@/components/auth-splash-gate";
 import { AuthViewport } from "@/components/auth-viewport";
 import { NeumaBackgroundWall } from "@/components/neuma-background-wall";
 
@@ -9,7 +10,9 @@ export default function AuthLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <>
-      <SplashScreen />
+      <Suspense fallback={null}>
+        <AuthSplashGate />
+      </Suspense>
       <div className="auth-shell">
         <div className="auth-shell-panel auth-shell-panel--form">
           <AuthViewport scrollable>

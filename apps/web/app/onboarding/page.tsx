@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { OnboardingNeumaEmbed } from "@/components/onboarding-neuma-embed";
+import { SplashScreen } from "@/components/splash-screen";
 import { studentHasOnboardingSubmission } from "@/lib/onboarding/submission";
 
 /**
@@ -22,11 +23,16 @@ export default async function OnboardingPage() {
   }
 
   return (
-    <OnboardingNeumaEmbed
-      studentId={user?.id ?? null}
-      alreadySubmitted={alreadySubmitted}
-      backHref={user ? "/home" : "/login/signup"}
-      backLabel={user ? "Ir para a app" : "Criar conta"}
-    />
+    <>
+      {!user ? <SplashScreen /> : null}
+      <div className={user ? "auth-flow-instant h-full min-h-0" : "h-full min-h-0"}>
+        <OnboardingNeumaEmbed
+          studentId={user?.id ?? null}
+          alreadySubmitted={alreadySubmitted}
+          backHref={user ? "/home" : "/login/signup"}
+          backLabel={user ? "Ir para a app" : "Criar conta"}
+        />
+      </div>
+    </>
   );
 }

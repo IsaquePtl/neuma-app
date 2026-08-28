@@ -42,20 +42,20 @@ export function OnboardingNeumaEmbed({
   backLabel?: string;
 }) {
   const router = useRouter();
-  const [ready, setReady] = useState(alreadySubmitted);
+  const isLoggedIn = Boolean(studentId);
+  const [ready, setReady] = useState(alreadySubmitted || isLoggedIn);
   const [phase, setPhase] = useState<Phase>(
     alreadySubmitted ? "thankYou" : "form",
   );
   const [thanksVisible, setThanksVisible] = useState(alreadySubmitted);
-  const isLoggedIn = Boolean(studentId);
 
   const [holdAfterSubmit, setHoldAfterSubmit] = useState(false);
 
   useEffect(() => {
-    if (ready) return;
+    if (ready || isLoggedIn) return;
     const t = window.setTimeout(() => setReady(true), 4000);
     return () => window.clearTimeout(t);
-  }, [ready]);
+  }, [ready, isLoggedIn]);
 
   useEffect(() => {
     const ui = document.querySelector<HTMLElement>("[data-neuma-ui]");
@@ -119,8 +119,12 @@ export function OnboardingNeumaEmbed({
             href={isLoggedIn ? backHref : SIGNUP_HREF}
             className={cn(
               "absolute right-4 top-[max(0.75rem,env(safe-area-inset-top,0px))] z-20 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline",
-              "transition-opacity duration-700 ease-out",
-              ready && phase === "form" ? "opacity-100" : "opacity-0",
+              isLoggedIn
+                ? "opacity-100"
+                : cn(
+                    "transition-opacity duration-700 ease-out",
+                    ready && phase === "form" ? "opacity-100" : "opacity-0",
+                  ),
             )}
           >
             {isLoggedIn ? backLabel : "Criar conta"}
@@ -131,8 +135,12 @@ export function OnboardingNeumaEmbed({
               "mx-auto flex h-full w-full max-w-md min-h-0 flex-col px-4",
               "pt-[18lvh] pb-[max(1rem,env(safe-area-inset-bottom,0px))]",
               "desktop:pt-[24%]",
-              "transition-opacity duration-700 ease-out",
-              ready && phase === "form" ? "opacity-100" : "opacity-0",
+              isLoggedIn
+                ? "opacity-100"
+                : cn(
+                    "transition-opacity duration-700 ease-out",
+                    ready && phase === "form" ? "opacity-100" : "opacity-0",
+                  ),
             )}
           >
             <Image

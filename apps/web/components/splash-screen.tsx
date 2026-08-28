@@ -9,15 +9,23 @@ const HOLD_MS = 3000;
 const FADE_OUT_MS = 1200;
 const DESKTOP_MQ = "(min-width: 850px)";
 
-export function SplashScreen() {
-  const [show, setShow] = useState(true);
+export function SplashScreen({ enabled = true }: { enabled?: boolean }) {
+  const [show, setShow] = useState(enabled);
   const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
+    if (!enabled) {
+      setShow(false);
+      return;
+    }
+
     if (window.matchMedia(DESKTOP_MQ).matches) {
       setShow(false);
       return;
     }
+
+    setShow(true);
+    setLeaving(false);
 
     const t1 = window.setTimeout(() => setLeaving(true), HOLD_MS);
     const t2 = window.setTimeout(() => setShow(false), HOLD_MS + FADE_OUT_MS);
@@ -26,7 +34,7 @@ export function SplashScreen() {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
     };
-  }, []);
+  }, [enabled]);
 
   if (!show) return null;
 
