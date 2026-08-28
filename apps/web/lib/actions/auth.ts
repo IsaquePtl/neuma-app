@@ -316,6 +316,9 @@ export async function login(formData: FormData) {
     await ensureDefaultMentorForStudent(data.user.id);
   }
 
+  // Garante que os cookies de sessão são escritos antes do redirect (SSR em produção).
+  await supabase.auth.getSession();
+
   revalidatePath("/", "layout");
   redirect(profile?.role === "mentor" ? "/studio" : "/home");
 }
