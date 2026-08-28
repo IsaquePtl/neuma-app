@@ -18,6 +18,7 @@ import {
   CATEGORY_THEMES,
   categoryThemeWash,
   inferCategoryTheme,
+  isCategoryTheme,
 } from "@/lib/brand-themes";
 import { LIBRARY_PATH } from "@/lib/library-routes";
 import type {
@@ -32,6 +33,13 @@ export type LibraryCategoryRow = {
   slug: string;
   theme: string | null;
 };
+
+function categoryForActions(cat: LibraryCategoryRow) {
+  return {
+    ...cat,
+    theme: isCategoryTheme(cat.theme) ? cat.theme : null,
+  };
+}
 
 export type LibraryTopicRow = {
   id: string;
@@ -131,7 +139,7 @@ export function LibraryHub({ categories, topics, items, categoryId }: Props) {
               />
               <span className="truncate">{activeCategory.name}</span>
             </p>
-            <LibraryCategoryActions category={activeCategory} />
+            <LibraryCategoryActions category={categoryForActions(activeCategory)} />
           </div>
         </Card>
 
@@ -300,7 +308,7 @@ export function LibraryHub({ categories, topics, items, categoryId }: Props) {
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => e.stopPropagation()}
               >
-                <LibraryCategoryActions category={cat} />
+                <LibraryCategoryActions category={categoryForActions(cat)} />
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
