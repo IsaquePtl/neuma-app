@@ -1,5 +1,7 @@
-import { ExternalLink } from "lucide-react";
-
+import {
+  instagramProfileUrl,
+  whatsappChatUrl,
+} from "@/lib/social-links";
 import { cn } from "@/lib/utils";
 
 export type TallyAnswerView = {
@@ -97,7 +99,13 @@ export function TallyAnswerList({
   }
 
   return (
-    <div className={cn("grid gap-2", !compact && "sm:grid-cols-2", className)}>
+    <div
+      className={cn(
+        "grid min-w-0 gap-2",
+        !compact && "sm:grid-cols-2",
+        className,
+      )}
+    >
       {answers.map((answer, index) => {
         const files = fileEntries(answer.value);
         const text = formatTallyAnswerText(answer);
@@ -105,29 +113,30 @@ export function TallyAnswerList({
         return (
           <div
             key={`${answer.key ?? "answer"}-${index}`}
-            className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
+            className="min-w-0 rounded-xl border border-white/10 bg-white/[0.03] p-3"
           >
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            <p className="truncate text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
               {answer.label ?? answer.key ?? "Campo"}
             </p>
 
             {files.length > 0 ? (
-              <div className="mt-2 space-y-1.5">
+              <div className="mt-2 min-w-0 space-y-1.5">
                 {files.map((file, fileIndex) => (
                   <a
                     key={`${file.url}-${fileIndex}`}
                     href={file.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm text-[var(--neuma-coral)] hover:underline"
+                    className="inline-flex max-w-full items-center gap-1.5 truncate text-sm text-[var(--neuma-coral)] hover:underline"
                   >
                     {file.name || "Abrir ficheiro"}
-                    <ExternalLink className="size-3.5" />
                   </a>
                 ))}
               </div>
             ) : (
-              <p className="mt-1 whitespace-pre-wrap text-sm">{text}</p>
+              <p className="mt-1 break-words whitespace-pre-wrap text-sm">
+                {text}
+              </p>
             )}
           </div>
         );
@@ -169,4 +178,53 @@ export function resolveTallyAnswers(
   }
 
   return fromAnswers;
+}
+
+function tallyAnswerText(answer?: TallyAnswerView | null) {
+  if (!answer) return null;
+  const text = formatTallyAnswerText(answer);
+  return text === "—" ? null : text;
+}
+
+function findTallyAnswer(
+  answers: TallyAnswerView[],
+  predicate: (answer: TallyAnswerView) => boolean,
+) {
+  return answers.find(predicate);
+}
+
+/** Contact fields from onboarding Tally answers (label/type heuristics). */
+export function extractTallyContactInfo(answers: TallyAnswerView[]) {
+  const ageAnswer =
+    findTallyAnswer(answers, (answer) => /idade/i.test(answer.label ?? "")) ??
+    findTallyAnswer(
+      answers,
+      (answer) =>
+        answer.type === "INPUT_NUMBER" && /idade/i.test(answer.label ?? ""),
+    );
+
+  const whatsappAnswer =
+    findTallyAnswer(answers, (answer) => /whatsapp/i.test(answer.label ?? "")) ??
+    findTallyAnswer(answers, (answer) => answer.type === "INPUT_PHONE_NUMBER");
+
+  const instagramAnswer =
+    findTallyAnswer(answers, (answer) => /instagram/i.test(answer.label ?? "")) ??
+    findTallyAnswer(
+      answers,
+      (answer) =>
+        answer.type === "INPUT_LINK" &&
+        /instagram/i.test(tallyAnswerText(answer) ?? ""),
+    );
+
+  const age = tallyAnswerText(ageAnswer);
+  const whatsapp = tallyAnswerText(whatsappAnswer);
+  const instagram = tallyAnswerText(instagramAnswer);
+
+  return {
+    age,
+    whatsapp,
+    instagram,
+    whatsappUrl: whatsapp ? whatsappChatUrl(whatsapp) : null,
+    instagramUrl: instagram ? instagramProfileUrl(instagram) : null,
+  };
 }

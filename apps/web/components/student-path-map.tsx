@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   Lock,
@@ -5,7 +8,6 @@ import {
   Video,
   Dumbbell,
   Flag,
-  Play,
   CalendarClock,
 } from "lucide-react";
 
@@ -13,6 +15,10 @@ import type { StudentNode } from "@/lib/students/queries";
 import { formatDate, nodeKindLabel } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import type { NodeKind } from "@/lib/types/database.types";
+import {
+  ActiveLevelFeedbackCta,
+  ActiveLevelFeedbackHint,
+} from "@/components/active-level-feedback-cta";
 
 function kindIcon(kind: NodeKind) {
   switch (kind) {
@@ -28,8 +34,38 @@ function kindIcon(kind: NodeKind) {
   }
 }
 
-export function StudentPathMap({ nodes }: { nodes: StudentNode[] }) {
+export function StudentPathMap({
+  nodes,
+  unviewedByNodeId = new Map<string, number>(),
+}: {
+  nodes: StudentNode[];
+  unviewedByNodeId?: Map<string, number>;
+}) {
   const activeIndex = nodes.findIndex((n) => n.status === "active");
+  const activeNodeId =
+    activeIndex >= 0
+      ? nodes[activeIndex]?.id
+      : nodes.find((n) => n.status !== "locked")?.id ?? null;
+  const activeStepRef = useRef<HTMLLIElement>(null);
+
+  useEffect(() => {
+    const el = activeStepRef.current;
+    if (!el) return;
+
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+
+    // Defer until after AppShell's pathname scrollToTop (parent useEffect).
+    const timer = window.setTimeout(() => {
+      el.scrollIntoView({
+        block: "center",
+        behavior: reducedMotion ? "auto" : "smooth",
+      });
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [activeNodeId]);
 
   return (
     <ol className="student-path-journey relative w-full list-none pl-0">
@@ -44,6 +80,7 @@ export function StudentPathMap({ nodes }: { nodes: StudentNode[] }) {
           !isPast &&
           (activeIndex < 0 ? node.status === "locked" : i > activeIndex);
         const openable = isActive || isPast;
+        const unviewedCount = unviewedByNodeId.get(node.id) ?? 0;
         const isLast = i === nodes.length - 1;
         const Icon = kindIcon(node.kind);
         const levelNum = i + 1;
@@ -125,16 +162,14 @@ export function StudentPathMap({ nodes }: { nodes: StudentNode[] }) {
                 ) : null}
               </div>
               {isActive ? (
-                <span className="mt-1 inline-flex size-8 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/10 text-xs font-medium text-white sm:size-auto sm:px-3 sm:py-1.5">
-                  <Play className="size-3 fill-current" />
-                  <span className="hidden sm:inline">Entrar</span>
-                </span>
+                <ActiveLevelFeedbackCta
+                  hasUnviewedFeedback={unviewedCount > 0}
+                  unviewedCount={unviewedCount}
+                />
               ) : null}
             </div>
             {isActive ? (
-              <p className="mt-3 text-xs font-medium tracking-wide text-[#ffffe9]/80">
-                Nível actual — toca para abrir
-              </p>
+              <ActiveLevelFeedbackHint hasUnviewedFeedback={unviewedCount > 0} />
             ) : null}
             {isPast && !isActive ? (
               <p className="mt-2 text-xs text-muted-foreground/80">
@@ -150,6 +185,8 @@ export function StudentPathMap({ nodes }: { nodes: StudentNode[] }) {
         return (
           <li
             key={node.id}
+            ref={isActive ? activeStepRef : undefined}
+            data-student-path-active={isActive ? "" : undefined}
             className={cn(
               "relative flex gap-4 sm:gap-5",
               isActive ? "pb-10" : "pb-8",

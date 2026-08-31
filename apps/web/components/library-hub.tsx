@@ -10,6 +10,7 @@ import { LibraryAssetDialog } from "@/components/library-asset-dialog";
 import {
   LibraryCategoryActions,
   LibraryTopicDeleteButton,
+  LibraryTopicDialog,
 } from "@/components/library-taxonomy-dialogs";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -126,7 +127,7 @@ export function LibraryHub({ categories, topics, items, categoryId }: Props) {
         </Link>
 
         <Card
-          className="overflow-hidden border-white/10 p-4 shadow-none backdrop-blur-none"
+          className="overflow-hidden border-0 p-4 shadow-none backdrop-blur-none"
           style={{ background: wash }}
         >
           <div className="flex items-center justify-between gap-2">
@@ -139,7 +140,24 @@ export function LibraryHub({ categories, topics, items, categoryId }: Props) {
               />
               <span className="truncate">{activeCategory.name}</span>
             </p>
-            <LibraryCategoryActions category={categoryForActions(activeCategory)} />
+            <div className="flex shrink-0 items-center gap-1.5">
+              <LibraryTopicDialog
+                categories={categories}
+                defaultCategoryId={activeCategory.id}
+                triggerSize="sm"
+              />
+              <LibraryAssetDialog
+                categories={categories}
+                topics={topics}
+                defaultCategoryId={activeCategory.id}
+                triggerLabel="Item"
+                triggerVariant="outline"
+                triggerSize="sm"
+              />
+              <LibraryCategoryActions
+                category={categoryForActions(activeCategory)}
+              />
+            </div>
           </div>
         </Card>
 
@@ -156,10 +174,10 @@ export function LibraryHub({ categories, topics, items, categoryId }: Props) {
 
         {categoryTopics.length === 0 ? (
           <Card className="p-6 text-sm text-muted-foreground">
-            Sem tópicos nesta categoria. Usa o botão Tópico acima para criar um.
+            Sem tópicos nesta categoria. Usa o botão Tópico para criar um.
           </Card>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="flex w-full flex-col gap-3">
             {categoryTopics.map((topic) => {
               const topicItems = items.filter((a) => a.topic_id === topic.id);
               const visibleItems = topicItems.filter((a) =>
@@ -171,39 +189,53 @@ export function LibraryHub({ categories, topics, items, categoryId }: Props) {
                 searchQuery.length > 0 || openTopics.has(topic.id);
 
               return (
-                <Card key={topic.id} className="overflow-hidden p-0">
-                  <button
-                    type="button"
-                    onClick={() => toggleTopic(topic.id)}
-                    className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition-colors hover:bg-white/[0.03]"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{topic.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {topicItems.length} item
-                        {topicItems.length === 1 ? "" : "s"}
-                        {topic.created_by_agent ? (
-                          <span className="ml-1 uppercase text-amber-500">
-                            agent
-                          </span>
-                        ) : null}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <span
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => e.stopPropagation()}
-                      >
-                        <LibraryTopicDeleteButton topicId={topic.id} />
-                      </span>
+                <Card
+                  key={topic.id}
+                  className="w-full gap-0 overflow-hidden rounded-xl p-0"
+                >
+                  <div className="flex w-full flex-nowrap items-center gap-1.5 px-2 py-2 sm:gap-2 sm:px-4 sm:py-3">
+                    <button
+                      type="button"
+                      onClick={() => toggleTopic(topic.id)}
+                      aria-expanded={expanded}
+                      className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-white/[0.03]"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{topic.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {topicItems.length} item
+                          {topicItems.length === 1 ? "" : "s"}
+                          {topic.created_by_agent ? (
+                            <span className="ml-1 uppercase text-amber-500">
+                              agent
+                            </span>
+                          ) : null}
+                        </p>
+                      </div>
                       <ChevronDown
                         className={cn(
-                          "size-4 text-muted-foreground transition-transform",
+                          "size-4 shrink-0 text-muted-foreground transition-transform",
                           expanded && "rotate-180",
                         )}
                       />
+                    </button>
+                    <div className="flex shrink-0 items-center gap-1.5 sm:gap-1">
+                      <LibraryAssetDialog
+                        categories={categories}
+                        topics={topics}
+                        defaultCategoryId={activeCategory.id}
+                        defaultTopicId={topic.id}
+                        triggerLabel="Adicionar item"
+                        triggerVariant="outline"
+                        triggerSize="sm"
+                        compactOnMobile
+                      />
+                      <LibraryTopicDeleteButton
+                        topicId={topic.id}
+                        compactOnMobile
+                      />
                     </div>
-                  </button>
+                  </div>
 
                   {expanded ? (
                     <div className="border-t border-white/5">
@@ -280,7 +312,7 @@ export function LibraryHub({ categories, topics, items, categoryId }: Props) {
             key={cat.id}
             role="button"
             tabIndex={0}
-            className="cursor-pointer space-y-2 overflow-hidden border-white/10 p-4 shadow-none backdrop-blur-none transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            className="cursor-pointer space-y-2 overflow-hidden border-0 p-4 shadow-none backdrop-blur-none transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             style={{ background: wash }}
             onClick={() =>
               router.push(`${LIBRARY_PATH}?category=${encodeURIComponent(cat.id)}`)

@@ -41,7 +41,7 @@ export function JourneysTabs() {
   const badges = useMentorBadgeCounts();
 
   return (
-    <nav className="flex flex-wrap gap-1 border-b border-white/10 pb-px">
+    <nav className="flex w-full flex-nowrap gap-0 border-b border-white/10 pb-px desktop:w-auto desktop:gap-0.5 sm:gap-1">
       {TABS.map((tab) => {
         const Icon = tab.icon;
         const active = tab.match(pathname);
@@ -56,14 +56,15 @@ export function JourneysTabs() {
             key={tab.href}
             href={tab.href}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-t-lg px-3 py-2 text-sm transition-colors",
+              "inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-t-lg px-2 py-3 text-sm transition-colors sm:gap-2 sm:px-3 sm:py-3.5",
+              "desktop:min-w-0 desktop:flex-none desktop:shrink-0 desktop:justify-start desktop:gap-1.5 desktop:px-3 desktop:py-2 desktop:text-sm",
               active
                 ? "border-b-2 border-[var(--neuma-coral)] font-medium text-foreground"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
             <span className="relative">
-              <Icon className="size-3.5" />
+              <Icon className="size-4 sm:size-[1.125rem] desktop:size-3.5" />
               <NavCountBadge count={badge} active={active} />
             </span>
             {tab.label}

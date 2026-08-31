@@ -3,7 +3,6 @@
 import {
   ChevronDown,
   ChevronUp,
-  ExternalLink,
   Trash2,
 } from "lucide-react";
 
@@ -209,7 +208,7 @@ export function PathTemplateEditor({
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                   >
-                    URL <ExternalLink className="size-3" />
+                    URL
                   </a>
                 ) : null}
               </div>

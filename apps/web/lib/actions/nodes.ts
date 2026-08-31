@@ -32,6 +32,12 @@ async function studentIdOfPath(
   return data?.student_id;
 }
 
+function revalidateJourneyPath(pathId: string) {
+  revalidatePath(`/studio/journeys/${pathId}`);
+  revalidatePath(`/studio/journeys/${pathId}/edit`);
+  revalidatePath("/studio/journeys");
+}
+
 export async function createNode(formData: FormData) {
   const supabase = await mentorClient();
   const pathId = formData.get("path_id") as string;
@@ -72,8 +78,7 @@ export async function createNode(formData: FormData) {
     revalidatePath("/path");
     revalidatePath("/session");
   }
-  revalidatePath(`/studio/journeys/${pathId}`);
-  revalidatePath("/studio/journeys");
+  revalidateJourneyPath(pathId);
 }
 
 export async function updateNode(formData: FormData) {
@@ -105,8 +110,7 @@ export async function updateNode(formData: FormData) {
     revalidatePath("/path");
     revalidatePath("/session");
   }
-  revalidatePath(`/studio/journeys/${pathId}`);
-  revalidatePath("/studio/journeys");
+  revalidateJourneyPath(pathId);
 }
 
 export async function deleteNode(formData: FormData) {
@@ -121,8 +125,7 @@ export async function deleteNode(formData: FormData) {
     revalidatePath("/path");
     revalidatePath("/session");
   }
-  revalidatePath(`/studio/journeys/${pathId}`);
-  revalidatePath("/studio/journeys");
+  revalidateJourneyPath(pathId);
 }
 
 export async function moveNode(formData: FormData) {
@@ -154,8 +157,7 @@ export async function moveNode(formData: FormData) {
   if (studentId) {
     revalidatePath(`/studio/students/${studentId}`);
   }
-  revalidatePath(`/studio/journeys/${pathId}`);
-  revalidatePath("/studio/journeys");
+  revalidateJourneyPath(pathId);
 }
 
 export async function activateNode(formData: FormData) {
@@ -187,6 +189,5 @@ export async function activateNode(formData: FormData) {
     revalidatePath("/path");
     revalidatePath("/session");
   }
-  revalidatePath(`/studio/journeys/${pathId}`);
-  revalidatePath("/studio/journeys");
+  revalidateJourneyPath(pathId);
 }

@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
   Video,
   MessageSquare,
-  ExternalLink,
   FileText,
 } from "lucide-react";
 
@@ -11,12 +10,33 @@ import type {
   StudentUpcomingBooking,
 } from "@/lib/students/queries";
 import { Button } from "@/components/ui/button";
-import { VideoEmbed, toEmbedUrl } from "@/components/video-embed";
+import { MediaVideoPlayer } from "@/components/media-video-player";
+import { isPlayableVideoUrl } from "@/components/video-embed";
 import { CheckpointQuiz } from "@/components/checkpoint-quiz";
 import { SessionBookingSection } from "@/components/session-booking-section";
 import { SupportMediaToggle } from "@/components/support-media-toggle";
 import { formatDate, nodeKindLabel } from "@/lib/labels";
 import { cn } from "@/lib/utils";
+
+/** Full-width lesson video — matches sibling content column (e.g. text card). */
+function LessonVideoPlayer({
+  url,
+  title,
+  fallbackLabel = "Abrir aula",
+}: {
+  url: string;
+  title?: string;
+  fallbackLabel?: string;
+}) {
+  return (
+    <MediaVideoPlayer
+      url={url}
+      title={title}
+      size="full"
+      fallbackLabel={fallbackLabel}
+    />
+  );
+}
 
 /** Anexo de apoio (link externo) — usado quando não é vídeo. */
 function SupportAttachmentButton({
@@ -31,15 +51,12 @@ function SupportAttachmentButton({
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm transition-colors hover:bg-white/[0.07]"
+      className="inline-flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm transition-colors hover:bg-white/[0.07]"
     >
-      <span className="inline-flex min-w-0 items-center gap-2.5">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30">
-          <FileText className="size-3.5 text-[var(--neuma-coral)]" />
-        </span>
-        <span className="truncate font-medium">{label}</span>
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30">
+        <FileText className="size-3.5 text-[var(--neuma-coral)]" />
       </span>
-      <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 truncate font-medium">{label}</span>
     </a>
   );
 }
@@ -52,8 +69,8 @@ function NodeLevelHeader({
   levelNumber: number;
 }) {
   return (
-    <header className="shrink-0">
-      <div className="flex items-center gap-3.5">
+    <header className="min-w-0 shrink-0">
+      <div className="flex min-w-0 items-center gap-3.5">
         <span
           className={cn(
             "student-path-marker relative grid size-14 shrink-0 place-items-center rounded-full",
@@ -76,7 +93,7 @@ function NodeLevelHeader({
               </>
             ) : null}
           </p>
-          <h1 className="font-heading text-2xl font-bold leading-tight tracking-tight sm:text-3xl">
+          <h1 className="break-words font-heading text-2xl font-bold leading-tight tracking-tight sm:text-3xl">
             {node.title}
           </h1>
         </div>
@@ -88,30 +105,53 @@ function NodeLevelHeader({
 function CheckInActions({
   node,
   practiceStyle = false,
+  canSubmitCheckIn = true,
+  blockedMessage = null,
+  preview = false,
 }: {
   node: StudentNode;
   practiceStyle?: boolean;
+  canSubmitCheckIn?: boolean;
+  blockedMessage?: string | null;
+  preview?: boolean;
 }) {
-  if (node.status === "completed") return null;
+  if (preview || node.status === "completed") return null;
   return (
-    <div className="flex flex-wrap gap-2">
-      <Button
-        render={<Link href={`/checkins/new?node=${node.id}`} />}
-        nativeButton={false}
-        className="gap-2"
-      >
-        <Video className="size-4" />
-        {practiceStyle ? "Fazer check-in" : "Confirmar que concluíste"}
-      </Button>
-      {practiceStyle ? (
-        <Button
-          render={<Link href="/session" />}
-          nativeButton={false}
-          variant="secondary"
-          className="gap-2"
-        >
-          <MessageSquare className="size-4" /> Falar no Mentor
-        </Button>
+    <div className="flex min-w-0 flex-col gap-2">
+      <div className="flex min-w-0 flex-col gap-2">
+        {canSubmitCheckIn ? (
+          <Button
+            render={<Link href={`/checkins/new?node=${node.id}`} />}
+            nativeButton={false}
+            className="h-14 w-full gap-2 text-base font-semibold"
+          >
+            <Video className="size-4" />
+            {practiceStyle ? "Fazer check-in" : "Confirmar que concluíste"}
+          </Button>
+        ) : (
+          <Button
+            disabled
+            className="h-14 w-full gap-2 text-base font-semibold"
+          >
+            <Video className="size-4" />
+            {practiceStyle ? "Fazer check-in" : "Confirmar que concluíste"}
+          </Button>
+        )}
+        {practiceStyle ? (
+          <Button
+            render={<Link href="/session" />}
+            nativeButton={false}
+            variant="secondary"
+            className="w-full gap-2"
+          >
+            <MessageSquare className="size-4" /> Falar no Mentor
+          </Button>
+        ) : null}
+      </div>
+      {!canSubmitCheckIn && blockedMessage ? (
+        <p className="break-words text-xs leading-snug text-muted-foreground">
+          {blockedMessage}
+        </p>
       ) : null}
     </div>
   );
@@ -124,6 +164,7 @@ function SessionLayout({
   calUser,
   upcomingBooking,
   canBookSessions,
+  preview = false,
 }: {
   node: StudentNode;
   levelNumber: number;
@@ -131,13 +172,14 @@ function SessionLayout({
   calUser: string;
   upcomingBooking: StudentUpcomingBooking | null;
   canBookSessions: boolean;
+  preview?: boolean;
 }) {
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 w-full max-w-full space-y-5">
       <NodeLevelHeader node={node} levelNumber={levelNumber} />
 
       {node.content_body ? (
-        <div className="whitespace-pre-wrap text-sm text-muted-foreground">
+        <div className="min-w-0 break-words whitespace-pre-wrap text-sm text-muted-foreground">
           {node.content_body}
         </div>
       ) : null}
@@ -154,7 +196,7 @@ function SessionLayout({
         initialBooking={upcomingBooking}
         mentorName={mentorName}
         calUser={calUser}
-        canBookSessions={canBookSessions}
+        canBookSessions={preview ? false : canBookSessions}
       />
     </div>
   );
@@ -163,19 +205,24 @@ function SessionLayout({
 function RecordingLayout({
   node,
   levelNumber,
+  canSubmitCheckIn = true,
+  blockedMessage = null,
+  preview = false,
 }: {
   node: StudentNode;
   levelNumber: number;
+  canSubmitCheckIn?: boolean;
+  blockedMessage?: string | null;
+  preview?: boolean;
 }) {
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 w-full max-w-full space-y-6">
       <NodeLevelHeader node={node} levelNumber={levelNumber} />
 
       {node.resource_url ? (
-        <VideoEmbed
+        <LessonVideoPlayer
           url={node.resource_url}
           title={node.title}
-          className="aspect-video w-full overflow-hidden rounded-xl border border-white/10"
           fallbackLabel="Abrir aula"
         />
       ) : (
@@ -185,12 +232,17 @@ function RecordingLayout({
       )}
 
       {node.content_body ? (
-        <div className="whitespace-pre-wrap rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
+        <div className="min-w-0 break-words whitespace-pre-wrap rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
           {node.content_body}
         </div>
       ) : null}
 
-      <CheckInActions node={node} />
+      <CheckInActions
+        node={node}
+        canSubmitCheckIn={canSubmitCheckIn}
+        blockedMessage={blockedMessage}
+        preview={preview}
+      />
     </div>
   );
 }
@@ -198,25 +250,31 @@ function RecordingLayout({
 function PracticeLayout({
   node,
   levelNumber,
+  canSubmitCheckIn = true,
+  blockedMessage = null,
+  preview = false,
 }: {
   node: StudentNode;
   levelNumber: number;
+  canSubmitCheckIn?: boolean;
+  blockedMessage?: string | null;
+  preview?: boolean;
 }) {
-  const hasVideo = Boolean(node.resource_url && toEmbedUrl(node.resource_url));
+  const hasVideo = isPlayableVideoUrl(node.resource_url);
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 w-full max-w-full space-y-6">
       <NodeLevelHeader node={node} levelNumber={levelNumber} />
 
       {node.content_body ? (
-        <div className="whitespace-pre-wrap rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
+        <div className="min-w-0 break-words whitespace-pre-wrap rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
           {node.content_body}
         </div>
       ) : null}
 
       {node.resource_url ? (
         hasVideo ? (
-          <VideoEmbed
+          <LessonVideoPlayer
             url={node.resource_url}
             title={node.title}
             fallbackLabel="Abrir recurso"
@@ -229,7 +287,13 @@ function PracticeLayout({
         )
       ) : null}
 
-      <CheckInActions node={node} practiceStyle />
+      <CheckInActions
+        node={node}
+        practiceStyle
+        canSubmitCheckIn={canSubmitCheckIn}
+        blockedMessage={blockedMessage}
+        preview={preview}
+      />
     </div>
   );
 }
@@ -237,16 +301,22 @@ function PracticeLayout({
 function CheckpointLayout({
   node,
   levelNumber,
+  canSubmitCheckIn = true,
+  blockedMessage = null,
+  preview = false,
 }: {
   node: StudentNode;
   levelNumber: number;
+  canSubmitCheckIn?: boolean;
+  blockedMessage?: string | null;
+  preview?: boolean;
 }) {
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 w-full max-w-full space-y-6">
       <NodeLevelHeader node={node} levelNumber={levelNumber} />
 
       {node.content_body ? (
-        <div className="whitespace-pre-wrap rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
+        <div className="min-w-0 break-words whitespace-pre-wrap rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
           {node.content_body}
         </div>
       ) : null}
@@ -261,26 +331,43 @@ function CheckpointLayout({
         />
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        {node.status !== "completed" ? (
-          <Button
-            render={<Link href={`/checkins/new?node=${node.id}`} />}
-            nativeButton={false}
-            variant="secondary"
-            className="gap-2"
-          >
-            <Video className="size-4" /> Fazer check-in
-          </Button>
-        ) : null}
-        <Button
-          render={<Link href="/session" />}
-          nativeButton={false}
-          variant="secondary"
-          className="gap-2"
-        >
-          <MessageSquare className="size-4" /> Falar no Mentor
-        </Button>
-      </div>
+      {!preview ? (
+        <div className="flex min-w-0 flex-col gap-2">
+          <div className="flex min-w-0 flex-wrap gap-2">
+            {node.status !== "completed" ? (
+              canSubmitCheckIn ? (
+                <Button
+                  render={<Link href={`/checkins/new?node=${node.id}`} />}
+                  nativeButton={false}
+                  variant="secondary"
+                  className="gap-2"
+                >
+                  <Video className="size-4" /> Fazer check-in
+                </Button>
+              ) : (
+                <Button disabled variant="secondary" className="gap-2">
+                  <Video className="size-4" /> Fazer check-in
+                </Button>
+              )
+            ) : null}
+            <Button
+              render={<Link href="/session" />}
+              nativeButton={false}
+              variant="secondary"
+              className="gap-2"
+            >
+              <MessageSquare className="size-4" /> Falar no Mentor
+            </Button>
+          </div>
+          {node.status !== "completed" &&
+          !canSubmitCheckIn &&
+          blockedMessage ? (
+            <p className="text-xs leading-snug text-muted-foreground">
+              {blockedMessage}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -292,6 +379,9 @@ export function StudentNodePlayer({
   calUsername,
   upcomingBooking = null,
   canBookSessions = true,
+  canSubmitCheckIn = true,
+  checkInBlockedMessage = null,
+  preview = false,
 }: {
   node: StudentNode;
   levelNumber: number;
@@ -299,6 +389,9 @@ export function StudentNodePlayer({
   calUsername?: string | null;
   upcomingBooking?: StudentUpcomingBooking | null;
   canBookSessions?: boolean;
+  canSubmitCheckIn?: boolean;
+  checkInBlockedMessage?: string | null;
+  preview?: boolean;
 }) {
   const calUser =
     calUsername ||
@@ -314,23 +407,42 @@ export function StudentNodePlayer({
         calUser={calUser}
         upcomingBooking={upcomingBooking}
         canBookSessions={canBookSessions}
+        preview={preview}
       />
     );
   }
 
   if (node.kind === "lesson" || node.kind === "resource") {
     return (
-      <RecordingLayout node={node} levelNumber={levelNumber} />
+      <RecordingLayout
+        node={node}
+        levelNumber={levelNumber}
+        canSubmitCheckIn={canSubmitCheckIn}
+        blockedMessage={checkInBlockedMessage}
+        preview={preview}
+      />
     );
   }
 
   if (node.kind === "milestone") {
     return (
-      <CheckpointLayout node={node} levelNumber={levelNumber} />
+      <CheckpointLayout
+        node={node}
+        levelNumber={levelNumber}
+        canSubmitCheckIn={canSubmitCheckIn}
+        blockedMessage={checkInBlockedMessage}
+        preview={preview}
+      />
     );
   }
 
   return (
-    <PracticeLayout node={node} levelNumber={levelNumber} />
+    <PracticeLayout
+      node={node}
+      levelNumber={levelNumber}
+      canSubmitCheckIn={canSubmitCheckIn}
+      blockedMessage={checkInBlockedMessage}
+      preview={preview}
+    />
   );
 }

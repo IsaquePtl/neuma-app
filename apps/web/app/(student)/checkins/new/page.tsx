@@ -1,7 +1,12 @@
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { loadStudentPath } from "@/lib/students/queries";
 import { CheckInTallyPanel } from "@/components/check-in-tally-panel";
+import {
+  checkInBlockedMessage,
+  getCheckInAllowance,
+} from "@/lib/checkins/allowance";
 import { ORPHAN_CHECKIN_LABEL } from "@/lib/labels";
 
 async function levelNumberForNode(
@@ -32,23 +37,16 @@ export default async function NewCheckinPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: path } = await supabase
-    .from("paths")
-    .select("id")
-    .eq("student_id", user.id)
-    .limit(1)
-    .maybeSingle();
-
-  if (!path) redirect("/session");
-
-  const formId = process.env.TALLY_CHECKIN_FORM_ID || "gDXd04";
+  const pathRow = await loadStudentPath(user.id, { forStudentApp: true });
+  if (!pathRow) redirect("/session");
+  if (pathRow.status === "paused") redirect("/path");
 
   if (!nodeId) {
     return (
       <CheckInTallyPanel
-        formId={formId}
         nodeId={null}
         nodeTitle={ORPHAN_CHECKIN_LABEL}
+        pathTitle={pathRow.title}
         studentId={user.id}
       />
     );
@@ -60,10 +58,9 @@ export default async function NewCheckinPage({
     .eq("id", nodeId)
     .maybeSingle();
 
-  if (!node) {
+  if (!node || node.path_id !== pathRow.id) {
     return (
       <CheckInTallyPanel
-        formId={formId}
         nodeId={null}
         nodeTitle={ORPHAN_CHECKIN_LABEL}
         studentId={user.id}
@@ -71,17 +68,23 @@ export default async function NewCheckinPage({
     );
   }
 
-  const levelNumber = node.path_id
-    ? await levelNumberForNode(supabase, node.id, node.path_id)
-    : null;
+  const [levelNumber, allowance] = await Promise.all([
+    node.path_id
+      ? levelNumberForNode(supabase, node.id, node.path_id)
+      : Promise.resolve(null),
+    getCheckInAllowance(supabase, node.id, user.id),
+  ]);
 
   return (
     <CheckInTallyPanel
-      formId={formId}
       nodeId={node.id}
       nodeTitle={node.title}
+      pathTitle={pathRow.title}
       levelNumber={levelNumber}
       studentId={user.id}
+      blockedMessage={
+        allowance.allowed ? null : checkInBlockedMessage(allowance)
+      }
     />
   );
 }

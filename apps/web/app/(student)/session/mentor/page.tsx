@@ -131,7 +131,7 @@ export default async function StudentMentorProfilePage() {
             Ainda não há eventos partilhados.
           </p>
         ) : (
-          <ol className="relative space-y-0 border-l border-white/10 pl-5">
+          <ol className="relative ms-3 space-y-0 border-l border-white/10 ps-6">
             {history.map((event) => (
               <HistoryItem key={event.id} event={event} />
             ))}
@@ -146,25 +146,27 @@ function HistoryItem({ event }: { event: MentorHistoryEvent }) {
   return (
     <li className="relative pb-6 last:pb-0">
       <span
-        className="absolute -left-[1.41rem] top-1.5 size-2 rounded-full bg-foreground/35 ring-4 ring-[var(--background)]"
+        className="absolute -start-[0.3125rem] top-1.5 size-2 rounded-full bg-foreground/35 ring-4 ring-[var(--background)]"
         aria-hidden
       />
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-          {event.label}
-        </p>
-        <time
-          dateTime={event.at}
-          className="shrink-0 text-[11px] text-muted-foreground/80"
-        >
-          {formatDate(event.at)}
-        </time>
+      <div className="ml-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+            {event.label}
+          </p>
+          <time
+            dateTime={event.at}
+            className="shrink-0 text-[11px] text-muted-foreground/80"
+          >
+            {formatDate(event.at)}
+          </time>
+        </div>
+        {event.detail ? (
+          <p className="mt-1 text-sm leading-snug text-foreground/90">
+            {event.detail}
+          </p>
+        ) : null}
       </div>
-      {event.detail ? (
-        <p className="mt-1 text-sm leading-snug text-foreground/90">
-          {event.detail}
-        </p>
-      ) : null}
     </li>
   );
 }

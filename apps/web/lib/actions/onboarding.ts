@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   getTallyConfig,
   parseTallyEmbedSubmission,
+  resolveTallySubmissionKind,
   type TallyEmbedSubmissionPayload,
 } from "@/lib/tally";
 
@@ -168,6 +169,118 @@ export async function persistOnboardingFromEmbed(
   }
 
   revalidateOnboardingPaths(user.id);
+  return { ok: true, submissionId: inserted.id };
+}
+
+/**
+ * Persist onboarding from the public embed (no login). Webhook may arrive later;
+ * this ensures orphan submissions appear in studio for manual linking.
+ */
+export async function persistPublicOnboardingFromEmbed(
+  embed: TallyEmbedSubmissionPayload,
+): Promise<{ ok: boolean; submissionId: string | null }> {
+  const config = getTallyConfig();
+  const parsed = parseTallyEmbedSubmission(embed);
+  const formId = parsed.formId ?? config.onboardingFormId;
+  const submissionKind = resolveTallySubmissionKind(
+    formId,
+    parsed.formName,
+    config,
+  );
+
+  if (submissionKind !== "onboarding") {
+    console.warn("[onboarding:public] unexpected form", {
+      formId,
+      formName: parsed.formName,
+      kind: submissionKind,
+    });
+    return { ok: false, submissionId: null };
+  }
+
+  const admin = createAdminClient();
+  const responseId = parsed.responseId ?? parsed.submissionId;
+
+  if (responseId) {
+    const { data: existing } = await admin
+      .from("tally_submissions")
+      .select("id, student_id, status")
+      .eq("source_response_id", responseId)
+      .neq("status", "archived")
+      .maybeSingle();
+
+    if (existing?.id) {
+      if (existing.student_id) {
+        revalidateOnboardingPaths(existing.student_id);
+      } else {
+        revalidatePath("/studio/journeys/onboardings");
+        revalidatePath("/studio/inbox");
+      }
+      return { ok: true, submissionId: existing.id };
+    }
+  }
+
+  let trustedStudentId: string | null = null;
+  let respondentEmail = parsed.respondentEmail?.trim().toLowerCase() || null;
+  if (parsed.respondentEmail) {
+    const email = parsed.respondentEmail.trim();
+    const { data: matches } = await admin
+      .from("profiles")
+      .select("id, email")
+      .eq("role", "student")
+      .ilike("email", email)
+      .limit(2);
+    if (matches?.length === 1) {
+      trustedStudentId = matches[0].id;
+      respondentEmail = matches[0].email?.trim().toLowerCase() || respondentEmail;
+    }
+  }
+
+  const { data: inserted, error } = await admin
+    .from("tally_submissions")
+    .insert({
+      source_event_id:
+        parsed.eventId ?? (responseId ? `embed-public:${responseId}` : null),
+      source_response_id: responseId,
+      source_submission_id: parsed.submissionId ?? responseId,
+      source_form_id: formId,
+      source_form_name: parsed.formName,
+      submission_kind: "onboarding",
+      status: trustedStudentId ? "linked" : "pending",
+      respondent_name: parsed.respondentName,
+      respondent_email: respondentEmail,
+      student_id: trustedStudentId,
+      notes: parsed.notes,
+      answers: parsed.answers,
+      payload: parsed.payload,
+      created_at: parsed.createdAt ?? undefined,
+      processed_at: null,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    if (error.code === "23505" && responseId) {
+      const { data: existing } = await admin
+        .from("tally_submissions")
+        .select("id")
+        .eq("source_response_id", responseId)
+        .neq("status", "archived")
+        .maybeSingle();
+      if (existing?.id) {
+        return { ok: true, submissionId: existing.id };
+      }
+    }
+    console.error("[onboarding:public] persist_failed", error);
+    return { ok: false, submissionId: null };
+  }
+
+  if (trustedStudentId) {
+    revalidateOnboardingPaths(trustedStudentId);
+  } else {
+    revalidatePath("/studio/journeys/onboardings");
+    revalidatePath("/studio/inbox");
+  }
+
   return { ok: true, submissionId: inserted.id };
 }
 

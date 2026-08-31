@@ -4,13 +4,14 @@ import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { ChevronLeft } from "lucide-react";
 
-import { createSignupAccount } from "@/lib/actions/auth";
+import { createSignupAccount, completeSignupProfile } from "@/lib/actions/auth";
 import {
   isValidEmail,
   isValidPassword,
   PASSWORD_MIN_LENGTH,
 } from "@/lib/auth/validation";
-import { parseAge, parseGender } from "@/lib/auth/signup-profile";
+import { namesFromOAuthMetadata } from "@/lib/auth/signup-complete";
+import { parseAge, parseGender, readSignupProfileDraft } from "@/lib/auth/signup-profile";
 import {
   hasSignupFinishingCookie,
   readSignupWizardStep,
@@ -31,11 +32,12 @@ import { SignupProfileStep } from "@/components/signup-profile-step";
 
 const STEP_META: Record<
   SignupWizardStep,
-  { title: string; subtitle?: string }
+  { title: string; subtitle?: string; oauthSubtitle?: string }
 > = {
   identity: {
     title: "Criar conta",
     subtitle: "1 de 3 — Quem és?",
+    oauthSubtitle: "1 de 2 — Quem és?",
   },
   credentials: {
     title: "A tua conta",
@@ -44,14 +46,17 @@ const STEP_META: Record<
   profile: {
     title: "O teu perfil",
     subtitle: "3 de 3 — Foto e bio (opcional)",
+    oauthSubtitle: "2 de 2 — Foto e bio (opcional)",
   },
 };
 
 export function SignupWizard({
   error: initialError,
+  oauthFromLogin = false,
   onStepChange,
 }: {
   error?: string;
+  oauthFromLogin?: boolean;
   onStepChange?: (step: SignupWizardStep) => void;
 }) {
   const [step, setStepState] = useState<SignupWizardStep>("identity");
@@ -65,6 +70,7 @@ export function SignupWizard({
   const [gender, setGender] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [oauthMode, setOauthMode] = useState(oauthFromLogin);
 
   function setStep(next: SignupWizardStep) {
     setStepState(next);
@@ -81,12 +87,31 @@ export function SignupWizard({
       } = await supabase.auth.getUser();
 
       const saved = readSignupWizardStep();
+      const draft = readSignupProfileDraft();
       const finishing =
         hasSignupFinishingCookie() || saved === "profile" || Boolean(user);
+      const fromLoginOAuth = oauthFromLogin && finishing && Boolean(user);
+
+      if (fromLoginOAuth) {
+        setOauthMode(true);
+      }
 
       if (user && finishing) {
         setSignupFinishingCookie();
-        if (!cancelled) setStep("profile");
+        if (draft || saved === "profile") {
+          if (!cancelled) setStep("profile");
+        } else if (fromLoginOAuth) {
+          const { firstName: fn, lastName: ln } = namesFromOAuthMetadata(
+            user.user_metadata as Record<string, unknown>,
+          );
+          if (!cancelled) {
+            if (fn) setFirstName(fn);
+            if (ln) setLastName(ln);
+            setStep("identity");
+          }
+        } else if (!cancelled) {
+          setStep("profile");
+        }
       } else if (saved === "credentials" || saved === "identity") {
         if (!cancelled) setStep(saved);
       }
@@ -97,7 +122,7 @@ export function SignupWizard({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [oauthFromLogin]);
 
   useEffect(() => {
     if (step !== "profile") return;
@@ -143,6 +168,36 @@ export function SignupWizard({
     });
   }
 
+  function onIdentitySubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!identityValid || pending) return;
+
+    if (!oauthMode) {
+      setStep("credentials");
+      setError(undefined);
+      return;
+    }
+
+    const ageNum = parseAge(age);
+    const genderVal = parseGender(gender);
+    if (ageNum == null || !genderVal) return;
+
+    setError(undefined);
+    startTransition(async () => {
+      const result = await completeSignupProfile({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        age: ageNum,
+        gender: genderVal,
+      });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      goToProfileStep();
+    });
+  }
+
   if (!hydrated) {
     return (
       <div className="min-h-[12rem] animate-pulse rounded-xl bg-white/[0.04]" />
@@ -150,6 +205,8 @@ export function SignupWizard({
   }
 
   const meta = STEP_META[step];
+  const stepSubtitle =
+    oauthMode && meta.oauthSubtitle ? meta.oauthSubtitle : meta.subtitle;
 
   if (step === "profile") {
     return (
@@ -158,8 +215,8 @@ export function SignupWizard({
           <h1 className="font-heading text-2xl font-bold tracking-tight">
             {meta.title}
           </h1>
-          {meta.subtitle ? (
-            <p className="mt-1.5 text-sm text-muted-foreground">{meta.subtitle}</p>
+          {stepSubtitle ? (
+            <p className="mt-1.5 text-sm text-muted-foreground">{stepSubtitle}</p>
           ) : null}
         </div>
         <SignupProfileStep displayName={composeLocalName()} />
@@ -183,21 +240,18 @@ export function SignupWizard({
         <h1 className="font-heading text-2xl font-bold tracking-tight">
           {meta.title}
         </h1>
-        {meta.subtitle ? (
-          <p className="mt-1.5 text-sm text-muted-foreground">{meta.subtitle}</p>
+        {stepSubtitle ? (
+          <p className="mt-1.5 text-sm text-muted-foreground">{stepSubtitle}</p>
+        ) : null}
+        {oauthMode && step === "identity" ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Google conectado — falta completar o teu perfil.
+          </p>
         ) : null}
       </div>
 
       {step === "identity" ? (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!identityValid) return;
-            setStep("credentials");
-            setError(undefined);
-          }}
-          className="space-y-4"
-        >
+        <form onSubmit={onIdentitySubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="first_name" className="text-base">
@@ -277,15 +331,15 @@ export function SignupWizard({
           <Button
             type="submit"
             size="lg"
-            disabled={!identityValid}
+            disabled={!identityValid || pending}
             className={cn(
               "h-14 w-full text-base font-semibold transition-colors",
-              identityValid
+              identityValid && !pending
                 ? "bg-[var(--neuma-orange)] text-white hover:bg-[var(--neuma-orange)]/90"
                 : "bg-white/12 text-foreground",
             )}
           >
-            Continuar
+            {pending ? "A guardar…" : "Continuar"}
           </Button>
 
           <p className="text-center text-sm text-muted-foreground">

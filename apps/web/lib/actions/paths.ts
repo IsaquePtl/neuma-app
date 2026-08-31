@@ -66,13 +66,15 @@ async function segmentPathNodes(
 export async function createDraftPath(formData: FormData) {
   const { supabase, user } = await requireMentor();
   const title = (formData.get("title") as string)?.trim() || "Novo percurso";
+  const studentId =
+    ((formData.get("student_id") as string) || "").trim() || null;
 
   const { data, error } = await supabase
     .from("paths")
     .insert({
       title,
       status: "draft",
-      student_id: null,
+      student_id: studentId,
       created_by: user.id,
     })
     .select("id")
@@ -80,7 +82,17 @@ export async function createDraftPath(formData: FormData) {
 
   if (error || !data) throw new Error(error?.message ?? "Falha ao criar percurso");
 
+  if (studentId) {
+    await supabase
+      .from("profiles")
+      .update({ mentor_id: user.id })
+      .eq("id", studentId)
+      .eq("role", "student");
+    revalidatePath(`/studio/students/${studentId}`);
+  }
+
   revalidatePath("/studio/journeys");
+  revalidatePath(`/studio/journeys/${data.id}`);
   return data.id as string;
 }
 
@@ -124,6 +136,7 @@ export async function upsertPath(formData: FormData) {
   if (pathId && schedule.startDate && schedule.endDate) {
     await segmentPathNodes(supabase, pathId, schedule.startDate, schedule.endDate);
     revalidatePath(`/studio/journeys/${pathId}`);
+    revalidatePath(`/studio/journeys/${pathId}/edit`);
   }
 
   if (studentId) {
@@ -137,6 +150,11 @@ export async function upsertPath(formData: FormData) {
   revalidatePath(`/studio/students/${studentId}`);
   revalidatePath("/home");
   revalidatePath("/session");
+  if (pathId) {
+    revalidatePath(`/studio/journeys/${pathId}`);
+    revalidatePath(`/studio/journeys/${pathId}/edit`);
+  }
+  revalidatePath("/studio/journeys");
 }
 
 export async function deletePath(formData: FormData) {
@@ -175,6 +193,9 @@ export async function setPathStatus(formData: FormData) {
   await supabase.from("paths").update({ status }).eq("id", id);
 
   revalidatePath(`/studio/students/${studentId}`);
+  revalidatePath(`/studio/journeys/${id}`);
+  revalidatePath(`/studio/journeys/${id}/edit`);
+  revalidatePath("/studio/journeys");
   revalidatePath("/home");
   revalidatePath("/session");
 }

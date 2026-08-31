@@ -13,6 +13,7 @@ import {
 import {
   confirmOnboardingSubmission,
   getOnboardingSubmissionStatus,
+  persistPublicOnboardingFromEmbed,
 } from "@/lib/actions/onboarding";
 import { cn } from "@/lib/utils";
 
@@ -116,7 +117,9 @@ export function OnboardingNeumaEmbed({
         });
         return;
       }
-      router.replace(SIGNUP_HREF);
+      void persistPublicOnboardingFromEmbed(payload).finally(() => {
+        router.replace(SIGNUP_HREF);
+      });
     },
     [isLoggedIn, router],
   );

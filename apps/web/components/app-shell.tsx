@@ -6,6 +6,10 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { requestJourneyEditLeave } from "@/lib/journey-path/edit-guard-store";
 import {
+  journeyPathBackHref,
+  safeStudioReturnTo,
+} from "@/lib/journey-path/routes";
+import {
   Users,
   House,
   ClipboardList,
@@ -172,10 +176,13 @@ function shellBackHref(
     return "/home";
   }
 
-  if (pathname.startsWith("/studio/students/")) return "/studio/students";
-  if (/^\/studio\/journeys\/[^/]+(\/edit)?$/.test(pathname)) {
-    return "/studio/journeys";
+  if (pathname.startsWith("/studio/students/")) {
+    const returnTo = safeStudioReturnTo(searchParams?.get("returnTo"));
+    if (returnTo) return returnTo;
+    return "/studio/students";
   }
+  const journeyBack = journeyPathBackHref(pathname);
+  if (journeyBack) return journeyBack;
   if (
     pathname.startsWith("/studio/library/") ||
     pathname.startsWith("/studio/paths/")
@@ -549,7 +556,7 @@ export function AppShell({
         </div>
       </aside>
 
-      <div className="flex flex-1 flex-col desktop:pl-64">
+      <div className="flex min-w-0 flex-1 flex-col desktop:pl-64">
         <header
           className={cn(
             "neuma-enter fixed inset-x-0 top-0 z-20 flex items-center bg-transparent desktop:hidden",
@@ -600,7 +607,7 @@ export function AppShell({
           aria-hidden
         />
 
-        <main className="neuma-enter neuma-enter-delay-1 flex w-full flex-1 flex-col px-4 pt-4 pb-[calc(6.5rem+8px)] desktop:px-10 desktop:pb-14 desktop:pt-10">
+        <main className="neuma-enter neuma-enter-delay-1 flex w-full min-w-0 flex-1 flex-col px-4 pt-4 pb-[calc(6.5rem+8px)] desktop:px-10 desktop:pb-14 desktop:pt-10">
           {navPending ? (
             <ScreenLoader />
           ) : (

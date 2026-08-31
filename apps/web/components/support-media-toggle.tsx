@@ -3,16 +3,16 @@
 import { useEffect, useState } from "react";
 import {
   ChevronDown,
-  ExternalLink,
   FileText,
   Loader2,
   Play,
 } from "lucide-react";
 
-import { toEmbedUrl } from "@/components/video-embed";
+import { MediaVideoPlayer } from "@/components/media-video-player";
+import { isPlayableVideoUrl, toEmbedUrl } from "@/components/video-embed";
 import { cn } from "@/lib/utils";
 
-/** Botão estilo to-do: vídeo embeddável expande; ficheiro abre link. */
+/** Botão estilo to-do: vídeo embutido expande; ficheiro abre link. */
 export function SupportMediaToggle({
   url,
   title,
@@ -26,7 +26,8 @@ export function SupportMediaToggle({
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
   const embed = toEmbedUrl(url);
-  const isVideo = Boolean(embed);
+  const isVideo = isPlayableVideoUrl(url);
+  const isIframeEmbed = Boolean(embed);
 
   useEffect(() => {
     if (!open) {
@@ -41,15 +42,12 @@ export function SupportMediaToggle({
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm transition-colors hover:bg-white/[0.07]"
+        className="inline-flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm transition-colors hover:bg-white/[0.07]"
       >
-        <span className="inline-flex min-w-0 items-center gap-2.5">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30">
-            <FileText className="size-3.5 text-[var(--neuma-coral)]" />
-          </span>
-          <span className="truncate font-medium">{label}</span>
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30">
+          <FileText className="size-3.5 text-[var(--neuma-coral)]" />
         </span>
-        <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 truncate font-medium">{label}</span>
       </a>
     );
   }
@@ -61,16 +59,23 @@ export function SupportMediaToggle({
       setReady(false);
       return;
     }
-    setLoading(true);
-    setReady(false);
+    if (isIframeEmbed) {
+      setLoading(true);
+      setReady(false);
+      setOpen(true);
+      return;
+    }
+    // Native / hosted file — MediaVideoPlayer mounts immediately.
     setOpen(true);
+    setReady(true);
+    setLoading(false);
   }
 
   const expanded = open && ready;
   const loadingState = loading && !ready;
 
   return (
-    <div className="space-y-2">
+    <div className="min-w-0 w-full max-w-full space-y-2">
       <button
         type="button"
         onClick={toggle}
@@ -105,7 +110,7 @@ export function SupportMediaToggle({
         />
       </button>
 
-      {open ? (
+      {open && isIframeEmbed ? (
         <div
           className={cn(
             "relative w-full overflow-hidden rounded-xl",
@@ -130,6 +135,15 @@ export function SupportMediaToggle({
             )}
           />
         </div>
+      ) : null}
+
+      {open && !isIframeEmbed ? (
+        <MediaVideoPlayer
+          url={url}
+          title={title}
+          size="full"
+          fallbackLabel={label}
+        />
       ) : null}
     </div>
   );

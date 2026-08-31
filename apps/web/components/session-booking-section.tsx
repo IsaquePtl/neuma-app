@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   CalendarClock,
   Clock,
-  ExternalLink,
 } from "lucide-react";
 
 import { CalBookButton } from "@/components/calcom-embed";
@@ -102,13 +101,10 @@ function CallBookingCard({
           href={booking.meet_url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-3.5 py-3.5 text-sm font-medium transition-colors hover:bg-white/[0.06]"
+          className="inline-flex w-full items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3.5 py-3.5 text-sm font-medium transition-colors hover:bg-white/[0.06]"
         >
-          <span className="inline-flex min-w-0 items-center gap-2">
-            <GoogleMeetMark className="size-5 shrink-0 text-[var(--neuma-coral)]" />
-            <span className="truncate">Entrar na call</span>
-          </span>
-          <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
+          <GoogleMeetMark className="size-5 shrink-0 text-[var(--neuma-coral)]" />
+          <span className="truncate">Entrar na call</span>
         </a>
       ) : (
         <p className="rounded-xl border border-dashed border-white/10 px-3.5 py-3.5 text-sm text-muted-foreground">
@@ -149,7 +145,7 @@ export function SessionBookingSection({
   const hasBooking = Boolean(booking);
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 w-full max-w-full space-y-3">
       <CallBookingCard booking={booking} mentorName={mentorName} />
       {canBookSessions ? (
         <CalBookButton
@@ -157,7 +153,6 @@ export function SessionBookingSection({
           namespace="30min"
           eventType="30min"
           label={hasBooking ? "Alterar agendamento" : "Agendar sessão"}
-          showExternalLink={false}
           size={hasBooking ? "default" : "lg"}
           variant={hasBooking ? "secondary" : "default"}
           className={

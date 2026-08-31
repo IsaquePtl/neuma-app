@@ -3,7 +3,13 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LayoutTemplate, Link2, Pencil, Trash2 } from "lucide-react";
+import {
+  LayoutTemplate,
+  Link2,
+  MoreVertical,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { claimUnassignedPath } from "@/lib/actions/agent-proposals";
@@ -19,6 +25,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 
 export function JourneyPathRowActions({
@@ -35,14 +48,10 @@ export function JourneyPathRowActions({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [linkOpen, setLinkOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [studentId, setStudentId] = useState("");
 
-  function onDelete() {
-    if (
-      !window.confirm(`Apagar o percurso “${path.title}”? Esta ação é irreversível.`)
-    ) {
-      return;
-    }
+  function confirmDelete() {
     startTransition(async () => {
       try {
         const fd = new FormData();
@@ -50,6 +59,7 @@ export function JourneyPathRowActions({
         fd.set("student_id", path.student_id ?? "");
         await deletePath(fd);
         toast.success("Percurso apagado");
+        setDeleteOpen(false);
         router.refresh();
       } catch {
         toast.error("Não foi possível apagar o percurso");
@@ -92,11 +102,13 @@ export function JourneyPathRowActions({
     });
   }
 
+  const editHref = `/studio/journeys/${path.id}/edit`;
+
   return (
     <>
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+      <div className="hidden shrink-0 flex-wrap items-center justify-end gap-1 desktop:flex">
         <Button
-          render={<Link href={`/studio/journeys/${path.id}/edit`} />}
+          render={<Link href={editHref} />}
           nativeButton={false}
           size="sm"
           variant="ghost"
@@ -135,12 +147,81 @@ export function JourneyPathRowActions({
           variant="ghost"
           className="gap-1 text-destructive hover:text-destructive"
           disabled={pending}
-          onClick={onDelete}
+          onClick={() => setDeleteOpen(true)}
         >
           <Trash2 className="size-3.5" />
           Remover
         </Button>
       </div>
+
+      <div className="flex items-center justify-end desktop:hidden">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={<Button variant="ghost" size="icon-sm" />}
+            aria-label="Ações"
+            title="Ações"
+          >
+            <MoreVertical className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-48">
+            <DropdownMenuItem onClick={() => router.push(editHref)}>
+              <Pencil className="size-4" />
+              Editar
+            </DropdownMenuItem>
+            {!path.student_id ? (
+              <DropdownMenuItem
+                disabled={pending}
+                onClick={() => setLinkOpen(true)}
+              >
+                <Link2 className="size-4" />
+                Vincular
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuItem disabled={pending} onClick={onSaveTemplate}>
+              <LayoutTemplate className="size-4" />
+              Template
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              disabled={pending}
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="size-4" />
+              Remover
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-md" showCloseButton={!pending}>
+          <DialogHeader>
+            <DialogTitle>Remover percurso?</DialogTitle>
+            <DialogDescription>
+              Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => setDeleteOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={pending}
+              onClick={confirmDelete}
+            >
+              {pending ? "A remover…" : "Remover"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={linkOpen} onOpenChange={setLinkOpen}>
         <DialogContent className="sm:max-w-md">

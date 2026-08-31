@@ -1,12 +1,14 @@
 "use client";
 
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
   ClipboardList,
-  ExternalLink,
   Inbox,
   Layers,
+  Maximize2,
+  Minimize2,
   Route,
   StickyNote,
 } from "lucide-react";
@@ -16,7 +18,7 @@ import {
   ApplyTemplateDialog,
   type ReadyTemplate,
 } from "@/components/apply-template-dialog";
-import { PathForm } from "@/components/path-form";
+import { CreatePathButton } from "@/components/create-path-button";
 import { PathStatusBadge, NodeStatusBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -28,26 +30,39 @@ import type {
   StudentPath,
   StudentProfile,
 } from "@/lib/students/queries";
+import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 
 function PanelHeader({
   icon: Icon,
   title,
   subtitle,
+  action,
+  showBorder = true,
 }: {
   icon: LucideIcon;
   title: string;
   subtitle: string;
+  action?: ReactNode;
+  showBorder?: boolean;
 }) {
   return (
-    <div className="flex items-start gap-3 border-b border-white/8 pb-3">
-      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/8">
-        <Icon className="size-4" />
-      </span>
-      <div className="min-w-0">
-        <h2 className="font-semibold leading-tight">{title}</h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
+    <div
+      className={cn(
+        "flex items-start justify-between gap-3",
+        showBorder && "border-b border-white/8 pb-3",
+      )}
+    >
+      <div className="flex min-w-0 flex-1 items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/8">
+          <Icon className="size-4" />
+        </span>
+        <div className="min-w-0">
+          <h2 className="font-semibold leading-tight">{title}</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
+        </div>
       </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   );
 }
@@ -79,26 +94,65 @@ export function StudentPanorama({
     nodes.filter((n) => n.status === "completed").at(-1) ??
     null;
   const done = nodes.filter((n) => n.status === "completed").length;
+  const [notesOpen, setNotesOpen] = useState(false);
 
   return (
     <div className="grid gap-4 sm:gap-5">
       {/* Notas */}
-      <Card className="flex flex-col gap-4 p-4 sm:p-5">
-        <PanelHeader
-          icon={StickyNote}
-          title="Notas"
-          subtitle="Prompt / contexto para o agent montar o percurso"
-        />
-        <StudentNotesField
-          studentId={student.id}
-          initialNotes={student.internal_notes}
-          rows={6}
-          placeholder="Notas / prompt para o agent montar o percurso…"
-        />
-        <p className="text-xs text-muted-foreground">
-          Depois do onboarding confirmado, escreve aqui o que o agent precisa
-          para desenhar o percurso.
-        </p>
+      <Card
+        className={cn(
+          "flex flex-col p-4 sm:p-5",
+          notesOpen && "gap-4",
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => setNotesOpen((open) => !open)}
+          aria-expanded={notesOpen}
+          aria-label={notesOpen ? "Minimizar notas" : "Maximizar notas"}
+          className={cn(
+            "w-full rounded-lg text-left transition-colors",
+            "hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            !notesOpen && "-m-4 p-4 sm:-m-5 sm:p-5",
+          )}
+        >
+          <PanelHeader
+            icon={StickyNote}
+            title="Notas"
+            subtitle="Prompt / contexto para o agent montar o percurso"
+            showBorder={notesOpen}
+            action={
+              <span
+                className="grid size-8 shrink-0 place-items-center text-muted-foreground"
+                aria-hidden
+              >
+                {notesOpen ? (
+                  <Minimize2 className="size-4" />
+                ) : (
+                  <Maximize2 className="size-4" />
+                )}
+              </span>
+            }
+          />
+        </button>
+        {notesOpen ? (
+          <div
+            className="flex flex-col gap-4"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <StudentNotesField
+              studentId={student.id}
+              initialNotes={student.internal_notes}
+              rows={6}
+              placeholder="Notas / prompt para o agent montar o percurso…"
+            />
+            <p className="text-xs text-muted-foreground">
+              Depois do onboarding confirmado, escreve aqui o que o agent precisa
+              para desenhar o percurso.
+            </p>
+          </div>
+        ) : null}
       </Card>
 
       {/* Progresso níveis */}
@@ -217,7 +271,7 @@ export function StudentPanorama({
               <Link
                 key={block.id}
                 href={`/studio/intake/${block.id}`}
-                className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-white/8 transition-colors hover:bg-white/[0.05]"
+                className="flex items-center gap-3 rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-white/8 transition-colors hover:bg-white/[0.05]"
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">
@@ -227,7 +281,6 @@ export function StudentPanorama({
                     {formatDateTime(block.created_at)}
                   </p>
                 </div>
-                <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
               </Link>
             ))}
           </div>
@@ -252,7 +305,12 @@ export function StudentPanorama({
                 studentId={student.id}
                 templates={readyTemplates}
               />
-              <PathForm studentId={student.id} triggerClassName="gap-2" />
+              <CreatePathButton
+                studentId={student.id}
+                label="Criar percurso"
+                size="sm"
+                className="gap-2"
+              />
             </div>
           </div>
         ) : (

@@ -20,12 +20,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { JourneyEditDirtyProvider } from "@/lib/journey-path/edit-dirty-context";
 import { registerJourneyEditGuard } from "@/lib/journey-path/edit-guard-store";
 import {
   buildPathSnapshot,
   isEmptyDraftSnapshot,
   shouldConfirmLeave,
   snapshotsEqual,
+  type PathSnapshot,
 } from "@/lib/journey-path/path-snapshot";
 import { deletePath } from "@/lib/actions/paths";
 import type { StudentNode, StudentPath } from "@/lib/students/queries";
@@ -49,14 +51,29 @@ export function JourneyPathEditGuard({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const [initialSnapshot] = useState(() =>
+  const [baseline, setBaseline] = useState<PathSnapshot>(() =>
     buildPathSnapshot(path, nodes, studentId),
   );
-  const stateRef = useRef({ path, nodes, studentId, isNewDraft });
+  const [draftAcknowledged, setDraftAcknowledged] = useState(false);
+  const effectiveIsNewDraft = isNewDraft && !draftAcknowledged;
+
+  const stateRef = useRef({
+    path,
+    nodes,
+    studentId,
+    isNewDraft: effectiveIsNewDraft,
+    baseline,
+  });
 
   useEffect(() => {
-    stateRef.current = { path, nodes, studentId, isNewDraft };
-  }, [path, nodes, studentId, isNewDraft]);
+    stateRef.current = {
+      path,
+      nodes,
+      studentId,
+      isNewDraft: effectiveIsNewDraft,
+      baseline,
+    };
+  }, [path, nodes, studentId, effectiveIsNewDraft, baseline]);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pendingLeave, setPendingLeave] = useState<PendingLeave | null>(null);
@@ -68,21 +85,22 @@ export function JourneyPathEditGuard({
   );
 
   const confirmLeave = useMemo(
-    () => shouldConfirmLeave(initialSnapshot, currentSnapshot, isNewDraft),
-    [currentSnapshot, initialSnapshot, isNewDraft],
+    () => shouldConfirmLeave(baseline, currentSnapshot, effectiveIsNewDraft),
+    [baseline, currentSnapshot, effectiveIsNewDraft],
   );
 
-  const hasChanges = !snapshotsEqual(initialSnapshot, currentSnapshot);
+  const hasChanges = !snapshotsEqual(baseline, currentSnapshot);
   const isEmptyDraft = isEmptyDraftSnapshot(currentSnapshot);
+  const isDirty = confirmLeave;
 
   const readShouldConfirmLeave = useCallback(() => {
-    const { path, nodes, studentId, isNewDraft } = stateRef.current;
+    const { path, nodes, studentId, isNewDraft, baseline } = stateRef.current;
     return shouldConfirmLeave(
-      initialSnapshot,
+      baseline,
       buildPathSnapshot(path, nodes, studentId),
       isNewDraft,
     );
-  }, [initialSnapshot]);
+  }, []);
 
   const finishLeave = useCallback((proceed: boolean) => {
     setPendingLeave((current) => {
@@ -100,6 +118,23 @@ export function JourneyPathEditGuard({
       }),
     [],
   );
+
+  const acknowledgeSave = useCallback(() => {
+    const { path: p, nodes: n, studentId: sid, baseline: base } =
+      stateRef.current;
+    const next = buildPathSnapshot(p, n, sid);
+    const changed = !snapshotsEqual(base, next);
+    setBaseline(next);
+    setDraftAcknowledged(true);
+    toast.success(
+      isEmptyDraftSnapshot(next) && !changed
+        ? "Percurso guardado"
+        : "Alterações guardadas",
+    );
+    if (isNewDraft) {
+      router.replace(`/studio/journeys/${path.id}/edit`);
+    }
+  }, [isNewDraft, path.id, router]);
 
   useEffect(() => {
     registerJourneyEditGuard({
@@ -149,6 +184,7 @@ export function JourneyPathEditGuard({
   }
 
   function onSave() {
+    // Changes are already persisted via per-level / path actions — keep and leave.
     navigateAway();
   }
 
@@ -185,8 +221,17 @@ export function JourneyPathEditGuard({
       ? "Este percurso ainda está vazio. Queres guardá-lo ou descartá-lo?"
       : "Tens alterações neste percurso. Queres guardá-las antes de sair?";
 
+  const dirtyValue = useMemo(
+    () => ({
+      isDirty,
+      save: acknowledgeSave,
+      pending: false,
+    }),
+    [acknowledgeSave, isDirty],
+  );
+
   return (
-    <>
+    <JourneyEditDirtyProvider value={dirtyValue}>
       {children}
 
       <Dialog
@@ -223,6 +268,6 @@ export function JourneyPathEditGuard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </JourneyEditDirtyProvider>
   );
 }

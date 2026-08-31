@@ -110,6 +110,37 @@ export function getTallyConfig() {
   };
 }
 
+export type TallySubmissionShape = {
+  submission_kind: string;
+  source_form_id: string | null;
+  source_form_name?: string | null;
+};
+
+/** Classify webhook/embed payloads — form id first, then form name fallback. */
+export function resolveTallySubmissionKind(
+  formId: string | null,
+  formName: string | null,
+  config = getTallyConfig(),
+): "onboarding" | "checkin" | "unknown" {
+  if (formId === config.onboardingFormId) return "onboarding";
+  if (formId === config.checkinFormId) return "checkin";
+  const name = formName?.trim() ?? "";
+  if (/onboarding/i.test(name)) return "onboarding";
+  if (/check[\s-]?in/i.test(name)) return "checkin";
+  return "unknown";
+}
+
+/** True when a row belongs on the mentor onboardings list (incl. misclassified). */
+export function isOnboardingTallySubmission(
+  submission: TallySubmissionShape,
+  onboardingFormId = getTallyConfig().onboardingFormId,
+) {
+  if (submission.submission_kind === "onboarding") return true;
+  if (submission.source_form_id === onboardingFormId) return true;
+  if (/onboarding/i.test(submission.source_form_name ?? "")) return true;
+  return false;
+}
+
 export function verifyTallySignature({
   rawBody,
   signature,

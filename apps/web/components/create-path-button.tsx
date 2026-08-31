@@ -12,9 +12,13 @@ import { cn } from "@/lib/utils";
 export function CreatePathButton({
   label = "Criar Percurso",
   className,
+  studentId,
+  size = "lg",
 }: {
   label?: string;
   className?: string;
+  studentId?: string;
+  size?: "default" | "sm" | "lg" | "icon";
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -24,6 +28,7 @@ export function CreatePathButton({
       try {
         const fd = new FormData();
         fd.set("title", "Novo percurso");
+        if (studentId) fd.set("student_id", studentId);
         const id = await createDraftPath(fd);
         router.push(`/studio/journeys/${id}/edit?new=1`);
       } catch {
@@ -35,9 +40,10 @@ export function CreatePathButton({
   return (
     <Button
       type="button"
+      size={size}
       disabled={pending}
       onClick={onCreate}
-      className={cn("h-12 gap-2 px-6 text-sm", className)}
+      className={cn(size === "lg" && "h-12 gap-2 px-6 text-sm", className)}
     >
       <Plus className="size-4" />
       {pending ? "A criar…" : label}

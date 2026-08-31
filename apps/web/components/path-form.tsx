@@ -96,7 +96,7 @@ export function PathForm({
             />
           }
         >
-          <Pencil className="size-4" /> Editar
+          <Pencil className="size-4" /> Editar Percurso
         </DialogTrigger>
       ) : (
         <DialogTrigger

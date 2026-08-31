@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { tryIncrementWeekExtensions } from "@/lib/nodes/week-extensions";
 
 async function mentorClient() {
   const supabase = await createClient();
@@ -23,13 +24,19 @@ async function revalidateJourney(
   supabase: Awaited<ReturnType<typeof createClient>>,
   pathId: string,
   studentId?: string | null,
+  nodeId?: string | null,
 ) {
   revalidatePath(`/studio/journeys/${pathId}`);
   revalidatePath("/studio/journeys");
   revalidatePath("/home");
   revalidatePath("/path");
   revalidatePath("/session");
+  revalidatePath("/session/feedback");
   if (studentId) revalidatePath(`/studio/students/${studentId}`);
+  if (nodeId) {
+    revalidatePath(`/studio/journeys/${pathId}/levels/${nodeId}`);
+    revalidatePath(`/path/${nodeId}`);
+  }
 }
 
 /** Completa o nível atual e ativa o seguinte (ou conclui o percurso). */
@@ -85,34 +92,43 @@ export async function advanceLevel(formData: FormData) {
     .eq("id", pathId)
     .single();
 
-  await revalidateJourney(supabase, pathId, path?.student_id);
+  await revalidateJourney(supabase, pathId, path?.student_id, nodeId);
 }
 
-/** Mantém o aluno no nível e prolonga o prazo pelo nº de semanas indicado. */
+function resolveExtensionDays(formData: FormData): number {
+  const unit = String(formData.get("unit") ?? "weeks");
+  const amountRaw = Number(
+    formData.get("amount") ?? formData.get("weeks") ?? formData.get("days") ?? 1,
+  );
+  const amount =
+    Number.isFinite(amountRaw) && amountRaw > 0
+      ? Math.min(Math.floor(amountRaw), unit === "days" ? 365 : 52)
+      : 0;
+  if (amount < 1) return 0;
+  return unit === "days" ? amount : amount * 7;
+}
+
+/** Mantém o aluno no nível e prolonga o prazo (dias ou semanas). */
 export async function extendLevelWeek(formData: FormData) {
   const { supabase } = await mentorClient();
   const nodeId = String(formData.get("node_id") ?? "");
   const pathId = String(formData.get("path_id") ?? "");
-  const weeksRaw = Number(formData.get("weeks") ?? 1);
-  const weeks =
-    Number.isFinite(weeksRaw) && weeksRaw > 0
-      ? Math.min(Math.floor(weeksRaw), 52)
-      : 0;
+  const daysToAdd = resolveExtensionDays(formData);
   if (!nodeId || !pathId) throw new Error("Dados em falta");
-  if (weeks < 1) throw new Error("Indica quantas semanas a prolongar");
+  if (daysToAdd < 1) throw new Error("Indica quanto tempo prolongar");
 
-  const { data: node } = await supabase
+  const { data: node, error: nodeError } = await supabase
     .from("nodes")
     .select("id, due_date, status")
     .eq("id", nodeId)
     .eq("path_id", pathId)
     .single();
-  if (!node) throw new Error("Nível não encontrado");
+  if (nodeError || !node) throw new Error("Nível não encontrado");
 
   const base = node.due_date
     ? new Date(`${node.due_date}T12:00:00`)
     : new Date();
-  base.setDate(base.getDate() + weeks * 7);
+  base.setDate(base.getDate() + daysToAdd);
   const nextDue = base.toISOString().slice(0, 10);
 
   await supabase
@@ -122,6 +138,9 @@ export async function extendLevelWeek(formData: FormData) {
       status: "active",
     })
     .eq("id", nodeId);
+
+  // One extend action → one extra check-in slot (when migration 0032 is applied).
+  await tryIncrementWeekExtensions(supabase, nodeId);
 
   // Ensure this is the active node
   const { data: siblings } = await supabase
@@ -143,7 +162,7 @@ export async function extendLevelWeek(formData: FormData) {
     .eq("id", pathId)
     .single();
 
-  await revalidateJourney(supabase, pathId, path?.student_id);
+  await revalidateJourney(supabase, pathId, path?.student_id, nodeId);
 }
 
 export async function createLevelFeedback(formData: FormData) {
@@ -174,5 +193,5 @@ export async function createLevelFeedback(formData: FormData) {
     .eq("id", pathId)
     .single();
 
-  await revalidateJourney(supabase, pathId, path?.student_id);
+  await revalidateJourney(supabase, pathId, path?.student_id, nodeId);
 }

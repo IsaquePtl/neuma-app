@@ -99,9 +99,9 @@ export function StudentShell({
         </div>
 
         {counts.totalNodes > 0 ? (
-          <div className="h-1 overflow-hidden rounded-full bg-white/10">
+          <div className="h-1 w-full overflow-hidden rounded-full bg-white/10">
             <div
-              className="neuma-gradient h-full transition-all"
+              className="h-full bg-[var(--neuma-coral)] transition-all"
               style={{ width: `${pct}%` }}
             />
           </div>

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import { studentProfileHref } from "@/lib/journey-path/routes";
 
 /** App calendar day / display timezone */
 export const APP_TIMEZONE = "Europe/Lisbon";
@@ -73,9 +74,17 @@ function monthBounds(year: number, monthIndex: number) {
   };
 }
 
-export async function loadCalendarEvents(year: number, monthIndex: number) {
+export async function loadCalendarEvents(
+  year: number,
+  monthIndex: number,
+  options?: { studentReturnTo?: string },
+) {
   const supabase = await createClient();
   const { fromIso, toIso, fromDate, toDate } = monthBounds(year, monthIndex);
+  const studentHref = (studentId: string) =>
+    options?.studentReturnTo
+      ? studentProfileHref(studentId, options.studentReturnTo)
+      : `/studio/students/${studentId}`;
 
   const [
     { data: bookings },
@@ -132,7 +141,7 @@ export async function loadCalendarEvents(year: number, monthIndex: number) {
       title: b.title ?? "Sessão 1:1",
       studentName: b.attendee_name ?? b.attendee_email,
       studentId: b.student_id,
-      href: b.student_id ? `/studio/students/${b.student_id}` : null,
+      href: b.student_id ? studentHref(b.student_id) : null,
       meetUrl: b.meet_url,
       meta: when,
       startsAtIso: b.start_time,
@@ -209,7 +218,7 @@ export async function loadCalendarEvents(year: number, monthIndex: number) {
       studentName: student?.full_name ?? student?.email ?? null,
       studentId: m.student_id,
       meta: `${kindLabel} · ${when}`,
-      href: m.student_id ? `/studio/students/${m.student_id}` : null,
+      href: m.student_id ? studentHref(m.student_id) : null,
       editableEventId: m.id,
       startsAtIso: m.starts_at,
       notes: m.notes,
@@ -230,12 +239,14 @@ export async function loadCalendarEvents(year: number, monthIndex: number) {
 }
 
 /** Events for the current calendar day in APP_TIMEZONE (Europe/Lisbon). */
-export async function loadTodayEvents(): Promise<CalendarEvent[]> {
+export async function loadTodayEvents(options?: {
+  studentReturnTo?: string;
+}): Promise<CalendarEvent[]> {
   const todayKey = toDateKey(new Date());
   if (!todayKey) return [];
   const year = Number(todayKey.slice(0, 4));
   const monthIndex = Number(todayKey.slice(5, 7)) - 1;
-  const events = await loadCalendarEvents(year, monthIndex);
+  const events = await loadCalendarEvents(year, monthIndex, options);
   return events.filter((e) => e.date === todayKey);
 }
 

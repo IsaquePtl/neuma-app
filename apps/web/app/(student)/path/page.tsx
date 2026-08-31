@@ -3,7 +3,9 @@ import { ArrowRight, Target, Route } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { loadMyPathWithNodes } from "@/lib/students/queries";
+import { loadStudentUnviewedFeedback } from "@/lib/feedbacks/student";
 import { PathAwaitingCard } from "@/components/path-awaiting-card";
+import { PathPausedCard } from "@/components/path-paused-card";
 import { StudentPathMap } from "@/components/student-path-map";
 import { CategoryThemeIcon } from "@/components/category-theme-icon";
 import { MusicStaffIcon } from "@/components/music-staff-icon";
@@ -23,6 +25,9 @@ export default async function StudentPathPage() {
   } = await supabase.auth.getUser();
 
   const { path, nodes } = await loadMyPathWithNodes(user!.id);
+  const unviewedFeedback = path
+    ? await loadStudentUnviewedFeedback(supabase, user!.id, nodes)
+    : { count: 0, items: [], unviewedByNodeId: new Map<string, number>() };
   const completed = nodes.filter((n) => n.status === "completed").length;
   const total = nodes.length;
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
@@ -50,6 +55,14 @@ export default async function StudentPathPage() {
     );
   }
 
+  if (path.status === "paused") {
+    return (
+      <div className="neuma-mobile-viewport flex flex-col items-center justify-center overflow-hidden overscroll-none pb-5 desktop:min-h-0 desktop:flex-1 desktop:justify-center desktop:overflow-visible desktop:pb-4">
+        <PathPausedCard />
+      </div>
+    );
+  }
+
   return (
     <div className={PATH_VIEWPORT}>
       {/* Cabeçalho leve — o foco é o mapa de níveis */}
@@ -67,10 +80,10 @@ export default async function StudentPathPage() {
             {path.goal}
           </p>
         ) : null}
-        <div className="flex items-center gap-3 pt-1">
-          <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
+        <div className="flex w-full items-center gap-3 pt-1">
+          <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-white/10">
             <div
-              className="neuma-gradient h-full transition-all"
+              className="h-full bg-[var(--neuma-coral)] transition-all"
               style={{ width: `${pct}%` }}
             />
           </div>
@@ -86,7 +99,10 @@ export default async function StudentPathPage() {
         </p>
       ) : (
         <div className="min-h-0 w-full">
-          <StudentPathMap nodes={nodes} />
+          <StudentPathMap
+            nodes={nodes}
+            unviewedByNodeId={unviewedFeedback.unviewedByNodeId}
+          />
         </div>
       )}
     </div>

@@ -10,7 +10,18 @@ function supabaseHostname() {
   }
 }
 
+function r2PublicHostname() {
+  const raw = process.env.R2_PUBLIC_URL;
+  if (!raw) return null;
+  try {
+    return new URL(raw).hostname;
+  } catch {
+    return null;
+  }
+}
+
 const supabaseHost = supabaseHostname();
+const r2Host = r2PublicHostname();
 
 const nextConfig: NextConfig = {
   async rewrites() {
@@ -26,12 +37,12 @@ const nextConfig: NextConfig = {
     ];
   },
   experimental: {
-    // Default Server Actions = 1 MB → fotos iPhone → "unexpected response"
+    // Default Server Actions = 1 MB; check-in / feedback videos up to 500 MB
     serverActions: {
-      bodySizeLimit: "10mb",
+      bodySizeLimit: "520mb",
     },
     // Proxy (Next 16) — evita cortar o body em produção
-    proxyClientMaxBodySize: "12mb",
+    proxyClientMaxBodySize: "520mb",
   },
   images: {
     // Vercel Services (vercel.json services.web) does not expose /_next/image —
@@ -47,8 +58,17 @@ const nextConfig: NextConfig = {
             },
           ]
         : []),
+      ...(r2Host
+        ? [
+            {
+              protocol: "https" as const,
+              hostname: r2Host,
+              pathname: "/**",
+            },
+          ]
+        : []),
       {
-        protocol: "https",
+        protocol: "https" as const,
         hostname: "*.supabase.co",
         pathname: "/storage/v1/object/public/**",
       },

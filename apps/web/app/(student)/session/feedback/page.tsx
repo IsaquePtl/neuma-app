@@ -1,9 +1,20 @@
 import Link from "next/link";
-import { ExternalLink, Video } from "lucide-react";
+import { ArrowRight, MessageSquareText } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
-import { Card } from "@/components/ui/card";
-import { formatDateTime } from "@/lib/labels";
+import {
+  feedbackHrefForItem,
+  loadStudentFeedbackList,
+} from "@/lib/feedbacks/student";
+import { firstNameFromFullName } from "@/lib/profile/greeting";
+import { loadMentorCalUsername, loadMyPathWithNodes } from "@/lib/students/queries";
+import { formatDateTime, nodeKindLabel } from "@/lib/labels";
+import { cn } from "@/lib/utils";
+import type { NodeKind } from "@/lib/types/database.types";
+
+function feedbackKindLabel(kind: "level" | "check_in") {
+  return kind === "level" ? "O feedback" : "Feedback do check-in";
+}
 
 export default async function SessionFeedbackPage() {
   const supabase = await createClient();
@@ -11,61 +22,35 @@ export default async function SessionFeedbackPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: activePath } = await supabase
-    .from("paths")
-    .select("id")
-    .eq("student_id", user!.id)
-    .eq("status", "active")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const [{ path, nodes }, mentor] = await Promise.all([
+    loadMyPathWithNodes(user!.id),
+    loadMentorCalUsername(),
+  ]);
 
-  const { data: activeNode } = activePath
-    ? await supabase
-        .from("nodes")
-        .select("id, title")
-        .eq("path_id", activePath.id)
-        .eq("status", "active")
-        .maybeSingle()
-    : { data: null };
+  const mentorName = firstNameFromFullName(mentor?.full_name);
 
-  if (!activeNode) {
+  if (!path) {
     return (
       <div className="w-full space-y-6">
-        <Card className="p-6 text-sm text-muted-foreground">
+        <header className="space-y-1">
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            Feedback
+          </p>
+          <h1 className="text-2xl font-bold tracking-tight">Feedbacks</h1>
+        </header>
+        <div className="student-path-step student-path-step--done !p-5 text-sm text-muted-foreground">
           Sem feedbacks de momento.
-        </Card>
+        </div>
       </div>
     );
   }
 
-  const [{ data: levelFeedbacks }, { data: checkInFeedbacks }] =
-    await Promise.all([
-      supabase
-        .from("level_feedbacks")
-        .select("id, notes, video_url, file_url, created_at")
-        .eq("node_id", activeNode.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("check_ins")
-        .select(
-          "id, created_at, feedback:feedbacks(notes, next_steps, video_url, approved, created_at)",
-        )
-        .eq("student_id", user!.id)
-        .eq("node_id", activeNode.id)
-        .order("created_at", { ascending: false }),
-    ]);
-
-  const fromCheckIns = (checkInFeedbacks ?? [])
-    .map((c) => {
-      const fb = Array.isArray(c.feedback) ? c.feedback[0] : c.feedback;
-      if (!fb) return null;
-      return { checkInId: c.id, feedback: fb };
-    })
-    .filter(Boolean);
-
-  const empty =
-    (levelFeedbacks?.length ?? 0) === 0 && fromCheckIns.length === 0;
+  const { items, unviewedCount } = await loadStudentFeedbackList(
+    supabase,
+    user!.id,
+    nodes,
+  );
+  const unviewedItems = items.filter((item) => !item.viewed);
 
   return (
     <div className="w-full space-y-6">
@@ -73,88 +58,82 @@ export default async function SessionFeedbackPage() {
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
           Feedback
         </p>
-        <h1 className="text-2xl font-bold tracking-tight">
-          {activeNode.title}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Feedback do mentor neste nível.
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight">Feedbacks</h1>
+        {unviewedItems.length > 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {unviewedCount === 1
+              ? "Tens 1 feedback por ver."
+              : `Tens ${unviewedCount} feedbacks por ver.`}
+          </p>
+        ) : null}
       </header>
 
-      {empty ? (
-        <Card className="p-6 text-sm text-muted-foreground">
+      {unviewedItems.length === 0 ? (
+        <div className="student-path-step student-path-step--done !p-5 text-sm text-muted-foreground">
           Sem feedbacks de momento.
-        </Card>
+        </div>
       ) : (
         <div className="space-y-3">
-          {(levelFeedbacks ?? []).map((f) => (
-            <Card key={f.id} className="space-y-2 p-5">
-              <p className="text-xs text-muted-foreground">
-                Feedback do nível · {formatDateTime(f.created_at)}
-              </p>
-              {f.notes ? (
-                <p className="whitespace-pre-wrap text-sm">{f.notes}</p>
-              ) : null}
-              {f.video_url ? (
-                <a
-                  href={f.video_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-sm text-[var(--neuma-coral)] hover:underline"
-                >
-                  <Video className="size-4" /> Ver vídeo
-                  <ExternalLink className="size-3.5" />
-                </a>
-              ) : null}
-              {f.file_url ? (
-                <a
-                  href={f.file_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-                >
-                  Abrir ficheiro <ExternalLink className="size-3.5" />
-                </a>
-              ) : null}
-            </Card>
-          ))}
+          {unviewedItems.map((item) => {
+            const kind = item.nodeKind as NodeKind | null | undefined;
+            const metaParts = [
+              feedbackKindLabel(item.kind),
+              kind ? nodeKindLabel[kind] : null,
+              item.weekNumber ? `Semana ${item.weekNumber}` : null,
+            ].filter(Boolean);
 
-          {fromCheckIns.map((row) => {
-            if (!row) return null;
-            const fb = row.feedback;
             return (
-              <Card key={row.checkInId} className="space-y-2 p-5">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground">
-                    Feedback do check-in · {formatDateTime(fb.created_at)}
-                  </p>
-                  <Link
-                    href={`/checkins/${row.checkInId}`}
-                    className="text-xs text-[var(--neuma-coral)] hover:underline"
-                  >
-                    Ver check-in
-                  </Link>
+              <Link
+                key={`${item.kind}:${item.referenceId}`}
+                href={feedbackHrefForItem(item)}
+                prefetch
+                className="group block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
+              >
+                <div
+                  className={cn(
+                    "student-path-step student-path-step--active neuma-accent-top !p-4 sm:!p-5",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <span
+                        className={cn(
+                          "inline-flex flex-wrap items-center gap-x-1.5 text-xs font-medium uppercase tracking-[0.14em]",
+                          "text-[var(--neuma-coral)]",
+                        )}
+                      >
+                        <span className="mr-0.5 inline-block size-1.5 rounded-full bg-[var(--neuma-coral)]" />
+                        {metaParts.join(" · ")}
+                      </span>
+
+                      <p className="font-heading text-lg font-bold tracking-tight sm:text-xl">
+                        {item.nodeTitle}
+                      </p>
+
+                      <p className="text-sm text-muted-foreground">
+                        {formatDateTime(item.createdAt)}
+                        {mentorName ? ` · ${mentorName}` : null}
+                      </p>
+
+                      <p
+                        className={cn(
+                          "inline-flex items-center gap-1.5 text-sm font-medium",
+                          "text-[var(--neuma-coral)]",
+                        )}
+                      >
+                        <MessageSquareText className="size-3.5 shrink-0" />
+                        Novo
+                      </p>
+                    </div>
+
+                    <ArrowRight
+                      className={cn(
+                        "mt-1 size-5 shrink-0 text-[var(--neuma-coral)] transition-transform group-hover:translate-x-0.5",
+                      )}
+                    />
+                  </div>
                 </div>
-                {fb.notes ? (
-                  <p className="whitespace-pre-wrap text-sm">{fb.notes}</p>
-                ) : null}
-                {fb.next_steps ? (
-                  <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                    Próximos passos: {fb.next_steps}
-                  </p>
-                ) : null}
-                {fb.video_url ? (
-                  <a
-                    href={fb.video_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-sm text-[var(--neuma-coral)] hover:underline"
-                  >
-                    <Video className="size-4" /> Ver vídeo
-                    <ExternalLink className="size-3.5" />
-                  </a>
-                ) : null}
-              </Card>
+              </Link>
             );
           })}
         </div>

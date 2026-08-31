@@ -1,3 +1,8 @@
+import {
+  checkInKindLabel,
+  checkInLevelTitle,
+  ORPHAN_CHECKIN_LABEL,
+} from "@/lib/labels";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import type {
@@ -78,8 +83,19 @@ export type StudentCounts = {
   overdueNodes: number;
 };
 
+/** Statuses visible to students (draft paths are mentor-only until published). */
+export const STUDENT_VISIBLE_PATH_STATUSES: PathStatus[] = [
+  "active",
+  "paused",
+  "completed",
+];
+
 /** Prefer active path; fallback to most recently created. */
-export async function loadStudentPath(studentId: string) {
+export async function loadStudentPath(
+  studentId: string,
+  opts?: { forStudentApp?: boolean },
+) {
+  const forStudent = opts?.forStudentApp ?? false;
   const supabase = await createClient();
 
   const { data: active } = await supabase
@@ -93,10 +109,16 @@ export async function loadStudentPath(studentId: string) {
 
   if (active) return active;
 
-  const { data: latest } = await supabase
+  let latestQuery = supabase
     .from("paths")
     .select("*")
-    .eq("student_id", studentId)
+    .eq("student_id", studentId);
+
+  if (forStudent) {
+    latestQuery = latestQuery.in("status", STUDENT_VISIBLE_PATH_STATUSES);
+  }
+
+  const { data: latest } = await latestQuery
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -276,7 +298,7 @@ export async function loadMyPathWithNodes(studentId: string): Promise<{
   path: StudentPath | null;
   nodes: StudentNode[];
 }> {
-  const pathRow = await loadStudentPath(studentId);
+  const pathRow = await loadStudentPath(studentId, { forStudentApp: true });
   if (!pathRow) return { path: null, nodes: [] };
 
   const supabase = await createClient();
@@ -341,7 +363,7 @@ export async function loadMyMentor(
     if (mentor) return mentor;
   }
 
-  const path = await loadStudentPath(id);
+  const path = await loadStudentPath(id, { forStudentApp: true });
   if (path?.created_by) {
     const { data: mentor } = await supabase
       .from("profiles")
@@ -362,9 +384,13 @@ export async function loadMentorCalUsername() {
 
 export type MentorHistoryKind =
   | "booking"
+  | "check_in"
   | "feedback"
   | "level_feedback"
-  | "level_validated";
+  | "level_validated"
+  | "level_start"
+  | "journey_start"
+  | "journey_end";
 
 export type MentorHistoryEvent = {
   id: string;
@@ -395,38 +421,53 @@ export async function loadMentorSharedHistory(
   const supabase = await createClient();
   const events: MentorHistoryEvent[] = [];
 
-  const pathRow = await loadStudentPath(studentId);
+  const pathRow = await loadStudentPath(studentId, { forStudentApp: true });
   const pathId = pathRow?.id ?? null;
+  const pathOwnedByMentor = pathRow?.created_by === mentorId;
 
-  const [{ data: bookingsById }, { data: profile }, nodesRes, feedbacksRes] =
-    await Promise.all([
-      supabase
-        .from("cal_bookings")
-        .select("id, title, start_time, status")
-        .eq("student_id", studentId)
-        .order("start_time", { ascending: false })
-        .limit(50),
-      supabase
-        .from("profiles")
-        .select("email")
-        .eq("id", studentId)
-        .maybeSingle(),
-      pathId
-        ? supabase
-            .from("nodes")
-            .select("id, title")
-            .eq("path_id", pathId)
-        : Promise.resolve({ data: [] as { id: string; title: string }[] }),
-      supabase
-        .from("feedbacks")
-        .select(
-          "id, approved, created_at, mentor_id, check_in:check_ins!inner(id, student_id, level_label, node:nodes(title))",
-        )
-        .eq("mentor_id", mentorId)
-        .eq("check_in.student_id", studentId)
-        .order("created_at", { ascending: false })
-        .limit(50),
-    ]);
+  const [
+    { data: bookingsById },
+    { data: profile },
+    nodesRes,
+    feedbacksRes,
+    checkInsRes,
+  ] = await Promise.all([
+    supabase
+      .from("cal_bookings")
+      .select("id, title, start_time, status")
+      .eq("student_id", studentId)
+      .order("start_time", { ascending: false })
+      .limit(50),
+    supabase
+      .from("profiles")
+      .select("email")
+      .eq("id", studentId)
+      .maybeSingle(),
+    pathId
+      ? supabase
+          .from("nodes")
+          .select("id, title, order_index")
+          .eq("path_id", pathId)
+          .order("order_index", { ascending: true })
+      : Promise.resolve(
+          { data: [] as { id: string; title: string; order_index: number }[] },
+        ),
+    supabase
+      .from("feedbacks")
+      .select(
+        "id, approved, created_at, mentor_id, check_in:check_ins!inner(id, student_id, level_label, node_id, node:nodes(title, order_index))",
+      )
+      .eq("mentor_id", mentorId)
+      .eq("check_in.student_id", studentId)
+      .order("created_at", { ascending: false })
+      .limit(50),
+    supabase
+      .from("check_ins")
+      .select("id, created_at, kind, level_label, node:nodes(title)")
+      .eq("student_id", studentId)
+      .order("created_at", { ascending: false })
+      .limit(50),
+  ]);
 
   const seenBookingIds = new Set<string>();
   for (const b of bookingsById ?? []) {
@@ -470,6 +511,30 @@ export async function loadMentorSharedHistory(
     }
   }
 
+  for (const row of checkInsRes.data ?? []) {
+    const node = Array.isArray(row.node) ? row.node[0] : row.node;
+    const levelTitle = checkInLevelTitle(node?.title, row.level_label);
+    const detailParts = [
+      levelTitle !== ORPHAN_CHECKIN_LABEL ? levelTitle : null,
+      checkInKindLabel[row.kind as CheckInKind],
+    ].filter(Boolean);
+
+    events.push({
+      id: `check_in:${row.id}`,
+      at: row.created_at,
+      kind: "check_in",
+      label: "Check-in",
+      detail: detailParts.length > 0 ? detailParts.join(" · ") : null,
+    });
+  }
+
+  const nodes = nodesRes.data ?? [];
+  const sortedNodes = [...nodes].sort((a, b) => a.order_index - b.order_index);
+  const nodeIds = sortedNodes.map((n) => n.id);
+  const nodeTitleById = new Map(sortedNodes.map((n) => [n.id, n.title]));
+  const nodeById = new Map(sortedNodes.map((n) => [n.id, n]));
+  const nodeByOrder = new Map(sortedNodes.map((n) => [n.order_index, n]));
+
   for (const fb of feedbacksRes.data ?? []) {
     const checkIn = Array.isArray(fb.check_in) ? fb.check_in[0] : fb.check_in;
     const node = checkIn
@@ -488,22 +553,35 @@ export async function loadMentorSharedHistory(
         label: "Nível validado",
         detail: levelTitle,
       });
+
+      const currentNode =
+        (checkIn?.node_id ? nodeById.get(checkIn.node_id) : null) ??
+        (node?.order_index != null
+          ? nodeByOrder.get(node.order_index)
+          : undefined);
+      const nextNode =
+        currentNode != null
+          ? nodeByOrder.get(currentNode.order_index + 1)
+          : undefined;
+      if (pathOwnedByMentor && nextNode) {
+        events.push({
+          id: `level_start:${nextNode.id}:via:${fb.id}`,
+          at: fb.created_at,
+          kind: "level_start",
+          label: "Novo nível",
+          detail: nextNode.title?.trim() || null,
+        });
+      }
     } else {
       events.push({
         id: `feedback:${fb.id}`,
         at: fb.created_at,
         kind: "feedback",
-        label: "Feedback",
-        detail: levelTitle
-          ? `${levelTitle} · revisão pedida`
-          : "Revisão pedida",
+        label: "Revisão pedida",
+        detail: levelTitle,
       });
     }
   }
-
-  const nodes = nodesRes.data ?? [];
-  const nodeIds = nodes.map((n) => n.id);
-  const nodeTitleById = new Map(nodes.map((n) => [n.id, n.title]));
 
   if (nodeIds.length > 0) {
     const { data: levelFbs } = await supabase
@@ -522,6 +600,45 @@ export async function loadMentorSharedHistory(
         label: "Feedback do nível",
         detail: nodeTitleById.get(lf.node_id)?.trim() || null,
       });
+    }
+  }
+
+  if (pathRow && pathOwnedByMentor) {
+    const journeyStart = pathRow.start_date ?? pathRow.created_at;
+    events.push({
+      id: `path_start:${pathRow.id}`,
+      at: journeyStart,
+      kind: "journey_start",
+      label: "Início do percurso",
+      detail: pathRow.title?.trim() || null,
+    });
+
+    const firstNode = sortedNodes[0];
+    if (firstNode) {
+      events.push({
+        id: `level_start:${firstNode.id}`,
+        at: journeyStart,
+        kind: "level_start",
+        label: "Novo nível",
+        detail: firstNode.title?.trim() || null,
+      });
+    }
+
+    if (pathRow.status === "completed") {
+      const lastValidation = events
+        .filter((event) => event.kind === "level_validated")
+        .map((event) => event.at)
+        .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
+      const journeyEnd = pathRow.end_date ?? lastValidation ?? null;
+      if (journeyEnd) {
+        events.push({
+          id: `path_end:${pathRow.id}`,
+          at: journeyEnd,
+          kind: "journey_end",
+          label: "Fim do percurso",
+          detail: pathRow.title?.trim() || null,
+        });
+      }
     }
   }
 

@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ExternalLink } from "lucide-react";
 
 import { ClaimPathForm } from "@/components/claim-path-form";
 import { JourneyPathComposer } from "@/components/journey-path-composer";
 import { JourneyPathEditGuard } from "@/components/journey-path-edit-guard";
 import { UserAvatar } from "@/components/user-avatar";
 import type { JourneyPathPageData } from "@/lib/journey-path/load-journey-path";
+import { studentProfileHref } from "@/lib/journey-path/routes";
 
 export function JourneyPathEditView({
   data,
@@ -26,7 +26,7 @@ export function JourneyPathEditView({
       studentId={student?.id ?? null}
       isNewDraft={isNewDraft}
     >
-      <div className="space-y-6">
+      <div className="min-w-0 space-y-6">
         {!student ? (
           <ClaimPathForm
             pathId={path.id}
@@ -35,10 +35,13 @@ export function JourneyPathEditView({
             students={allStudents}
           />
         ) : (
-          <div className="flex flex-wrap items-center justify-end gap-3">
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
             <Link
-              href={`/studio/students/${student.id}`}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm transition-colors hover:bg-white/10"
+              href={studentProfileHref(
+                student.id,
+                `/studio/journeys/${path.id}/edit`,
+              )}
+              className="inline-flex max-w-full items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm transition-colors hover:bg-white/10"
             >
               <UserAvatar
                 name={student.full_name}
@@ -47,8 +50,7 @@ export function JourneyPathEditView({
                 size="sm"
                 rounded="xl"
               />
-              <span className="font-medium">{displayName}</span>
-              <ExternalLink className="size-3.5 text-muted-foreground" />
+              <span className="min-w-0 truncate font-medium">{displayName}</span>
             </Link>
           </div>
         )}

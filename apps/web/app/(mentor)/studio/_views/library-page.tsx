@@ -135,11 +135,7 @@ export default async function LibraryPage({
   return (
     <div className="space-y-10">
       <div className="space-y-3">
-        <PageHero
-          eyebrow="Studio"
-          title="Biblioteca"
-          subtitle="Só material pronto a reutilizar. Cascas do Agent ficam em Percursos → Percursos do Agent."
-        />
+        <PageHero eyebrow="Studio" title="Biblioteca" />
 
         <section id="biblioteca" className="scroll-mt-24 space-y-4 pt-1">
           <div className="flex flex-col gap-3 min-[950px]:flex-row min-[950px]:items-center min-[950px]:justify-between min-[950px]:gap-4">
@@ -168,22 +164,24 @@ export default async function LibraryPage({
                 </>
               )}
             </h3>
-            <div className="order-1 grid w-full grid-cols-3 gap-2 pt-1 min-[950px]:order-2 min-[950px]:w-auto min-[950px]:flex min-[950px]:pt-0">
-              <div className="min-w-0 [&_button]:h-12 [&_button]:w-full min-[950px]:[&_button]:w-auto">
-                <LibraryCategoryDialog />
+            {!activeCategory ? (
+              <div className="order-1 grid w-full grid-cols-3 gap-2 pt-1 min-[950px]:order-2 min-[950px]:w-auto min-[950px]:flex min-[950px]:pt-0">
+                <div className="min-w-0 [&_button]:h-12 [&_button]:w-full min-[950px]:[&_button]:w-auto">
+                  <LibraryCategoryDialog />
+                </div>
+                <div className="min-w-0 [&_button]:h-12 [&_button]:w-full min-[950px]:[&_button]:w-auto">
+                  <LibraryTopicDialog categories={cats} />
+                </div>
+                <div className="min-w-0 [&_button]:h-12 [&_button]:w-full min-[950px]:[&_button]:w-auto">
+                  <LibraryAssetDialog
+                    categories={cats}
+                    topics={tops}
+                    triggerLabel="Item"
+                    triggerVariant="outline"
+                  />
+                </div>
               </div>
-              <div className="min-w-0 [&_button]:h-12 [&_button]:w-full min-[950px]:[&_button]:w-auto">
-                <LibraryTopicDialog categories={cats} />
-              </div>
-              <div className="min-w-0 [&_button]:h-12 [&_button]:w-full min-[950px]:[&_button]:w-auto">
-                <LibraryAssetDialog
-                  categories={cats}
-                  topics={tops}
-                  triggerLabel="Item"
-                  triggerVariant="outline"
-                />
-              </div>
-            </div>
+            ) : null}
           </div>
 
           {cats.length === 0 ? (

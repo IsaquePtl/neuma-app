@@ -18,6 +18,9 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { profileInitials } from "@/components/user-avatar";
 
+/** ~43–51 chars/line at max-w-sm (384px); 3 lines → ~130–150 chars */
+const BIO_MAX_CHARS = 150;
+
 export function SettingsView({
   name,
   email,
@@ -92,6 +95,21 @@ export function SettingsView({
     if (editingSocial) socialInputRef.current?.focus();
   }, [editingSocial]);
 
+  function syncBioHeight() {
+    const el = bioRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const maxPx =
+      parseFloat(getComputedStyle(el).fontSize) *
+      parseFloat(getComputedStyle(el).lineHeight) *
+      3;
+    el.style.height = `${Math.min(el.scrollHeight, maxPx)}px`;
+  }
+
+  useEffect(() => {
+    syncBioHeight();
+  }, [draftBio, editingBio, savedBio]);
+
   function startBioEdit() {
     setEditingBio(true);
     requestAnimationFrame(() => {
@@ -100,6 +118,7 @@ export function SettingsView({
       el.focus();
       const len = el.value.length;
       el.setSelectionRange(len, len);
+      syncBioHeight();
     });
   }
 
@@ -280,72 +299,62 @@ export function SettingsView({
 
           <div
             ref={bioSectionRef}
-            className="flex w-full flex-col items-center"
+            className="flex w-full max-w-sm flex-col items-center"
           >
-            <div
+            <textarea
+              ref={bioRef}
+              id="bio"
+              name="bio"
+              value={draftBio}
+              onChange={(e) => setDraftBio(e.target.value)}
+              onBlur={onBioBlur}
               onClick={() => !editingBio && startBioEdit()}
+              onFocus={() => !editingBio && startBioEdit()}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  onCancelBio();
+                }
+              }}
+              readOnly={!editingBio}
+              placeholder="Uma linha sobre ti…"
+              maxLength={BIO_MAX_CHARS}
+              rows={1}
+              aria-label="Bio"
               className={cn(
-                "relative w-full max-w-sm rounded-xl border px-3 py-2.5",
-                "border-white/[0.06] transition-colors",
-                editingBio ? "border-white/10 pb-9" : "cursor-text",
+                "block w-full resize-none overflow-hidden bg-transparent",
+                "text-center text-[0.9375rem] leading-relaxed outline-none",
+                "placeholder:text-muted-foreground/45 cursor-text",
+                editingBio ? "text-foreground" : "text-muted-foreground",
               )}
-            >
-              <textarea
-                ref={bioRef}
-                id="bio"
-                name="bio"
-                value={draftBio}
-                onChange={(e) => setDraftBio(e.target.value)}
-                onBlur={onBioBlur}
-                onFocus={() => !editingBio && setEditingBio(true)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    onCancelBio();
-                  }
-                }}
-                readOnly={!editingBio}
-                placeholder="Uma linha sobre ti…"
-                maxLength={280}
-                rows={2}
-                aria-label="Bio"
-                className={cn(
-                  "block w-full resize-none overflow-hidden bg-transparent",
-                  "text-center text-[0.9375rem] leading-relaxed outline-none",
-                  "placeholder:text-muted-foreground/45",
-                  editingBio
-                    ? "h-[3.25rem] cursor-text pr-8 text-foreground"
-                    : "h-[3.25rem] cursor-text text-muted-foreground",
-                )}
-              />
-              {editingBio ? (
-                <>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={onCancelBio}
-                    className="absolute bottom-2 left-3 text-xs text-muted-foreground/80 transition-colors hover:text-foreground"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={onSaveBio}
-                    disabled={bioPending}
-                    aria-label={bioPending ? "A guardar bio" : "Guardar bio"}
-                    className={cn(
-                      "absolute bottom-1.5 right-1.5 grid size-7 place-items-center rounded-full",
-                      "border border-white/10 bg-white/[0.06] text-muted-foreground",
-                      "transition-colors hover:bg-white/[0.1] hover:text-foreground",
-                      "disabled:cursor-not-allowed disabled:opacity-50",
-                    )}
-                  >
-                    <Check className="size-3.5" strokeWidth={2.5} />
-                  </button>
-                </>
-              ) : null}
-            </div>
+            />
+            {editingBio ? (
+              <div className="mt-1.5 flex w-full items-center justify-between px-1">
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={onCancelBio}
+                  className="text-xs text-muted-foreground/80 transition-colors hover:text-foreground"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={onSaveBio}
+                  disabled={bioPending}
+                  aria-label={bioPending ? "A guardar bio" : "Guardar bio"}
+                  className={cn(
+                    "grid size-7 place-items-center rounded-full",
+                    "border border-white/10 bg-white/[0.06] text-muted-foreground",
+                    "transition-colors hover:bg-white/[0.1] hover:text-foreground",
+                    "disabled:cursor-not-allowed disabled:opacity-50",
+                  )}
+                >
+                  <Check className="size-3.5" strokeWidth={2.5} />
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

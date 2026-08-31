@@ -1,10 +1,7 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExternalLink } from "lucide-react";
 
 import { ClaimPathForm } from "@/components/claim-path-form";
 import { JourneyPathAdminView } from "@/components/journey-path-admin-view";
-import { UserAvatar } from "@/components/user-avatar";
 import { loadJourneyPathPageData } from "@/lib/journey-path/load-journey-path";
 
 export default async function JourneyAdminPage({
@@ -29,28 +26,12 @@ export default async function JourneyAdminPage({
           claimEmail={claimEmail}
           students={allStudents}
         />
-      ) : (
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <Link
-            href={`/studio/students/${student.id}`}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm transition-colors hover:bg-white/10"
-          >
-            <UserAvatar
-              name={student.full_name}
-              email={student.email}
-              avatarUrl={student.avatar_url}
-              size="sm"
-              rounded="xl"
-            />
-            <span className="font-medium">{displayName}</span>
-            <ExternalLink className="size-3.5 text-muted-foreground" />
-          </Link>
-        </div>
-      )}
+      ) : null}
 
       <JourneyPathAdminView
         pathId={path.id}
-        studentName={displayName}
+        displayName={displayName}
+        student={student}
         path={path}
         nodes={data.nodes}
         checkIns={data.checkIns}

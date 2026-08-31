@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { CalendarPlus } from "lucide-react";
 import { toast } from "sonner";
 
 import { createMentorCalendarEvent } from "@/lib/actions/calendar-events";
@@ -17,7 +16,7 @@ const KIND_OPTIONS = [
   { value: "misc", label: "Diversos" },
 ] as const;
 
-/** Painel de criação; abre com `#novo-evento` ou pelo botão. */
+/** Painel de criação; abre com `#novo-evento`. */
 export function CreateCalendarEventPanel({
   students = [],
   paths = [],
@@ -75,17 +74,7 @@ export function CreateCalendarEventPanel({
 
   return (
     <div id="novo-evento" className="scroll-mt-24 space-y-3">
-      {!open ? (
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className="gap-1.5"
-          onClick={() => setOpen(true)}
-        >
-          <CalendarPlus className="size-3.5" /> Adicionar evento
-        </Button>
-      ) : (
+      {open ? (
         <Card className="space-y-4 p-4 sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -196,7 +185,7 @@ export function CreateCalendarEventPanel({
             </div>
           </form>
         </Card>
-      )}
+      ) : null}
     </div>
   );
 }

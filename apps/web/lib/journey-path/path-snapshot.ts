@@ -6,8 +6,8 @@ export type PathSnapshot = {
   goal: string | null;
   status: StudentPath["status"];
   studentId: string | null;
-  nodeCount: number;
-  nodeIds: string[];
+  /** Ordered node fingerprint: id + title + status (detects reorder / level edits). */
+  nodesKey: string;
 };
 
 export function buildPathSnapshot(
@@ -21,15 +21,29 @@ export function buildPathSnapshot(
     goal: (path.goal ?? "").trim() || null,
     status: path.status,
     studentId,
-    nodeCount: nodes.length,
-    nodeIds: nodes.map((n) => n.id).sort(),
+    nodesKey: nodes
+      .map(
+        (n) =>
+          [
+            n.id,
+            n.title.trim(),
+            (n.description ?? "").trim(),
+            n.kind,
+            n.status,
+            n.week_number ?? "",
+            n.due_date ?? "",
+            (n.resource_url ?? "").trim(),
+            (n.content_body ?? "").trim(),
+          ].join("\0"),
+      )
+      .join("\n"),
   };
 }
 
 export function isEmptyDraftSnapshot(snapshot: PathSnapshot): boolean {
   return (
     snapshot.title === "Novo percurso" &&
-    snapshot.nodeCount === 0 &&
+    snapshot.nodesKey === "" &&
     !snapshot.studentId &&
     !snapshot.goal &&
     !snapshot.description
@@ -43,8 +57,7 @@ export function snapshotsEqual(a: PathSnapshot, b: PathSnapshot): boolean {
     a.goal === b.goal &&
     a.status === b.status &&
     a.studentId === b.studentId &&
-    a.nodeCount === b.nodeCount &&
-    a.nodeIds.join("\0") === b.nodeIds.join("\0")
+    a.nodesKey === b.nodesKey
   );
 }
 

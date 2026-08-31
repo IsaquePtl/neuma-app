@@ -15,6 +15,7 @@ export type FormQuestionType =
   | "multi_choice"
   | "scale";
 export type FeedbackDraftStatus = "pending_review" | "published" | "rejected";
+export type StudentFeedbackViewKind = "check_in" | "level";
 export type TallySubmissionKind = "onboarding" | "checkin" | "unknown";
 export type TallySubmissionStatus =
   | "pending"
@@ -205,6 +206,7 @@ export interface Database {
           due_date: string | null;
           resource_url: string | null;
           content_body: string | null;
+          week_extensions: number;
           created_at: string;
         };
         Insert: {
@@ -219,6 +221,7 @@ export interface Database {
           due_date?: string | null;
           content_body?: string | null;
           resource_url?: string | null;
+          week_extensions?: number;
           created_at?: string;
         };
         Update: {
@@ -233,6 +236,7 @@ export interface Database {
           due_date?: string | null;
           resource_url?: string | null;
           content_body?: string | null;
+          week_extensions?: number;
           created_at?: string;
         };
         Relationships: [
@@ -381,6 +385,38 @@ export interface Database {
             columns: ["node_id"];
             isOneToOne: false;
             referencedRelation: "nodes";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      student_feedback_views: {
+        Row: {
+          id: string;
+          student_id: string;
+          feedback_kind: StudentFeedbackViewKind;
+          reference_id: string;
+          viewed_at: string;
+        };
+        Insert: {
+          id?: string;
+          student_id: string;
+          feedback_kind: StudentFeedbackViewKind;
+          reference_id: string;
+          viewed_at?: string;
+        };
+        Update: {
+          id?: string;
+          student_id?: string;
+          feedback_kind?: StudentFeedbackViewKind;
+          reference_id?: string;
+          viewed_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "student_feedback_views_student_id_fkey";
+            columns: ["student_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];

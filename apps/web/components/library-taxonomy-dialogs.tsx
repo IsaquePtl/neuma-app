@@ -37,6 +37,7 @@ import {
   CategoryThemePicker,
 } from "@/components/category-theme-icon";
 import type { CategoryTheme } from "@/lib/brand-themes";
+import { cn } from "@/lib/utils";
 
 export function LibraryCategoryDialog() {
   const [open, setOpen] = useState(false);
@@ -210,11 +211,19 @@ export function LibraryCategoryActions({
 
 export function LibraryTopicDialog({
   categories,
+  defaultCategoryId,
+  triggerSize = "default",
 }: {
   categories: { id: string; name: string }[];
+  defaultCategoryId?: string;
+  triggerSize?: "default" | "sm";
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const selectedCategoryId =
+    defaultCategoryId && categories.some((c) => c.id === defaultCategoryId)
+      ? defaultCategoryId
+      : categories[0]?.id;
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -236,12 +245,14 @@ export function LibraryTopicDialog({
         render={
           <Button
             variant="outline"
-            className="gap-2"
+            size={triggerSize}
+            className="gap-1.5"
             disabled={categories.length === 0}
           />
         }
       >
-        <FolderPlus className="size-4" /> Tópico
+        <FolderPlus className={triggerSize === "sm" ? "size-3.5" : "size-4"} />{" "}
+        Tópico
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -257,6 +268,8 @@ export function LibraryTopicDialog({
               id="topic-cat"
               name="category_id"
               required
+              defaultValue={selectedCategoryId}
+              key={selectedCategoryId ?? "topic-cat"}
               className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
             >
               {categories.map((c) => (
@@ -282,14 +295,25 @@ export function LibraryTopicDialog({
 }
 
 
-export function LibraryTopicDeleteButton({ topicId }: { topicId: string }) {
+export function LibraryTopicDeleteButton({
+  topicId,
+  compactOnMobile = false,
+}: {
+  topicId: string;
+  /** Icon-only below `sm`; “Eliminar” label from `sm` up. */
+  compactOnMobile?: boolean;
+}) {
   const [pending, startTransition] = useTransition();
   return (
     <Button
       type="button"
       variant="ghost"
       size="sm"
-      className="text-destructive"
+      aria-label="Eliminar tópico"
+      className={cn(
+        "text-destructive",
+        compactOnMobile && "size-7 shrink-0 px-0 sm:h-7 sm:w-auto sm:px-2.5",
+      )}
       disabled={pending}
       onClick={() => {
         if (!confirm("Eliminar este tópico e os seus assets?")) return;
@@ -305,7 +329,10 @@ export function LibraryTopicDeleteButton({ topicId }: { topicId: string }) {
         });
       }}
     >
-      Eliminar
+      <Trash2
+        className={cn("size-3.5", compactOnMobile ? "sm:hidden" : "hidden")}
+      />
+      <span className={cn(compactOnMobile && "hidden sm:inline")}>Eliminar</span>
     </Button>
   );
 }

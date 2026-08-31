@@ -1,4 +1,4 @@
-import { ExternalLink, Play } from "lucide-react";
+import { Play } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -39,6 +39,19 @@ export function toEmbedUrl(raw: string | null | undefined): string | null {
   return null;
 }
 
+const DIRECT_VIDEO_EXT = /\.(mp4|webm|mov|m4v|ogg|ogv)(\?|#|$)/i;
+
+/** True for YouTube/Vimeo/etc embeds or direct hosted video files (e.g. R2 `.mov`). */
+export function isPlayableVideoUrl(raw: string | null | undefined): boolean {
+  if (!raw?.trim()) return false;
+  if (toEmbedUrl(raw)) return true;
+  try {
+    return DIRECT_VIDEO_EXT.test(new URL(raw.trim()).pathname);
+  } catch {
+    return DIRECT_VIDEO_EXT.test(raw.trim());
+  }
+}
+
 /** Player embutido para o vídeo de um bloco; cai para link externo se não for suportado. */
 export function VideoEmbed({
   url,
@@ -67,7 +80,6 @@ export function VideoEmbed({
       >
         <Play className="size-4 text-[var(--neuma-coral)]" />
         {fallbackLabel}
-        <ExternalLink className="size-3.5 text-muted-foreground" />
       </a>
     );
   }

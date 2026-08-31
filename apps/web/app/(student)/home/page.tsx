@@ -5,13 +5,19 @@ import {
   Dumbbell,
   Flag,
   Phone,
-  Play,
   Video,
 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
+import { getCheckInAllowance } from "@/lib/checkins/allowance";
+import {
+  feedbackHrefForItem,
+  loadStudentUnviewedFeedback,
+} from "@/lib/feedbacks/student";
 import { loadMentorCalUsername, loadMyPathWithNodes } from "@/lib/students/queries";
 import { FirstVisitWelcome } from "@/components/first-visit-welcome";
+import { ActiveLevelFeedbackCta } from "@/components/active-level-feedback-cta";
+import { PathPausedCard } from "@/components/path-paused-card";
 import {
   StudentTodoList,
   type StudentTodoItem,
@@ -23,14 +29,6 @@ import {
   welcomeGreeting,
 } from "@/lib/profile/greeting";
 import type { NodeKind, ProfileGender } from "@/lib/types/database.types";
-
-type JoinedNodeWeek = { week_number: number | null };
-type JoinedFeedbackNotes = { notes: string | null };
-type NormalizedApprovedCheckIn = {
-  id: string;
-  node: JoinedNodeWeek | null;
-  feedback: JoinedFeedbackNotes | null;
-};
 
 function weekNumberLabel(week: number | null | undefined) {
   return week == null ? "—" : `${week}`;
@@ -92,61 +90,29 @@ export default async function StudentHomePage() {
   const mentor = await loadMentorCalUsername();
   const mentorName = firstNameFromFullName(mentor?.full_name) ?? "mentor";
 
-  const activeNode =
-    nodes.find((n) => n.status === "active") ??
-    nodes.find((n) => n.status !== "completed") ??
-    nodes[0];
+  // Only the single active level is visible to students — never locked future nodes.
+  const activeNode = nodes.find((n) => n.status === "active") ?? null;
 
-  const activeCall =
-    nodes.find((n) => n.status === "active" && n.kind === "call") ??
-    nodes.find((n) => n.status !== "completed" && n.kind === "call");
+  const activeCall = activeNode?.kind === "call" ? activeNode : null;
   const activeContent =
-    nodes.find(
-      (n) =>
-        n.status === "active" && (n.kind === "lesson" || n.kind === "resource"),
-    ) ??
-    nodes.find(
-      (n) =>
-        n.status !== "completed" &&
-        (n.kind === "lesson" || n.kind === "resource"),
-    );
+    activeNode &&
+    (activeNode.kind === "lesson" || activeNode.kind === "resource")
+      ? activeNode
+      : null;
   const activeCheckin =
-    nodes.find(
-      (n) =>
-        n.status === "active" &&
-        (n.kind === "practice" || n.kind === "milestone"),
-    ) ??
-    nodes.find(
-      (n) =>
-        n.status !== "completed" &&
-        (n.kind === "practice" || n.kind === "milestone"),
-    );
+    activeNode &&
+    (activeNode.kind === "practice" || activeNode.kind === "milestone")
+      ? activeNode
+      : null;
 
-  const { data: approvedCheckIns } = await supabase
-    .from("check_ins")
-    .select(
-      "id,status,node:nodes(week_number),feedback:feedbacks(notes,approved)",
-    )
-    .eq("student_id", user!.id)
-    .eq("status", "approved")
-    .order("created_at", { ascending: false })
-    .limit(5);
+  const unviewedFeedback = path
+    ? await loadStudentUnviewedFeedback(supabase, user!.id, nodes)
+    : { count: 0, items: [], unviewedByNodeId: new Map<string, number>() };
+  const activeNodeUnviewedCount = activeNode
+    ? (unviewedFeedback.unviewedByNodeId.get(activeNode.id) ?? 0)
+    : 0;
 
-  const normalizedCheckIns: NormalizedApprovedCheckIn[] = (approvedCheckIns ??
-    []).map((c: unknown) => {
-    const cc = c as {
-      id: string;
-      node: JoinedNodeWeek | JoinedNodeWeek[] | null;
-      feedback: JoinedFeedbackNotes | JoinedFeedbackNotes[] | null;
-    };
-    const node = Array.isArray(cc.node) ? cc.node[0] : cc.node;
-    const feedback = Array.isArray(cc.feedback) ? cc.feedback[0] : cc.feedback;
-    return {
-      id: cc.id,
-      node: node ?? null,
-      feedback: feedback ?? null,
-    };
-  });
+  const isPathPaused = path?.status === "paused";
 
   if (!path) {
     const hasOnboarding = await studentHasOnboardingSubmission({
@@ -160,7 +126,7 @@ export default async function StudentHomePage() {
         : [
             {
               key: "onboarding",
-              title: "Neuma 1:1 — preencher onboarding",
+              title: "Onboarding",
               href: "/onboarding",
               tag: "ONBOARDING",
             } satisfies StudentTodoItem,
@@ -202,46 +168,53 @@ export default async function StudentHomePage() {
 
   const todos: StudentTodoItem[] = [];
 
-  if (activeContent) {
-    const week = weekNumberLabel(activeContent.week_number);
-    todos.push({
-      key: `content:${activeContent.id}`,
-      title: `Ver conteúdo da semana ${week}`,
-      href: `/path/${activeContent.id}`,
-      tag: todoTagLabel(`content:${activeContent.id}`),
-    });
+  if (!isPathPaused) {
+    if (activeContent) {
+      const week = weekNumberLabel(activeContent.week_number);
+      todos.push({
+        key: `content:${activeContent.id}`,
+        title: `Ver conteúdo da semana ${week}`,
+        href: `/path/${activeContent.id}`,
+        tag: todoTagLabel(`content:${activeContent.id}`),
+      });
+    }
+
+    if (activeCall) {
+      const week = weekNumberLabel(activeCall.week_number);
+      todos.push({
+        key: `call:${activeCall.id}`,
+        title: `Agendar call da semana ${week}`,
+        href: `/path/${activeCall.id}`,
+        tag: todoTagLabel(`call:${activeCall.id}`),
+      });
+    }
+
+    if (activeCheckin) {
+      const allowance = await getCheckInAllowance(
+        supabase,
+        activeCheckin.id,
+        user!.id,
+      );
+      if (allowance.allowed) {
+        const week = weekNumberLabel(activeCheckin.week_number);
+        todos.push({
+          key: `checkin:${activeCheckin.id}`,
+          title: `Fazer check-in da semana ${week}`,
+          href: `/path/${activeCheckin.id}`,
+          tag: todoTagLabel(`checkin:${activeCheckin.id}`),
+        });
+      }
+    }
   }
 
-  if (activeCall) {
-    const week = weekNumberLabel(activeCall.week_number);
-    todos.push({
-      key: `call:${activeCall.id}`,
-      title: `Agendar call da semana ${week}`,
-      href: `/path/${activeCall.id}`,
-      tag: todoTagLabel(`call:${activeCall.id}`),
-    });
-  }
-
-  if (activeCheckin) {
-    const week = weekNumberLabel(activeCheckin.week_number);
-    todos.push({
-      key: `checkin:${activeCheckin.id}`,
-      title: `Fazer check-in da semana ${week}`,
-      href: `/path/${activeCheckin.id}`,
-      tag: todoTagLabel(`checkin:${activeCheckin.id}`),
-    });
-  }
-
-  const feedbackItem = normalizedCheckIns.find((c) =>
-    Boolean(c.feedback?.notes),
-  );
+  const feedbackItem = unviewedFeedback.items[0];
   if (feedbackItem) {
-    const week = weekNumberLabel(feedbackItem.node?.week_number);
+    const week = weekNumberLabel(feedbackItem.weekNumber);
     todos.push({
-      key: `feedback:${feedbackItem.id}`,
+      key: `feedback:${feedbackItem.referenceId}`,
       title: `Ver feedback do ${mentorName} da semana ${week}`,
-      href: `/checkins/${feedbackItem.id}`,
-      tag: todoTagLabel(`feedback:${feedbackItem.id}`),
+      href: feedbackHrefForItem(feedbackItem),
+      tag: todoTagLabel(`feedback:${feedbackItem.referenceId}`),
     });
   }
 
@@ -252,12 +225,16 @@ export default async function StudentHomePage() {
       href: "/session#agendar",
       tag: todoTagLabel("session"),
     },
-    {
-      key: "path",
-      title: "Abrir percurso",
-      href: "/path",
-      tag: todoTagLabel("path"),
-    },
+    ...(isPathPaused
+      ? []
+      : [
+          {
+            key: "path",
+            title: "Abrir percurso",
+            href: "/path",
+            tag: todoTagLabel("path"),
+          } satisfies StudentTodoItem,
+        ]),
   ];
 
   const finalTodos = todos.length > 0 ? todos.slice(0, 6) : fallbackTodos;
@@ -279,47 +256,62 @@ export default async function StudentHomePage() {
         <StudentTodoList items={finalTodos} />
       </div>
 
-      <Link
-        href={activeNode ? `/path/${activeNode.id}` : "/path"}
-        prefetch
-        className="neuma-enter-up neuma-enter-delay-2 relative z-[1] block min-w-0 shrink-0 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
-      >
-        <div className="student-path-step student-path-step--active !p-4 sm:!p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-[0.14em] text-[var(--neuma-coral)]">
-                  {activeNode ? (
-                    kindIconEl(activeNode.kind)
-                  ) : (
-                    <Video className="size-3" />
-                  )}
-                  {activeNode ? nodeKindLabel[activeNode.kind] : "Aula"}
-                  {activeNode?.week_number
-                    ? ` · Sem. ${activeNode.week_number}`
-                    : null}
-                </span>
+      {isPathPaused ? (
+        <Link
+          href="/path"
+          prefetch
+          className="neuma-enter-up neuma-enter-delay-2 relative z-[1] block min-w-0 shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
+        >
+          <PathPausedCard compact />
+        </Link>
+      ) : (
+        <Link
+          href={activeNode ? `/path/${activeNode.id}` : "/path"}
+          prefetch
+          className="neuma-enter-up neuma-enter-delay-2 relative z-[1] block min-w-0 shrink-0 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
+        >
+          <div className="student-path-step student-path-step--active !p-4 sm:!p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-[0.14em] text-[var(--neuma-coral)]">
+                    {activeNode ? (
+                      kindIconEl(activeNode.kind)
+                    ) : (
+                      <Video className="size-3" />
+                    )}
+                    {activeNode ? nodeKindLabel[activeNode.kind] : "Aula"}
+                    {activeNode?.week_number
+                      ? ` · Sem. ${activeNode.week_number}`
+                      : null}
+                  </span>
+                </div>
+
+                <p className="font-heading truncate text-lg font-bold tracking-tight sm:text-xl">
+                  {activeNode?.title ?? path.title}
+                </p>
+
+                {activeNode?.due_date ? (
+                  <p className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+                    <CalendarClock className="size-3.5" />
+                    Até {formatDate(activeNode.due_date)}
+                  </p>
+                ) : null}
+                {activeNodeUnviewedCount > 0 ? (
+                  <p className="text-sm font-medium text-[var(--neuma-coral)]">
+                    Tens feedback novo do mentor
+                  </p>
+                ) : null}
               </div>
 
-              <p className="font-heading truncate text-lg font-bold tracking-tight sm:text-xl">
-                {activeNode?.title ?? path.title}
-              </p>
-
-              {activeNode?.due_date ? (
-                <p className="inline-flex items-center gap-1 text-sm text-muted-foreground">
-                  <CalendarClock className="size-3.5" />
-                  Até {formatDate(activeNode.due_date)}
-                </p>
-              ) : null}
+              <ActiveLevelFeedbackCta
+                hasUnviewedFeedback={activeNodeUnviewedCount > 0}
+                unviewedCount={activeNodeUnviewedCount}
+              />
             </div>
-
-            <span className="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/10 text-xs font-medium text-white sm:size-auto sm:px-3 sm:py-1.5">
-              <Play className="size-3.5 fill-current" />
-              <span className="hidden sm:inline">Entrar</span>
-            </span>
           </div>
-        </div>
-      </Link>
+        </Link>
+      )}
     </div>
     </>
   );

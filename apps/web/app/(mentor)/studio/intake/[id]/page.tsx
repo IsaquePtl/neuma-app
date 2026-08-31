@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExternalLink } from "lucide-react";
 
 import {
   markTallySubmissionPending,
@@ -8,6 +7,7 @@ import {
 } from "@/lib/actions/tally";
 import { createClient } from "@/lib/supabase/server";
 import {
+  extractTallyContactInfo,
   resolveTallyAnswers,
   TallyAnswerList,
 } from "@/components/tally-answers";
@@ -16,6 +16,8 @@ import { TallySubmissionRowActions } from "@/components/tally-submission-row-act
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/labels";
+import { cn } from "@/lib/utils";
+import { MessageCircle } from "lucide-react";
 
 export default async function TallySubmissionDetailPage({
   params,
@@ -36,6 +38,7 @@ export default async function TallySubmissionDetailPage({
   if (!submission) notFound();
 
   const answers = resolveTallyAnswers(submission.answers, submission.payload);
+  const contact = extractTallyContactInfo(answers);
   const isOnboarding = submission.submission_kind === "onboarding";
   const title =
     submission.respondent_name ??
@@ -131,45 +134,78 @@ export default async function TallySubmissionDetailPage({
         </Card>
       ) : null}
 
-      <Card className="space-y-3 p-5">
+      <Card className="space-y-4 p-5 sm:p-6">
         <h2 className="font-semibold">Contacto</h2>
-        <dl className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-              Nome
-            </dt>
-            <dd className="text-sm">{submission.respondent_name ?? "—"}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-              Email
-            </dt>
-            <dd className="text-sm">{submission.respondent_email ?? "—"}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-              Form ID
-            </dt>
-            <dd className="text-sm">{submission.source_form_id}</dd>
-          </div>
-          {submission.video_url ? (
-            <div>
-              <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-                Ficheiro principal
-              </dt>
-              <dd>
-                <a
-                  href={submission.video_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm text-[var(--neuma-coral)] hover:underline"
-                >
-                  Abrir ficheiro <ExternalLink className="size-3.5" />
-                </a>
-              </dd>
-            </div>
+        <div className="space-y-1.5 text-base">
+          <p>
+            <span className="text-muted-foreground">Nome:</span>{" "}
+            {submission.respondent_name ?? "—"}
+          </p>
+          {contact.age ? (
+            <p>
+              <span className="text-muted-foreground">Idade:</span> {contact.age}{" "}
+              anos
+            </p>
           ) : null}
-        </dl>
+          <p>
+            <span className="text-muted-foreground">Email:</span>{" "}
+            {submission.respondent_email ?? "—"}
+          </p>
+        </div>
+
+        {contact.instagramUrl || contact.whatsappUrl ? (
+          <div className="grid grid-cols-2 gap-2 sm:gap-3">
+            {contact.instagramUrl ? (
+              <Button
+                render={
+                  <a
+                    href={contact.instagramUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  />
+                }
+                nativeButton={false}
+                size="lg"
+                variant="secondary"
+                className={cn(
+                  "h-11 w-full gap-1.5 px-2 text-sm font-semibold sm:h-14 sm:gap-2 sm:px-4 sm:text-base",
+                )}
+              >
+                <InstagramMark className="size-4 sm:size-5" />
+                Instagram
+              </Button>
+            ) : null}
+            {contact.whatsappUrl ? (
+              <Button
+                render={
+                  <a
+                    href={contact.whatsappUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  />
+                }
+                nativeButton={false}
+                size="lg"
+                variant="secondary"
+                className="h-11 w-full gap-1.5 px-2 text-sm font-semibold sm:h-14 sm:gap-2 sm:px-4 sm:text-base"
+              >
+                <MessageCircle className="size-4 sm:size-5" />
+                WhatsApp
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {submission.video_url ? (
+          <a
+            href={submission.video_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-sm text-[var(--neuma-coral)] hover:underline"
+          >
+            Abrir ficheiro
+          </a>
+        ) : null}
       </Card>
 
       <Card className="space-y-4 p-5">
@@ -177,5 +213,31 @@ export default async function TallySubmissionDetailPage({
         <TallyAnswerList answers={answers} />
       </Card>
     </div>
+  );
+}
+
+function InstagramMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <rect
+        x="3"
+        y="3"
+        width="18"
+        height="18"
+        rx="5"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        className="text-muted-foreground"
+      />
+      <circle
+        cx="12"
+        cy="12"
+        r="4"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        className="text-muted-foreground"
+      />
+      <circle cx="17.2" cy="6.8" r="1.1" fill="currentColor" className="text-muted-foreground" />
+    </svg>
   );
 }

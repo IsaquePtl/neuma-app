@@ -2,6 +2,7 @@ import { cache } from "react";
 
 import { ensureDefaultMentorForStudent } from "@/lib/auth/default-mentor";
 import { createClient } from "@/lib/supabase/server";
+import { getTallyConfig, isOnboardingTallySubmission } from "@/lib/tally";
 
 /** Deduplica getUser() no mesmo request RSC. */
 export const getSessionUser = cache(async () => {
@@ -47,12 +48,20 @@ export const getMentorPendingCheckInsCount = cache(async () => {
 /** Onboardings por tratar (mentor). */
 export const getMentorPendingOnboardingsCount = cache(async () => {
   const supabase = await createClient();
-  const { count } = await supabase
+  const { onboardingFormId } = getTallyConfig();
+  const { data } = await supabase
     .from("tally_submissions")
-    .select("id", { count: "exact", head: true })
-    .eq("submission_kind", "onboarding")
-    .in("status", ["pending", "linked"]);
-  return count ?? 0;
+    .select(
+      "id, submission_kind, status, student_id, source_form_id, source_form_name",
+    )
+    .neq("status", "archived");
+
+  return (
+    data?.filter((row) => {
+      if (!isOnboardingTallySubmission(row, onboardingFormId)) return false;
+      return !row.student_id || row.status === "pending" || row.status === "linked";
+    }).length ?? 0
+  );
 });
 
 /** Badge leve: check-ins pending + onboardings por tratar (mentor). */

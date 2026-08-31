@@ -226,15 +226,16 @@ export async function completeSignupProfile(input: {
   }
 
   const fullName = composeFullName(firstName, lastName);
-  const { error } = await supabase
-    .from("profiles")
-    .update({
+  const { error } = await supabase.from("profiles").upsert(
+    {
+      id: user.id,
       full_name: fullName,
       age,
       gender,
       email: user.email ?? null,
-    })
-    .eq("id", user.id);
+    },
+    { onConflict: "id" },
+  );
 
   if (error) {
     return { ok: false as const, error: error.message };

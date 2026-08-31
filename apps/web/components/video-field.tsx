@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Upload, Link2 } from "lucide-react";
 
-import { createClient } from "@/lib/supabase/client";
+import { getCheckInVideoUploadUrl } from "@/lib/actions/r2-uploads";
+import { uploadViaPresignedPut } from "@/lib/uploads/presigned-client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -24,24 +25,13 @@ export function VideoField({
     setError(null);
     setUploading(true);
     try {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Nao autenticado");
-
-      const ext = file.name.split(".").pop() || "mp4";
-      const path = `${user.id}/${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from("check-ins")
-        .upload(path, file, { upsert: false, contentType: file.type });
-      if (upErr) throw upErr;
-
-      const { data } = await supabase.storage
-        .from("check-ins")
-        .createSignedUrl(path, 60 * 60 * 24 * 365);
-      if (!data?.signedUrl) throw new Error("Nao foi possivel obter o URL");
-      setUrl(data.signedUrl);
+      const presigned = await getCheckInVideoUploadUrl({
+        filename: file.name,
+        contentType: file.type,
+        size: file.size,
+      });
+      const publicUrl = await uploadViaPresignedPut(file, presigned);
+      setUrl(publicUrl);
       setMode("link");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha no upload");

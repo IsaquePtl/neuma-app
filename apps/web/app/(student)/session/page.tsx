@@ -13,8 +13,19 @@ import { createClient } from "@/lib/supabase/server";
 import { CalBookButton } from "@/components/calcom-embed";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
+import {
+  checkInBlockedMessage,
+  getCheckInAllowance,
+} from "@/lib/checkins/allowance";
+import {
+  loadStudentUnviewedFeedback,
+} from "@/lib/feedbacks/student";
 import { formatDate } from "@/lib/labels";
-import { loadMyMentor } from "@/lib/students/queries";
+import {
+  loadMyMentor,
+  loadMyPathWithNodes,
+  STUDENT_VISIBLE_PATH_STATUSES,
+} from "@/lib/students/queries";
 import { cn } from "@/lib/utils";
 
 function mentorWhatsAppUrl(whatsapp: string | null | undefined) {
@@ -64,6 +75,8 @@ export default async function StudentSessionPage({
         .from("paths")
         .select("id")
         .eq("student_id", user!.id)
+        .in("status", STUDENT_VISIBLE_PATH_STATUSES)
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
       supabase
@@ -103,30 +116,20 @@ export default async function StudentSessionPage({
     ? `/checkins/new?node=${activeNode.id}`
     : "/checkins/new";
 
-  // Feedback do nível actual (check-in com feedback ou level_feedback)
-  let hasFeedback = false;
-  if (activeNode) {
-    const [{ data: recentCheckIns }, { data: levelFb }] = await Promise.all([
-      supabase
-        .from("check_ins")
-        .select("id, feedback:feedbacks(id)")
-        .eq("student_id", user!.id)
-        .eq("node_id", activeNode.id)
-        .order("created_at", { ascending: false })
-        .limit(10),
-      supabase
-        .from("level_feedbacks")
-        .select("id")
-        .eq("node_id", activeNode.id)
-        .limit(1)
-        .maybeSingle(),
-    ]);
-    const hasCheckInFb = (recentCheckIns ?? []).some((c) => {
-      const fb = Array.isArray(c.feedback) ? c.feedback[0] : c.feedback;
-      return Boolean(fb);
-    });
-    hasFeedback = hasCheckInFb || Boolean(levelFb?.id);
-  }
+  const checkInAllowance = activeNode
+    ? await getCheckInAllowance(supabase, activeNode.id, user!.id)
+    : null;
+  const canSubmitCheckIn = !activeNode || (checkInAllowance?.allowed ?? true);
+  const checkInBlocked = checkInAllowance
+    ? checkInBlockedMessage(checkInAllowance)
+    : null;
+
+  const { nodes } = await loadMyPathWithNodes(user!.id);
+
+  const unviewedFeedback = nodes.length
+    ? await loadStudentUnviewedFeedback(supabase, user!.id, nodes)
+    : { count: 0, items: [], unviewedByNodeId: new Map<string, number>() };
+  const unviewedCount = unviewedFeedback.count;
 
   return (
     <div className={SESSION_VIEWPORT}>
@@ -195,7 +198,7 @@ export default async function StudentSessionPage({
       ) : null}
 
       <section id="agendar" className="grid shrink-0 gap-2.5">
-        {hasPath ? (
+        {hasPath && canSubmitCheckIn ? (
           <Button
             render={<Link href={checkInHref} />}
             nativeButton={false}
@@ -214,20 +217,28 @@ export default async function StudentSessionPage({
               <Video className="size-5" /> Fazer check-in
             </Button>
             <p className="-mt-0.5 text-center text-xs leading-snug text-muted-foreground">
-              O check-in fica disponível quando o teu percurso estiver ativo.
+              {!hasPath
+                ? "O check-in fica disponível quando o teu percurso estiver ativo."
+                : checkInBlocked}
             </p>
           </div>
         )}
 
-        {hasFeedback ? (
+        {unviewedCount > 0 ? (
           <Button
             render={<Link href="/session/feedback" />}
             nativeButton={false}
             size="lg"
             variant="ghost"
-            className={cn(FEEDBACK_BTN, "h-[3.5rem]")}
+            className={cn(FEEDBACK_BTN, "relative h-[3.5rem]")}
           >
-            <MessageSquareText className="size-5" /> Ver feedback
+            <MessageSquareText className="size-5" />
+            {unviewedCount > 1
+              ? `Ver feedback (${unviewedCount})`
+              : "Ver feedback"}
+            <span className="absolute right-1 top-1 grid min-w-5 place-items-center rounded-full bg-[var(--neuma-coral)] px-1.5 text-[10px] font-semibold text-white">
+              {unviewedCount > 9 ? "9+" : unviewedCount}
+            </span>
           </Button>
         ) : (
           <Button
@@ -246,7 +257,6 @@ export default async function StudentSessionPage({
             namespace="sessao-de-duvidas"
             eventType="sessao-de-duvidas"
             label="Agendar sessão de dúvidas"
-            showExternalLink={false}
             size="lg"
             className="[&_button]:h-[3.5rem]"
           />
@@ -276,7 +286,7 @@ export default async function StudentSessionPage({
         >
           <History className="size-5" /> Ver histórico
           {revisionCount > 0 ? (
-            <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-[var(--neuma-coral)] px-1.5 text-[10px] font-semibold text-white">
+            <span className="absolute right-1 top-1 grid min-w-5 place-items-center rounded-full bg-[var(--neuma-coral)] px-1.5 text-[10px] font-semibold text-white">
               {revisionCount > 9 ? "9+" : revisionCount}
             </span>
           ) : null}

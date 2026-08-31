@@ -269,7 +269,7 @@ html[data-neuma-bg="neon"] {
   /* Percurso — cards de nível (vidro preto da paleta, sem contorno) */
   .student-path-step {
     border-radius: 1.5rem;
-    padding: 1rem 1.15rem;
+    padding: 0.85rem 0.9rem;
     overflow: hidden;
     border: none;
     transition:
@@ -277,6 +277,11 @@ html[data-neuma-bg="neon"] {
       transform 200ms ease,
       opacity 200ms ease,
       background-color 200ms ease;
+  }
+  @media (min-width: 640px) {
+    .student-path-step {
+      padding: 1rem 1.15rem;
+    }
   }
   .student-path-step--active {
     background: rgb(22 22 22 / 58%);
@@ -364,35 +369,6 @@ iframe[src*="tally.so/embed"] {
 .cal-modal-box::backdrop,
 cal-modal-box::backdrop {
   background: rgba(0, 0, 0, 0.72) !important;
-}
-
-/* × do Cal no canto do ecrã — só ≥768px; fora do shadow (fixed real no viewport) */
-.neuma-cal-screen-close {
-  display: none;
-  position: fixed;
-  top: 0;
-  right: 0;
-  z-index: 2147483646;
-  width: 48px;
-  height: 48px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: rgb(255 255 255 / 0.8);
-  font-size: 32px;
-  line-height: 1;
-  cursor: pointer;
-  place-items: center;
-}
-.neuma-cal-screen-close:hover {
-  color: #fff;
-}
-@media (min-width: 768px) {
-  .neuma-cal-screen-close[data-visible="true"] {
-    display: grid;
-  }
 }
 
 .neuma-bg {
@@ -785,6 +761,38 @@ body:has(.auth-shell) .neuma-bg::before {
   margin: 0;
   transform-origin: bottom center;
   padding: 0;
+}
+
+/*
+ * Mobile toasts: sit immediately above the floating menubar.
+ * Menubar: pill h = p-2.5×2 + h-[3.75rem] = 5rem, bottom: 8px, + 12px gap
+ * → --neuma-toast-bottom: calc(5rem + 20px).
+ * Consumed by Toaster offset/mobileOffset (Sonner inline styles).
+ * Only when .mobile-menubar is mounted (student + mentor shell). Auth stays default.
+ */
+@media (max-width: 849px) {
+  body:has(.mobile-menubar) {
+    --neuma-toast-bottom: calc(5rem + 20px);
+  }
+
+  [data-sonner-toast][data-styled=true].cn-toast,
+  [data-sonner-toaster] [data-sonner-toast][data-styled=true] {
+    padding: 8px 12px;
+    font-size: 12px;
+    gap: 6px;
+    min-height: 0;
+    line-height: 1.35;
+  }
+
+  [data-sonner-toaster] [data-sonner-toast][data-styled=true] [data-icon] {
+    width: 14px;
+    height: 14px;
+  }
+
+  [data-sonner-toaster] [data-sonner-toast][data-styled=true] [data-icon] svg {
+    width: 14px;
+    height: 14px;
+  }
 }
 
 /* ---- Auth entrance stagger ---- */

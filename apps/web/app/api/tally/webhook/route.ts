@@ -8,6 +8,7 @@ import { ORPHAN_CHECKIN_LABEL } from "@/lib/labels";
 import {
   getTallyConfig,
   parseTallyPayload,
+  resolveTallySubmissionKind,
   verifyTallySignature,
 } from "@/lib/tally";
 
@@ -71,12 +72,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "missing_form_id" }, { status: 400 });
   }
 
-  const submissionKind =
-    parsed.formId === config.onboardingFormId
-      ? "onboarding"
-      : parsed.formId === config.checkinFormId
-        ? "checkin"
-        : "unknown";
+  const submissionKind = resolveTallySubmissionKind(
+    parsed.formId,
+    parsed.formName,
+    config,
+  );
 
   if (submissionKind === "unknown") {
     // Still persist — mentor can triage in studio/inbox — but surface misconfig.

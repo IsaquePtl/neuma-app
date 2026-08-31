@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Check, UserPlus } from "lucide-react";
@@ -96,33 +95,6 @@ export function OnboardingIntakeActions({
           {confirmed ? "Confirmado" : "Confirmar"}
         </Button>
       </div>
-
-      {linkedStudentId && !confirmed ? (
-        <div className="flex flex-col items-center gap-2">
-          <p className="text-center text-sm text-muted-foreground">
-            Já está ligado ao aluno. Confirma para marcar como tratado no perfil.
-          </p>
-          <Button
-            render={<Link href={`/studio/students/${linkedStudentId}`} />}
-            nativeButton={false}
-            variant="outline"
-          >
-            Abrir perfil do aluno
-          </Button>
-        </div>
-      ) : null}
-
-      {linkedStudentId && confirmed ? (
-        <div className="flex justify-center">
-          <Button
-            render={<Link href={`/studio/students/${linkedStudentId}`} />}
-            nativeButton={false}
-            variant="outline"
-          >
-            Abrir perfil do aluno
-          </Button>
-        </div>
-      ) : null}
 
       <Dialog open={linkOpen} onOpenChange={setLinkOpen}>
         <DialogContent className="sm:max-w-md">

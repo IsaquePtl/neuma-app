@@ -1,21 +1,26 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  Video,
-  ExternalLink,
-  MessageSquare,
-  RefreshCw,
-} from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import {
   resolveTallyAnswers,
   TallyAnswerList,
 } from "@/components/tally-answers";
+import {
+  FeedbackNextStepsCard,
+  FeedbackNotesCard,
+  MentorFeedbackCardHeader,
+} from "@/components/student-feedback-sections";
+import { StudentFeedbackCardBody } from "@/components/student-feedback-card-body";
+import { StudentSubmissionCardBody } from "@/components/student-submission-card-body";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckInStatusBadge } from "@/components/status-badges";
+import { FeedbackDecisionBlock } from "@/components/status-badges";
 import { checkInKindLabel, checkInLevelTitle, formatDateTime } from "@/lib/labels";
+import { resolveNextLevel } from "@/lib/feedbacks/student-shared";
+import { loadMyPathWithNodes } from "@/lib/students/queries";
+import { cn } from "@/lib/utils";
 
 export default async function CheckInDetailPage({
   params,
@@ -52,64 +57,73 @@ export default async function CheckInDetailPage({
     ? resolveTallyAnswers(tally.answers, tally.payload)
     : [];
   const videoUrl = checkIn.video_url || tally?.video_url || null;
+  const { nodes } = await loadMyPathWithNodes(user!.id);
+
+  const nextLevel =
+    checkIn.status === "approved" && checkIn.node_id
+      ? resolveNextLevel(nodes, checkIn.node_id)
+      : null;
 
   return (
-    <div className="w-full space-y-6">
-      <header className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm text-muted-foreground">Check-in</p>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {checkInLevelTitle(node?.title, checkIn.level_label)}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {checkInKindLabel[checkIn.kind]} ·{" "}
-            {formatDateTime(checkIn.created_at)}
-          </p>
-        </div>
-        <CheckInStatusBadge status={checkIn.status} />
+    <div
+      className={cn(
+        "neuma-mobile-viewport flex w-full min-w-0 flex-col gap-6 overflow-y-auto overscroll-contain pb-6",
+        "desktop:h-auto desktop:min-h-0 desktop:overflow-visible desktop:pb-4",
+      )}
+    >
+      <header className="min-w-0 shrink-0 space-y-1">
+        <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+          Check-in
+        </p>
+        <h1 className="break-words text-2xl font-bold tracking-tight sm:text-3xl">
+          {checkInLevelTitle(node?.title, checkIn.level_label)}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {checkInKindLabel[checkIn.kind]} ·{" "}
+          {formatDateTime(checkIn.created_at)}
+        </p>
       </header>
 
-      <Card className="space-y-4 p-5">
+      <Card className="min-w-0 space-y-4 !p-4 sm:!p-5">
         <h2 className="text-sm font-medium">A tua submissão</h2>
-        {videoUrl ? (
-          <a
-            href={videoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-sm text-[var(--neuma-coral)] hover:underline"
-          >
-            <Video className="size-4" /> Ver ficheiro
-            <ExternalLink className="size-3.5" />
-          </a>
-        ) : null}
-        {answers.length > 0 ? (
-          <TallyAnswerList answers={answers} compact />
-        ) : checkIn.notes ? (
-          <p className="whitespace-pre-wrap text-sm">{checkIn.notes}</p>
-        ) : (
-          <p className="text-sm text-muted-foreground">Sem respostas guardadas.</p>
-        )}
+        <StudentSubmissionCardBody videoUrl={videoUrl}>
+          {answers.length > 0 || checkIn.notes || !videoUrl ? (
+            answers.length > 0 ? (
+              <TallyAnswerList answers={answers} compact />
+            ) : checkIn.notes ? (
+              <p className="break-words whitespace-pre-wrap text-sm">{checkIn.notes}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Sem respostas guardadas.
+              </p>
+            )
+          ) : null}
+        </StudentSubmissionCardBody>
       </Card>
 
       {feedback ? (
-        <Card className="neuma-accent-top space-y-3 p-5">
-          <p className="flex items-center gap-2 font-medium">
-            <MessageSquare className="size-4 text-[var(--neuma-coral)]" />
-            Feedback do mentor
-          </p>
-          {feedback.notes ? (
-            <p className="whitespace-pre-wrap text-sm">{feedback.notes}</p>
-          ) : null}
-          {feedback.next_steps ? (
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Próximos passos
-              </p>
-              <p className="mt-1 whitespace-pre-wrap text-sm">
-                {feedback.next_steps}
-              </p>
-            </div>
-          ) : null}
+        <Card className="neuma-accent-top min-w-0 space-y-4 !p-4 sm:!p-5">
+          <MentorFeedbackCardHeader
+            subtitle={`Feedback do check-in · ${formatDateTime(checkIn.created_at)}`}
+          />
+          <StudentFeedbackCardBody
+            videoUrl={feedback.video_url}
+            nextSteps={
+              feedback.next_steps ? (
+                <FeedbackNextStepsCard nextSteps={feedback.next_steps} />
+              ) : null
+            }
+            footer={
+              <FeedbackDecisionBlock
+                status={checkIn.status}
+                nextLevel={nextLevel}
+                nodeId={checkIn.node_id ?? undefined}
+                feedbackRefs={[{ kind: "check_in", referenceId: id }]}
+              />
+            }
+          >
+            {feedback.notes ? <FeedbackNotesCard notes={feedback.notes} /> : null}
+          </StudentFeedbackCardBody>
         </Card>
       ) : (
         <p className="text-sm text-muted-foreground">
@@ -121,9 +135,10 @@ export default async function CheckInDetailPage({
         <Button
           render={<Link href={`/checkins/new?node=${checkIn.node_id}`} />}
           nativeButton={false}
-          className="gap-2"
+          variant="secondary"
+          className="w-full shrink-0 gap-2 sm:w-auto"
         >
-          <RefreshCw className="size-4" /> Reenviar check-in
+          <RefreshCw className="size-4 shrink-0" /> Reenviar check-in
         </Button>
       ) : null}
     </div>

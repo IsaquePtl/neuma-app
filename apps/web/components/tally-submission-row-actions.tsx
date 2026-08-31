@@ -132,12 +132,6 @@ export function TallySubmissionRowActions({
               <UserPlus className="size-4" />
               Associar a aluno
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => router.push("/studio/students")}
-            >
-              <UserPlus className="size-4" />
-              Convidar aluno
-            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               disabled={pending}

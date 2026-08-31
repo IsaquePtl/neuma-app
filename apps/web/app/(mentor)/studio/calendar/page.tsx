@@ -1,10 +1,7 @@
-import Link from "next/link";
-import { ExternalLink, CalendarDays } from "lucide-react";
-
 import { MentorCalendar } from "@/components/mentor-calendar";
 import { CreateCalendarEventPanel } from "@/components/create-calendar-event-form";
+import { UpcomingSessionsSection } from "@/components/mentor-dashboard/upcoming-sessions-section";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
 import {
   loadCalendarEvents,
@@ -33,7 +30,9 @@ export default async function MentorCalendarPage({
 
   const [events, upcoming, { data: mentorProfile }, { data: students }, { data: paths }] =
     await Promise.all([
-      loadCalendarEvents(safeYear, safeMonth),
+      loadCalendarEvents(safeYear, safeMonth, {
+        studentReturnTo: "/studio/calendar",
+      }),
       loadUpcomingSessions(7),
       supabase
         .from("profiles")
@@ -84,7 +83,7 @@ export default async function MentorCalendarPage({
             size="sm"
             className="gap-1.5"
           >
-            Cal.com <ExternalLink className="size-3.5" />
+            Cal.com
           </Button>
         ) : null}
       </header>
@@ -101,81 +100,10 @@ export default async function MentorCalendarPage({
         paths={paths ?? []}
       />
 
-      <section className="space-y-3">
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <CalendarDays className="size-5" /> Próximas sessões
-        </h2>
-        {upcoming.length === 0 ? (
-          <Card className="p-6 text-sm text-muted-foreground">
-            Sem marcações futuras ingeridas. Quando o webhook do Cal.com
-            receber bookings, aparecem aqui.
-          </Card>
-        ) : (
-          <Card className="overflow-hidden p-0">
-            <div className="divide-y divide-white/5">
-              {upcoming.map((b) => {
-                const when = new Date(b.start_time).toLocaleString("pt-PT", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                });
-                const who =
-                  b.attendee_name ?? b.attendee_email ?? "Convidado";
-                const levelLine = b.levelTitle
-                  ? `${b.levelTitle}${b.levelTheme ? ` · ${b.levelTheme}` : ""}`
-                  : null;
-                return (
-                  <div
-                    key={b.id}
-                    className="flex items-center justify-between gap-3 px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{who}</p>
-                      <p className="truncate text-sm text-muted-foreground">
-                        {b.title ?? "Sessão"} · {when}
-                      </p>
-                      {levelLine ? (
-                        <p className="truncate text-xs text-muted-foreground">
-                          Nível: {levelLine}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="flex shrink-0 gap-1">
-                      {b.meet_url ? (
-                        <Button
-                          render={
-                            <a
-                              href={b.meet_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            />
-                          }
-                          nativeButton={false}
-                          size="sm"
-                          variant="ghost"
-                        >
-                          Meet
-                        </Button>
-                      ) : null}
-                      {b.student_id ? (
-                        <Button
-                          render={
-                            <Link href={`/studio/students/${b.student_id}`} />
-                          }
-                          nativeButton={false}
-                          size="sm"
-                          variant="ghost"
-                        >
-                          Ficha
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        )}
-      </section>
+      <UpcomingSessionsSection
+        sessions={upcoming}
+        returnTo="/studio/calendar"
+      />
     </div>
   );
 }

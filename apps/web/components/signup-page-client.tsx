@@ -8,7 +8,13 @@ import { Card } from "@/components/ui/card";
 import type { SignupWizardStep } from "@/lib/auth/signup-wizard";
 import { cn } from "@/lib/utils";
 
-export function SignupPageClient({ error }: { error?: string }) {
+export function SignupPageClient({
+  error,
+  oauthFromLogin = false,
+}: {
+  error?: string;
+  oauthFromLogin?: boolean;
+}) {
   const [step, setStep] = useState<SignupWizardStep>("identity");
   const instant = step !== "identity";
 
@@ -36,7 +42,11 @@ export function SignupPageClient({ error }: { error?: string }) {
           instant ? "auth-enter-form--instant" : "auth-enter-form animate-fade-up",
         )}
       >
-        <SignupWizard error={error} onStepChange={setStep} />
+        <SignupWizard
+          error={error}
+          oauthFromLogin={oauthFromLogin}
+          onStepChange={setStep}
+        />
       </Card>
     </div>
   );

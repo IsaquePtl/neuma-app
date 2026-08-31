@@ -23,6 +23,12 @@ import type {
   PathStatus,
 } from "@/lib/types/database.types";
 
+const journeyTableGridClass =
+  "grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_2.5rem] desktop:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(14rem,auto)] gap-0";
+const journeyColPercurso = "min-w-0 pr-3";
+const journeyColAluno = "min-w-0 pl-3";
+const journeyColActions = "pl-3";
+
 type PathRow = {
   id: string;
   title: string;
@@ -35,18 +41,6 @@ type PathRow = {
     | null;
   nodes: { id: string; title: string; status: NodeStatus; order_index: number }[] | null;
 };
-
-function currentNode(
-  nodes: { id: string; title: string; status: NodeStatus; order_index: number }[],
-) {
-  const sorted = [...nodes].sort((a, b) => a.order_index - b.order_index);
-  return (
-    sorted.find((n) => n.status === "active") ??
-    sorted.filter((n) => n.status === "completed").at(-1) ??
-    sorted[0] ??
-    null
-  );
-}
 
 export default async function JourneysListPage() {
   await purgeOrphanedAgentShells();
@@ -162,19 +156,12 @@ export default async function JourneysListPage() {
           </Card>
         ) : (
           <Card className="overflow-hidden p-0">
-            <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto] gap-3 border-b border-white/10 px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground desktop:grid">
-              <span>Percurso</span>
-              <span>Aluno</span>
-              <span>Nível atual</span>
-              <span className="text-right">Acções</span>
-            </div>
-            <div className="divide-y divide-white/5">
-              {sortedStudentPaths.map((p) => {
+            <div className="divide-y divide-white/[0.03]">
+                {sortedStudentPaths.map((p) => {
                 const student = Array.isArray(p.student)
                   ? p.student[0]
                   : p.student;
                 const nodes = p.nodes ?? [];
-                const current = currentNode(nodes);
                 const done = nodes.filter((n) => n.status === "completed").length;
                 const studentLabel =
                   student?.full_name ??
@@ -185,45 +172,47 @@ export default async function JourneysListPage() {
                 return (
                   <div
                     key={p.id}
-                    className="flex flex-col gap-3 px-4 py-3.5 desktop:grid desktop:grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto] desktop:items-center desktop:gap-3"
+                    className={`${journeyTableGridClass} items-center px-4 py-3 transition-colors hover:bg-white/[0.04]`}
                   >
                     <Link
                       href={`/studio/journeys/${p.id}`}
-                      className="min-w-0 transition-colors hover:text-foreground/90"
+                      className={`${journeyColPercurso} transition-colors hover:text-foreground/90`}
                     >
-                      <p className="truncate font-medium">{p.title}</p>
-                      <p className="truncate text-xs text-muted-foreground desktop:hidden">
-                        {studentLabel}
-                        {current ? ` · ${current.title}` : ""}
+                      <p className="truncate font-medium leading-snug">
+                        {p.title}
                       </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {done}/{nodes.length} níveis ·{" "}
+                      <div className="mt-0.5 flex items-center gap-2">
                         <PathStatusBadge status={p.status} />
-                      </p>
+                        <p className="text-xs text-muted-foreground">
+                          {done}/{nodes.length} níveis
+                        </p>
+                      </div>
                     </Link>
-                    <div className="hidden min-w-0 items-center gap-2 desktop:flex">
+                    <div
+                      className={`flex items-center gap-2 ${journeyColAluno}`}
+                    >
                       <UserAvatar
+                        className="shrink-0"
                         name={student?.full_name ?? p.placeholder_name}
                         email={student?.email}
                         avatarUrl={student?.avatar_url}
                         size="sm"
                         rounded="xl"
                       />
-                      <p className="truncate text-sm text-muted-foreground">
+                      <p className="min-w-0 flex-1 truncate text-xs leading-tight text-muted-foreground desktop:text-sm">
                         {studentLabel}
                       </p>
                     </div>
-                    <p className="hidden truncate text-sm text-muted-foreground desktop:block">
-                      {current?.title ?? "—"}
-                    </p>
-                    <JourneyPathRowActions
-                      path={{
-                        id: p.id,
-                        title: p.title,
-                        student_id: p.student_id,
-                      }}
-                      students={studentOptions}
-                    />
+                    <div className={journeyColActions}>
+                      <JourneyPathRowActions
+                        path={{
+                          id: p.id,
+                          title: p.title,
+                          student_id: p.student_id,
+                        }}
+                        students={studentOptions}
+                      />
+                    </div>
                   </div>
                 );
               })}

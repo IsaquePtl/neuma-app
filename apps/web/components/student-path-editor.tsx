@@ -4,12 +4,12 @@ import {
   CalendarRange,
   ChevronDown,
   ChevronUp,
-  ExternalLink,
   Play,
   Target,
   Trash2,
 } from "lucide-react";
 
+import { CreatePathButton } from "@/components/create-path-button";
 import { PathForm } from "@/components/path-form";
 import { NodeDialog } from "@/components/node-dialog";
 import {
@@ -58,11 +58,29 @@ export function StudentPathEditor({
       {!embedded ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">Percurso</h2>
-          <PathForm studentId={studentId} path={path ?? undefined} />
+          {path ? (
+            <PathForm studentId={studentId} path={path} />
+          ) : (
+            <CreatePathButton
+              studentId={studentId}
+              label="Criar percurso"
+              size="sm"
+              className="gap-2"
+            />
+          )}
         </div>
       ) : (
         <div className="flex justify-end">
-          <PathForm studentId={studentId} path={path ?? undefined} />
+          {path ? (
+            <PathForm studentId={studentId} path={path} />
+          ) : (
+            <CreatePathButton
+              studentId={studentId}
+              label="Criar percurso"
+              size="sm"
+              className="gap-2"
+            />
+          )}
         </div>
       )}
 
@@ -76,7 +94,12 @@ export function StudentPathEditor({
               studentId={studentId}
               templates={readyTemplates}
             />
-            <PathForm studentId={studentId} triggerClassName="gap-2" />
+            <CreatePathButton
+              studentId={studentId}
+              label="Criar percurso"
+              size="sm"
+              className="gap-2"
+            />
           </div>
           {readyTemplates.length === 0 ? (
             <p className="text-xs text-muted-foreground">
@@ -229,7 +252,7 @@ export function StudentPathEditor({
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1 hover:text-foreground"
                             >
-                              Recurso <ExternalLink className="size-3" />
+                              Recurso
                             </a>
                           ) : null}
                         </div>

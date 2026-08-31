@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { redirectUrlForRequest } from "@/lib/auth/app-origin";
 import { ensureDefaultMentorForStudent } from "@/lib/auth/default-mentor";
+import { isStudentSignupIncomplete } from "@/lib/auth/signup-complete";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/types/database.types";
 import { SIGNUP_FINISHING_COOKIE } from "@/lib/auth/signup-wizard";
@@ -112,22 +113,30 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Login social: só entra se já existir perfil (conta criada antes).
+  // Login social: contas novas ou perfil incompleto → terminar registo em /login/signup.
   if (intent === "login") {
     const userId = data.user.id;
     const email = data.user.email?.trim().toLowerCase() ?? null;
 
-    let profileId: string | null = null;
+    type ProfileRow = {
+      id: string;
+      role: string | null;
+      age: number | null;
+      gender: string | null;
+    };
+
+    let profileRow: ProfileRow | null = null;
+
     try {
       const admin = createAdminClient();
       const { data: byId } = await admin
         .from("profiles")
-        .select("id")
+        .select("id, role, age, gender")
         .eq("id", userId)
         .maybeSingle();
-      profileId = byId?.id ?? null;
+      profileRow = byId ?? null;
 
-      if (!profileId && email) {
+      if (!profileRow && email) {
         const { data: byEmail } = await admin
           .from("profiles")
           .select("id, email")
@@ -143,7 +152,7 @@ export async function GET(request: NextRequest) {
           return redirectWithCookies(
             request,
             `/login?error=${encodeURIComponent(
-              "Já tens conta com este email. Usa email e password, ou cria conta com Google em «Criar conta».",
+              "Já tens conta com este email. Usa email e password, ou entra com Google se criaste conta assim.",
             )}`,
             pendingCookies,
           );
@@ -152,27 +161,21 @@ export async function GET(request: NextRequest) {
     } catch {
       const { data: byId } = await supabase
         .from("profiles")
-        .select("id")
+        .select("id, role, age, gender")
         .eq("id", userId)
         .maybeSingle();
-      profileId = byId?.id ?? null;
+      profileRow = byId ?? null;
     }
 
-    if (!profileId) {
-      await supabase.auth.signOut();
-      try {
-        const admin = createAdminClient();
-        await admin.auth.admin.deleteUser(userId);
-      } catch {
-        // ignore
+    if (!profileRow || isStudentSignupIncomplete(profileRow)) {
+      if (profileRow?.role === "student" || !profileRow) {
+        await ensureDefaultMentorForStudent(userId);
       }
-
       return redirectWithCookies(
         request,
-        `/login/signup?error=${encodeURIComponent(
-          "Esta conta Google ainda não está registada. Cria a tua conta primeiro.",
-        )}`,
+        "/login/signup?oauth=1",
         pendingCookies,
+        { signupFinishing: true },
       );
     }
   }

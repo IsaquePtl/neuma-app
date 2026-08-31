@@ -2,9 +2,9 @@
 
 import { useEffect, useId, useRef } from "react";
 import Cal, { getCalApi } from "@calcom/embed-react";
-import { ExternalLink, Phone } from "lucide-react";
+import { Phone } from "lucide-react";
 
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_CAL_USER =
@@ -53,10 +53,6 @@ function resolveCalLink({
   eventType = "30min",
 }: Pick<CalLinkProps, "calLink" | "eventType">) {
   return calLink ?? `${DEFAULT_CAL_USER}/${eventType}`;
-}
-
-function publicCalUrl(calLink: string) {
-  return `https://cal.com/${calLink.replace(/^\//, "")}`;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -115,40 +111,13 @@ function extractCancelledData(e: unknown): CalBookingCancelledData {
   };
 }
 
-/**
- * Move o × do Cal (shadow DOM) para o canto do card no mobile.
- * ≥768px: o × vai para o canto do ecrã (light DOM) — o modal do Cal tem
- * transform e o `position:fixed` no shadow não chega ao viewport.
- */
-const CAL_SCREEN_CLOSE_ID = "neuma-cal-screen-close";
-
-function getCalScreenCloseButton() {
-  return document.getElementById(CAL_SCREEN_CLOSE_ID);
-}
-
-function ensureCalScreenCloseButton() {
-  const existing = getCalScreenCloseButton();
-  if (existing instanceof HTMLButtonElement) return existing;
-
-  const button = document.createElement("button");
-  button.id = CAL_SCREEN_CLOSE_ID;
-  button.type = "button";
-  button.className = "neuma-cal-screen-close";
-  button.setAttribute("aria-label", "Fechar");
-  button.textContent = "×";
-  button.addEventListener("click", () => {
-    const host = document.querySelector("cal-modal-box");
-    const close = host?.shadowRoot?.querySelector(".close");
-    if (close instanceof HTMLElement) close.click();
-  });
-  document.body.appendChild(button);
-  return button;
-}
-
-function syncCalScreenClose(host: Element, embedReady: boolean) {
-  const desktop = window.matchMedia("(min-width: 768px)").matches;
-  const button = ensureCalScreenCloseButton();
-  button.dataset.visible = desktop && embedReady ? "true" : "false";
+/** Posiciona o × do Cal (shadow DOM) no canto do modal — mobile e desktop. */
+function isCalModalOpen(host: Element) {
+  const el = host as HTMLElement;
+  const state = host.getAttribute("state");
+  if (state === "closed" || state === "prerendering") return false;
+  if (el.style.visibility === "hidden") return false;
+  return state === "loaded" || state === "reopening" || state === "loading";
 }
 
 function pinCalModalCloseButton(host: Element) {
@@ -168,8 +137,8 @@ function pinCalModalCloseButton(host: Element) {
 
   const state = host.getAttribute("state");
   const embedReady = state === "loaded" || state === "reopening";
-  header.dataset.neumaVisible = embedReady ? "true" : "false";
-  syncCalScreenClose(host, embedReady);
+  const modalOpen = isCalModalOpen(host);
+  header.dataset.neumaVisible = embedReady && modalOpen ? "true" : "false";
 
   let style = root.getElementById("neuma-cal-close-fix");
   if (!style) {
@@ -206,56 +175,36 @@ function pinCalModalCloseButton(host: Element) {
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
-        color: rgba(255, 255, 255, 0.72) !important;
+        color: #fff !important;
         cursor: pointer !important;
         padding: 0 !important;
-        transition: color 150ms ease !important;
+        transition: opacity 150ms ease !important;
       }
       .close:hover {
-        color: #fff !important;
-      }
-      @media (min-width: 768px) {
-        .header,
-        .header[data-neuma-visible="true"] {
-          display: none !important;
-          pointer-events: none !important;
-        }
+        opacity: 0.85 !important;
       }
     `;
 }
 
 function watchCalModalCloseButtons() {
   const scan = () => {
-    const hosts = document.querySelectorAll("cal-modal-box");
-    if (hosts.length === 0) {
-      const leftover = getCalScreenCloseButton();
-      if (leftover) leftover.dataset.visible = "false";
-      return;
-    }
-    hosts.forEach(pinCalModalCloseButton);
+    document.querySelectorAll("cal-modal-box").forEach(pinCalModalCloseButton);
   };
   scan();
-  const mq = window.matchMedia("(min-width: 768px)");
-  mq.addEventListener("change", scan);
   const obs = new MutationObserver(scan);
   obs.observe(document.documentElement, {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ["state"],
+    attributeFilter: ["state", "style"],
   });
-  return () => {
-    mq.removeEventListener("change", scan);
-    obs.disconnect();
-    getCalScreenCloseButton()?.remove();
-  };
+  return () => obs.disconnect();
 }
 
 type CalBookButtonProps = CalLinkProps & {
   className?: string;
   label?: string;
   description?: string;
-  showExternalLink?: boolean;
   size?: "default" | "lg";
   variant?: "default" | "secondary";
   onBookingSuccess?: (data: CalBookingSuccessData) => void | Promise<void>;
@@ -273,7 +222,6 @@ export function CalBookButton({
   className,
   label = "Agendar chamada",
   description,
-  showExternalLink = false,
   size = "default",
   variant = "default",
   onBookingSuccess,
@@ -282,7 +230,6 @@ export function CalBookButton({
   const reactId = useId().replace(/:/g, "");
   const ns = namespace ?? eventType ?? `cal-${reactId}`;
   const resolvedLink = resolveCalLink({ calLink, eventType });
-  const fallbackHref = publicCalUrl(resolvedLink);
   const onSuccessRef = useRef(onBookingSuccess);
   const onCancelledRef = useRef(onBookingCancelled);
   onSuccessRef.current = onBookingSuccess;
@@ -373,19 +320,6 @@ export function CalBookButton({
           <Phone className={lg ? "size-5" : "size-4"} />
           {label}
         </button>
-        {showExternalLink ? (
-          <Button
-            render={
-              <a href={fallbackHref} target="_blank" rel="noopener noreferrer" />
-            }
-            nativeButton={false}
-            variant="secondary"
-            className="gap-2"
-          >
-            <ExternalLink className="size-4" />
-            Abrir no Cal.com
-          </Button>
-        ) : null}
       </div>
     </div>
   );
@@ -468,7 +402,6 @@ export function CalEmbedDisclosure({
           calLink={calLink}
           namespace={namespace}
           eventType={eventType}
-          showExternalLink={false}
         />
       </div>
     </details>
