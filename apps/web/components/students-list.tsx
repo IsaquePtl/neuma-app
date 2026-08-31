@@ -13,7 +13,7 @@ import type { PathStatus } from "@/lib/types/database.types";
 export type StudentListRow = {
   id: string;
   full_name: string | null;
-  email: string;
+  email: string | null;
   avatar_url: string | null;
   onboarding_completed: boolean;
   path: { status: PathStatus; title: string } | null;
@@ -25,7 +25,7 @@ function studentMatchesSearch(student: StudentListRow, query: string) {
   const q = query.toLowerCase();
   return (
     (student.full_name?.toLowerCase().includes(q) ?? false) ||
-    student.email.toLowerCase().includes(q) ||
+    (student.email?.toLowerCase().includes(q) ?? false) ||
     (student.path?.title.toLowerCase().includes(q) ?? false)
   );
 }
