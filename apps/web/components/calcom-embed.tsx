@@ -132,10 +132,10 @@ function pinCalModalCloseButton(host: Element) {
 
   const isDesktop = window.matchMedia("(min-width: 768px)").matches;
   if (isDesktop) {
-    if (header.parentElement !== root) {
+    if (header.parentNode !== root) {
       root.appendChild(header);
     }
-  } else if (header.parentElement !== modal) {
+  } else if (header.parentNode !== modal) {
     modal.style.position = "relative";
     modal.prepend(header);
   }
