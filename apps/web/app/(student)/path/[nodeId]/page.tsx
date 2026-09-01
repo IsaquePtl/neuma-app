@@ -32,17 +32,25 @@ export default async function StudentNodePage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [{ path, nodes }, mentor, upcomingBooking, { data: me }] =
-    await Promise.all([
-      loadMyPathWithNodes(user!.id),
-      loadMentorCalUsername(),
-      loadMyUpcomingBooking(user!.id),
-      supabase
-        .from("profiles")
-        .select("can_book_sessions")
-        .eq("id", user!.id)
-        .maybeSingle(),
-    ]);
+  const [
+    { path, nodes },
+    mentor,
+    upcomingBooking,
+    { data: me },
+    allowance,
+    activity,
+  ] = await Promise.all([
+    loadMyPathWithNodes(user!.id),
+    loadMentorCalUsername(),
+    loadMyUpcomingBooking(user!.id),
+    supabase
+      .from("profiles")
+      .select("can_book_sessions")
+      .eq("id", user!.id)
+      .maybeSingle(),
+    getCheckInAllowance(supabase, nodeId, user!.id),
+    loadStudentNodeActivity(supabase, user!.id, nodeId),
+  ]);
 
   const canBookSessions = me?.can_book_sessions !== false;
 
@@ -64,9 +72,6 @@ export default async function StudentNodePage({
   if (!isActive && !isPast) {
     redirect("/path");
   }
-
-  const allowance = await getCheckInAllowance(supabase, node.id, user!.id);
-  const activity = await loadStudentNodeActivity(supabase, user!.id, nodeId);
 
   // Mobile: center in menubar-aware viewport (pt-8 = slight lower bias);
   // my-auto collapses when overflowing so scroll still reaches the top.

@@ -1,9 +1,7 @@
 "use client";
 
-import type { MouseEvent } from "react";
-import { useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { startTransition, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 
 import {
@@ -11,16 +9,22 @@ import {
   markStudentFeedbackViewedAction,
 } from "@/lib/actions/student-feedback-views";
 import type { StudentFeedbackViewRef } from "@/lib/feedbacks/student-shared";
+import { requestStudentBadgesRefresh } from "@/lib/student-badges-client";
 import { Button } from "@/components/ui/button";
 
-async function markFeedbackViewed(
+async function markFeedbackViewedInBackground(
   nodeId: string | undefined,
   feedbackRefs: StudentFeedbackViewRef[],
 ) {
-  if (feedbackRefs.length > 0) {
-    await markStudentFeedbackViewedAction(feedbackRefs);
-  } else if (nodeId) {
-    await markNodeFeedbackViewedAction(nodeId);
+  try {
+    if (feedbackRefs.length > 0) {
+      await markStudentFeedbackViewedAction(feedbackRefs);
+    } else if (nodeId) {
+      await markNodeFeedbackViewedAction(nodeId);
+    }
+    requestStudentBadgesRefresh();
+  } catch {
+    // Navigation should not wait on badge bookkeeping.
   }
 }
 
@@ -36,39 +40,33 @@ export function FeedbackContinueAction({
   label?: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [isPending, setIsPending] = useState(false);
 
-  const handleClick = async (event: MouseEvent<HTMLAnchorElement>) => {
-    event.preventDefault();
+  const handleClick = () => {
     if (isPending) return;
 
     setIsPending(true);
-    try {
-      await markFeedbackViewed(nodeId, feedbackRefs);
-    } catch {
-      setIsPending(false);
-      return;
-    }
-
-    router.push(href);
-    router.refresh();
-    setIsPending(false);
+    void markFeedbackViewedInBackground(nodeId, feedbackRefs);
+    startTransition(() => {
+      // Same node deep links keep query params on push; replace clears them.
+      if (pathname === href) {
+        router.replace(href);
+      } else {
+        router.push(href);
+      }
+    });
   };
 
   return (
     <div className="min-w-0 space-y-2">
       <Button
-        render={
-          <Link
-            href={href}
-            onClick={handleClick}
-            aria-busy={isPending}
-          />
-        }
-        nativeButton={false}
+        type="button"
         size="lg"
         className="h-12 w-full gap-2 text-base font-semibold"
         disabled={isPending}
+        aria-busy={isPending}
+        onClick={handleClick}
       >
         {label}
         <ArrowRight className="size-4" aria-hidden />

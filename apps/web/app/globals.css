@@ -284,7 +284,7 @@ html[data-neuma-bg="neon"] {
     }
   }
   .student-path-step--active {
-    background: rgb(22 22 22 / 58%);
+    background: rgb(22 22 22);
     backdrop-filter: blur(24px) saturate(170%);
     -webkit-backdrop-filter: blur(24px) saturate(170%);
     box-shadow:
@@ -293,7 +293,7 @@ html[data-neuma-bg="neon"] {
   }
   a:hover .student-path-step--active {
     transform: translateY(-1px);
-    background: rgb(22 22 22 / 64%);
+    background: rgb(28 28 28);
   }
   .student-path-step--done {
     background: rgb(22 22 22 / 42%);
@@ -719,6 +719,53 @@ body:has(.auth-shell) .neuma-bg::before {
 /* barra fina de gradiente no topo de superficies premium (desactivada) */
 .neuma-accent-top {
   position: relative;
+}
+
+/*
+ * Quiz CTA halo (mobile). Outer box-shadow on the button is clipped by
+ * .neuma-ui (overflow-x: hidden) and .neuma-mobile-viewport (overflow-y: auto).
+ * Host reclaims main px-4 gutter; ::before matches button width and paints
+ * the halo into the gutter plus vertical padding-block for top/bottom bleed.
+ */
+.neuma-quiz-cta-host {
+  position: relative;
+  margin-inline: -1rem;
+  padding-block: 1.25rem;
+}
+
+.neuma-quiz-cta-host::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  left: 1rem;
+  right: 1rem;
+  top: 50%;
+  height: 3.5rem;
+  transform: translateY(-50%);
+  border-radius: 1rem;
+  pointer-events: none;
+  box-shadow:
+    0 0 28px 4px color-mix(in oklch, var(--neuma-coral) 58%, transparent),
+    0 0 44px 10px color-mix(in oklch, var(--neuma-coral) 32%, transparent);
+  opacity: 0.95;
+}
+
+.neuma-quiz-cta-host:has(.neuma-quiz-cta:hover)::before,
+.neuma-quiz-cta-host:has(.neuma-quiz-cta:focus-visible)::before {
+  box-shadow:
+    0 0 32px 6px color-mix(in oklch, var(--neuma-coral) 65%, transparent),
+    0 0 52px 14px color-mix(in oklch, var(--neuma-coral) 38%, transparent);
+}
+
+@media (min-width: 850px) {
+  .neuma-quiz-cta-host {
+    margin-inline: 0;
+    padding-block: 0;
+  }
+
+  .neuma-quiz-cta-host::before {
+    content: none;
+  }
 }
 
 /* safe-area helpers (conteúdo / sheets — não a menubar flutuante) */

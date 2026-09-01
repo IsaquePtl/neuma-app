@@ -36,17 +36,17 @@ const STEP_META: Record<
 > = {
   identity: {
     title: "Criar conta",
-    subtitle: "1 de 3 — Quem és?",
-    oauthSubtitle: "1 de 2 — Quem és?",
+    subtitle: "1 de 3 — Identificação",
+    oauthSubtitle: "1 de 2 — Identificação",
   },
   credentials: {
     title: "A tua conta",
-    subtitle: "2 de 3 — Email e password",
+    subtitle: "2 de 3 — Acesso",
   },
   profile: {
     title: "O teu perfil",
-    subtitle: "3 de 3 — Foto e bio (opcional)",
-    oauthSubtitle: "2 de 2 — Foto e bio (opcional)",
+    subtitle: "3 de 3 — Perfil",
+    oauthSubtitle: "2 de 2 — Perfil",
   },
 };
 

@@ -54,14 +54,31 @@ function viewKey(kind: StudentFeedbackViewRef["kind"], referenceId: string) {
 async function loadViewedFeedbackKeys(
   supabase: Supabase,
   studentId: string,
+  referenceIds?: string[],
 ): Promise<Set<string>> {
-  const { data, error } = await supabase
+  if (referenceIds && referenceIds.length === 0) {
+    return new Set();
+  }
+
+  let query = supabase
     .from("student_feedback_views")
     .select("feedback_kind, reference_id")
     .eq("student_id", studentId);
 
+  if (referenceIds && referenceIds.length > 0) {
+    query = query.in("reference_id", referenceIds);
+  }
+
+  const { data, error } = await query;
+
   if (error) {
-    // Table may not exist yet in local dev without migration applied.
+    if (isStudentFeedbackViewsUnavailable(error)) {
+      console.warn(
+        "[student_feedback_views] table unavailable — apply migration 0033_student_feedback_views.sql",
+      );
+      return new Set();
+    }
+    console.error("[student_feedback_views] load failed:", error.message);
     return new Set();
   }
 
@@ -236,12 +253,11 @@ export async function loadStudentNodeActivity(
   studentId: string,
   nodeId: string,
 ): Promise<StudentNodeActivity> {
-  const [{ data: checkIns }, { data: levelFeedbacks }, viewedKeys] =
-    await Promise.all([
+  const [{ data: checkIns }, { data: levelFeedbacks }] = await Promise.all([
     supabase
       .from("check_ins")
       .select(
-        "id, status, kind, created_at, video_url, notes, feedback:feedbacks(notes, next_steps, video_url, approved)",
+        "id, status, kind, created_at, video_url, notes, feedback:feedbacks(notes, next_steps, video_url, approved), tally_submissions(answers, payload, video_url)",
       )
       .eq("student_id", studentId)
       .eq("node_id", nodeId)
@@ -251,20 +267,16 @@ export async function loadStudentNodeActivity(
       .select("id, notes, video_url, file_url, created_at")
       .eq("node_id", nodeId)
       .order("created_at", { ascending: false }),
-    loadViewedFeedbackKeys(supabase, studentId),
   ]);
 
-  const checkInIds = (checkIns ?? []).map((checkIn) => checkIn.id);
-  const { data: tallyRows } =
-    checkInIds.length > 0
-      ? await supabase
-          .from("tally_submissions")
-          .select("check_in_id, answers, payload, video_url")
-          .in("check_in_id", checkInIds)
-      : { data: [] as { check_in_id: string; answers: unknown; payload: unknown; video_url: string | null }[] };
-
-  const tallyByCheckInId = new Map(
-    (tallyRows ?? []).map((row) => [row.check_in_id, row]),
+  const referenceIds = [
+    ...(checkIns ?? []).map((checkIn) => checkIn.id),
+    ...(levelFeedbacks ?? []).map((feedback) => feedback.id),
+  ];
+  const viewedKeys = await loadViewedFeedbackKeys(
+    supabase,
+    studentId,
+    referenceIds,
   );
 
   return {
@@ -272,7 +284,10 @@ export async function loadStudentNodeActivity(
       const feedback = Array.isArray(checkIn.feedback)
         ? checkIn.feedback[0]
         : checkIn.feedback;
-      const tally = tallyByCheckInId.get(checkIn.id);
+      const tallyRows = checkIn.tally_submissions;
+      const tally = Array.isArray(tallyRows)
+        ? tallyRows[0]
+        : tallyRows ?? null;
       const submissionVideoUrl =
         checkIn.video_url || tally?.video_url || null;
       const hasFeedback = hasVisibleCheckInFeedback(feedback);
@@ -324,8 +339,13 @@ export async function markStudentFeedbackViewed(
     .from("student_feedback_views")
     .upsert(rows, { onConflict: "student_id,feedback_kind,reference_id" });
 
-  if (error && !isStudentFeedbackViewsUnavailable(error)) {
-    console.error("[student_feedback_views]", error.message);
+  if (error) {
+    if (isStudentFeedbackViewsUnavailable(error)) {
+      throw new Error(
+        "Não foi possível guardar a visualização do feedback. Aplica a migration 0033_student_feedback_views.sql no Supabase.",
+      );
+    }
+    throw new Error(error.message);
   }
 }
 

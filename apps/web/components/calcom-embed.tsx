@@ -130,7 +130,12 @@ function pinCalModalCloseButton(host: Element) {
     return;
   }
 
-  if (header.parentElement !== modal) {
+  const isDesktop = window.matchMedia("(min-width: 768px)").matches;
+  if (isDesktop) {
+    if (header.parentElement !== root) {
+      root.appendChild(header);
+    }
+  } else if (header.parentElement !== modal) {
     modal.style.position = "relative";
     modal.prepend(header);
   }
@@ -157,6 +162,15 @@ function pinCalModalCloseButton(host: Element) {
         margin: 0 !important;
         display: none !important;
         pointer-events: none !important;
+      }
+      @media (min-width: 768px) {
+        .header {
+          position: fixed !important;
+          top: max(10px, env(safe-area-inset-top, 0px)) !important;
+          right: max(10px, env(safe-area-inset-right, 0px)) !important;
+          left: auto !important;
+          z-index: 2147483646 !important;
+        }
       }
       .header[data-neuma-visible="true"] {
         display: block !important;
@@ -198,7 +212,13 @@ function watchCalModalCloseButtons() {
     attributes: true,
     attributeFilter: ["state", "style"],
   });
-  return () => obs.disconnect();
+  const mq = window.matchMedia("(min-width: 768px)");
+  const onBreakpointChange = () => scan();
+  mq.addEventListener("change", onBreakpointChange);
+  return () => {
+    obs.disconnect();
+    mq.removeEventListener("change", onBreakpointChange);
+  };
 }
 
 type CalBookButtonProps = CalLinkProps & {

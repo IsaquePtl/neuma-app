@@ -1,5 +1,7 @@
 "use server";
 
+import crypto from "node:crypto";
+
 import { revalidatePath } from "next/cache";
 
 import {
@@ -7,12 +9,22 @@ import {
   findLinkedOnboarding,
   studentHasOnboardingSubmission,
 } from "@/lib/onboarding/submission";
+import {
+  ONBOARDING_FORM_ID,
+  ONBOARDING_FORM_NAME,
+  ONBOARDING_FIELDS,
+  onboardingAnswerFields,
+  resolveOnboardingLabel,
+  type OnboardingFieldDef,
+} from "@/lib/onboarding/questions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import type { Json } from "@/lib/types/database.types";
 import {
   getTallyConfig,
   parseTallyEmbedSubmission,
   resolveTallySubmissionKind,
+  type TallyAnswer,
   type TallyEmbedSubmissionPayload,
 } from "@/lib/tally";
 
@@ -41,6 +53,210 @@ function revalidateOnboardingPaths(studentId: string) {
   revalidatePath(`/studio/students/${studentId}`);
   revalidatePath("/studio/journeys/onboardings");
   revalidatePath("/studio/inbox");
+}
+
+function normalizeEmail(email: string | null | undefined) {
+  const trimmed = email?.trim().toLowerCase() ?? "";
+  return trimmed || null;
+}
+
+function fieldValue(
+  values: Record<string, string>,
+  field: OnboardingFieldDef,
+): Json {
+  const raw = values[field.tallyKey]?.trim() ?? "";
+  if (!raw) return null;
+
+  if (field.type === "INPUT_NUMBER" || field.type === "LINEAR_SCALE") {
+    const num = Number(raw);
+    return Number.isFinite(num) ? num : raw;
+  }
+
+  return raw;
+}
+
+function buildNativeOnboardingAnswers(
+  values: Record<string, string>,
+  nome: string,
+  studentId?: string | null,
+): TallyAnswer[] {
+  const answers: TallyAnswer[] = onboardingAnswerFields().map((field) => ({
+    key: field.tallyKey,
+    label: field.dynamicNome
+      ? resolveOnboardingLabel(field.label, nome)
+      : field.label,
+    type: field.type,
+    value: fieldValue(values, field),
+    options: field.options?.length
+      ? field.options.map((option) => ({
+          id: option.id,
+          text: option.text,
+        }))
+      : null,
+  }));
+
+  if (studentId) {
+    answers.push({
+      key: ONBOARDING_FIELDS.studentId.tallyKey,
+      label: ONBOARDING_FIELDS.studentId.label,
+      type: ONBOARDING_FIELDS.studentId.type,
+      value: studentId,
+      options: null,
+    });
+  }
+
+  return answers;
+}
+
+function buildNativeOnboardingPayload(params: {
+  responseId: string;
+  answers: TallyAnswer[];
+  studentId?: string | null;
+}) {
+  const fields = params.answers.map((answer) => ({
+    key: answer.key,
+    label: answer.label,
+    type: answer.type,
+    value: answer.value,
+    options: answer.options ?? undefined,
+  }));
+
+  return {
+    eventId: `native:${params.responseId}`,
+    eventType: "FORM_RESPONSE",
+    createdAt: new Date().toISOString(),
+    data: {
+      responseId: params.responseId,
+      submissionId: params.responseId,
+      formId: ONBOARDING_FORM_ID,
+      formName: ONBOARDING_FORM_NAME,
+      createdAt: new Date().toISOString(),
+      fields,
+      ...(params.studentId ? { student_id: params.studentId } : {}),
+    },
+  };
+}
+
+export async function submitOnboarding(
+  values: Record<string, string>,
+): Promise<{
+  ok: boolean;
+  alreadySubmitted?: boolean;
+  submissionId?: string | null;
+  error?: string;
+}> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const nome = values[ONBOARDING_FIELDS.name.tallyKey]?.trim() ?? "";
+  if (!nome) {
+    return { ok: false, error: "Indica o teu nome." };
+  }
+
+  for (const field of onboardingAnswerFields()) {
+    if (field.required === false) continue;
+    const value = values[field.tallyKey]?.trim() ?? "";
+    if (!value) {
+      return {
+        ok: false,
+        error: `Preenche «${field.label.split("\n")[0]}».`,
+      };
+    }
+  }
+
+  if (user) {
+    const existing = await findLinkedOnboarding(user.id);
+    if (existing) {
+      revalidateOnboardingPaths(user.id);
+      return { ok: true, alreadySubmitted: true, submissionId: existing };
+    }
+  }
+
+  const sessionEmail = normalizeEmail(user?.email);
+  const formEmail = normalizeEmail(values[ONBOARDING_FIELDS.email.tallyKey]);
+  const respondentEmail = sessionEmail ?? formEmail;
+  if (!respondentEmail) {
+    return { ok: false, error: "Indica o teu email." };
+  }
+
+  const answers = buildNativeOnboardingAnswers(values, nome, user?.id ?? null);
+  const responseId = crypto.randomUUID();
+  const payload = buildNativeOnboardingPayload({
+    responseId,
+    answers,
+    studentId: user?.id ?? null,
+  });
+
+  const admin = createAdminClient();
+  let trustedStudentId: string | null = user?.id ?? null;
+  let trustedProfileEmail: string | null = sessionEmail;
+
+  if (!trustedStudentId && respondentEmail) {
+    const { data: matches } = await admin
+      .from("profiles")
+      .select("id, email, role")
+      .eq("role", "student")
+      .ilike("email", respondentEmail)
+      .limit(2);
+
+    if (matches?.length === 1) {
+      trustedStudentId = matches[0].id;
+      trustedProfileEmail =
+        normalizeEmail(matches[0].email) ?? respondentEmail;
+    }
+  }
+
+  const { data: inserted, error } = await admin
+    .from("tally_submissions")
+    .insert({
+      source: "native",
+      source_event_id: `native:${responseId}`,
+      source_response_id: responseId,
+      source_submission_id: responseId,
+      source_form_id: ONBOARDING_FORM_ID,
+      source_form_name: ONBOARDING_FORM_NAME,
+      submission_kind: "onboarding",
+      status: trustedStudentId ? "linked" : "pending",
+      respondent_name: nome,
+      respondent_email: trustedProfileEmail ?? respondentEmail,
+      student_id: trustedStudentId,
+      notes: null,
+      answers,
+      payload,
+      processed_at: null,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    if (error.code === "23505" && user) {
+      const linked = await findLinkedOnboarding(user.id);
+      if (linked) {
+        revalidateOnboardingPaths(user.id);
+        return { ok: true, alreadySubmitted: true, submissionId: linked };
+      }
+      const claimed = await claimOnboardingByEmail({
+        studentId: user.id,
+        email: respondentEmail,
+      });
+      if (claimed) {
+        return { ok: true, submissionId: claimed };
+      }
+    }
+    console.error("[onboarding:native] persist_failed", error);
+    return { ok: false, error: "Não foi possível guardar o onboarding." };
+  }
+
+  if (trustedStudentId) {
+    revalidateOnboardingPaths(trustedStudentId);
+  } else {
+    revalidatePath("/studio/journeys/onboardings");
+    revalidatePath("/studio/inbox");
+  }
+
+  return { ok: true, submissionId: inserted.id };
 }
 
 /**

@@ -249,6 +249,7 @@ export async function submitQuizAttempt(
   if (error) throw new Error(error.message);
 
   revalidatePath(`/path/${nodeId}`);
+  revalidatePath(`/path/${nodeId}/quiz`);
   revalidatePath("/home");
   revalidatePath("/path");
 

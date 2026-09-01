@@ -30,7 +30,7 @@ const timelineInputClass =
   "absolute inset-0 z-10 h-full w-full cursor-pointer appearance-none bg-transparent opacity-0 [&::-webkit-slider-thumb]:size-0 [&::-webkit-slider-thumb]:appearance-none [&::-moz-range-thumb]:size-0 [&::-moz-range-thumb]:border-0";
 
 const volumeRangeClass =
-  "w-14 cursor-pointer appearance-none accent-[var(--neuma-coral)] sm:w-16 h-1 rounded-full bg-white/20 [&::-webkit-slider-thumb]:size-2.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--neuma-coral)] [&::-moz-range-thumb]:size-2.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-[var(--neuma-coral)]";
+  "h-1 w-14 shrink-0 cursor-pointer appearance-none rounded-full bg-white/20 accent-[var(--neuma-coral)] sm:w-16 [&::-webkit-slider-thumb]:size-2.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--neuma-coral)] [&::-moz-range-thumb]:size-2.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-[var(--neuma-coral)]";
 
 const CONTROLS_HIDE_DELAY_MS = 3000;
 
@@ -58,6 +58,8 @@ function NativeVideoPlayer({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const volumeControlRef = useRef<HTMLDivElement>(null);
   const hideControlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -69,6 +71,11 @@ function NativeVideoPlayer({
   const [muted, setMuted] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
+  const [hoverPercent, setHoverPercent] = useState<number | null>(null);
+  const [isFinePointer, setIsFinePointer] = useState(false);
+  const [isTimelineHovered, setIsTimelineHovered] = useState(false);
+  const [isTimelinePointerActive, setIsTimelinePointerActive] = useState(false);
+  const [volumeSliderPinned, setVolumeSliderPinned] = useState(false);
 
   const clearHideControlsTimeout = useCallback(() => {
     if (hideControlsTimeoutRef.current !== null) {
@@ -81,6 +88,7 @@ function NativeVideoPlayer({
     clearHideControlsTimeout();
     hideControlsTimeoutRef.current = setTimeout(() => {
       setControlsVisible(false);
+      setVolumeSliderPinned(false);
       hideControlsTimeoutRef.current = null;
     }, CONTROLS_HIDE_DELAY_MS);
   }, [clearHideControlsTimeout]);
@@ -110,6 +118,7 @@ function NativeVideoPlayer({
         clearHideControlsTimeout();
         hideControlsTimeoutRef.current = setTimeout(() => {
           setControlsVisible(false);
+          setVolumeSliderPinned(false);
           hideControlsTimeoutRef.current = null;
         }, CONTROLS_HIDE_DELAY_MS);
       }
@@ -154,6 +163,14 @@ function NativeVideoPlayer({
   useEffect(() => {
     return () => clearHideControlsTimeout();
   }, [clearHideControlsTimeout]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const sync = () => setIsFinePointer(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   const playWithSound = useCallback(async () => {
     const video = videoRef.current;
@@ -267,6 +284,106 @@ function NativeVideoPlayer({
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
   const showPlayingControls = isPlaying && controlsVisible;
+  const isTimelineZoomed =
+    isTimelineHovered || isTimelinePointerActive || isSeeking;
+  const showHoverPreview =
+    isFinePointer &&
+    hoverPercent !== null &&
+    hoverPercent > progress + 0.5;
+
+  const handleTimelineMouseMove = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!isFinePointer || !timelineRef.current) return;
+
+      const rect = timelineRef.current.getBoundingClientRect();
+      if (rect.width <= 0) return;
+
+      const percent = Math.max(
+        0,
+        Math.min(100, ((event.clientX - rect.left) / rect.width) * 100),
+      );
+      setHoverPercent(percent);
+    },
+    [isFinePointer],
+  );
+
+  const handleTimelineMouseEnter = useCallback(() => {
+    setIsTimelineHovered(true);
+  }, []);
+
+  const handleTimelineMouseLeave = useCallback(() => {
+    setIsTimelineHovered(false);
+    setHoverPercent(null);
+  }, []);
+
+  const handleTimelinePointerDown = useCallback(() => {
+    setIsTimelinePointerActive(true);
+  }, []);
+
+  const handleTimelinePointerUp = useCallback(() => {
+    setIsTimelinePointerActive(false);
+  }, []);
+
+  const handleContainerKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== " " && event.key !== "k" && event.key !== "K") return;
+
+      const target = event.target as HTMLElement;
+      if (target.closest('input[type="range"]')) return;
+
+      event.preventDefault();
+      void togglePlay();
+    },
+    [togglePlay],
+  );
+
+  const handleVolumeButtonClick = useCallback(() => {
+    toggleMute();
+  }, [toggleMute]);
+
+  const handleVolumeButtonKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setVolumeSliderPinned(true);
+        handleVolumeChange(Math.min(1, volume + 0.05));
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setVolumeSliderPinned(true);
+        handleVolumeChange(Math.max(0, volume - 0.05));
+        return;
+      }
+
+      if (event.key === "m" || event.key === "M") {
+        event.preventDefault();
+        toggleMute();
+      }
+    },
+    [handleVolumeChange, toggleMute, volume],
+  );
+
+  const handleVolumeMouseLeave = useCallback(() => {
+    setVolumeSliderPinned(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isTimelinePointerActive) return;
+
+    const releaseTimelinePointer = () => {
+      setIsTimelinePointerActive(false);
+    };
+
+    window.addEventListener("pointerup", releaseTimelinePointer);
+    window.addEventListener("pointercancel", releaseTimelinePointer);
+
+    return () => {
+      window.removeEventListener("pointerup", releaseTimelinePointer);
+      window.removeEventListener("pointercancel", releaseTimelinePointer);
+    };
+  }, [isTimelinePointerActive]);
 
   return (
     <div
@@ -278,6 +395,7 @@ function NativeVideoPlayer({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onTouchStart={handleTouchStart}
+      onKeyDown={handleContainerKeyDown}
     >
       <video
         ref={videoRef}
@@ -285,8 +403,9 @@ function NativeVideoPlayer({
         playsInline
         muted
         preload="metadata"
+        tabIndex={-1}
         onLoadedMetadata={onLoadedMetadata}
-        className="absolute inset-0 size-full object-contain"
+        className="absolute inset-0 size-full object-contain outline-none"
         aria-label={title ?? "Vídeo"}
       >
         <track kind="captions" />
@@ -296,7 +415,7 @@ function NativeVideoPlayer({
         <button
           type="button"
           onClick={playWithSound}
-          className="absolute inset-0 z-10 flex size-full items-center justify-center rounded-xl bg-black/40 transition-opacity"
+          className="absolute inset-0 z-10 flex size-full items-center justify-center rounded-xl bg-black/40 transition-opacity outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
           aria-label="Reproduzir vídeo"
         >
           <span className="grid size-14 place-items-center rounded-full bg-[var(--neuma-coral)] text-white transition-transform hover:scale-105">
@@ -306,8 +425,9 @@ function NativeVideoPlayer({
       ) : (
         <button
           type="button"
+          tabIndex={-1}
           onClick={handleSurfaceToggle}
-          className="absolute inset-0 z-10 size-full cursor-pointer border-0 bg-transparent p-0"
+          className="absolute inset-0 z-10 size-full cursor-pointer border-0 bg-transparent p-0 outline-none focus:outline-none"
           aria-label="Pausar vídeo"
         />
       )}
@@ -315,7 +435,7 @@ function NativeVideoPlayer({
       {isPlaying ? (
         <div
           className={cn(
-            "absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/75 via-black/45 to-transparent pt-8 transition-opacity duration-200",
+            "absolute inset-x-0 bottom-1 z-20 bg-gradient-to-t from-black/75 via-black/45 to-transparent pt-8 transition-opacity duration-200",
             showPlayingControls
               ? "opacity-100"
               : "pointer-events-none opacity-0",
@@ -345,12 +465,25 @@ function NativeVideoPlayer({
 
             <div className="flex-1" />
 
-            <div className="flex shrink-0 items-center gap-1">
+            <div
+              ref={volumeControlRef}
+              role="group"
+              aria-label="Controlo de volume"
+              className={cn(
+                "group/volume hidden shrink-0 items-center gap-1 rounded-lg transition-colors hover:bg-white/10 focus-within:bg-white/10 sm:flex",
+                volumeSliderPinned && "bg-white/10",
+              )}
+              onMouseLeave={handleVolumeMouseLeave}
+            >
               <button
                 type="button"
-                onClick={toggleMute}
-                className="grid size-8 shrink-0 place-items-center rounded-lg text-white transition-colors hover:bg-white/10"
-                aria-label={muted || volume === 0 ? "Ativar som" : "Silenciar"}
+                onClick={handleVolumeButtonClick}
+                onKeyDown={handleVolumeButtonKeyDown}
+                className="grid size-8 shrink-0 place-items-center rounded-lg text-white"
+                aria-label={
+                  muted || volume === 0 ? "Ativar som" : "Silenciar"
+                }
+                aria-expanded={volumeSliderPinned}
               >
                 {muted || volume === 0 ? (
                   <VolumeX className="size-4" />
@@ -358,18 +491,29 @@ function NativeVideoPlayer({
                   <Volume2 className="size-4" />
                 )}
               </button>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={muted ? 0 : volume * 100}
-                onChange={(event) =>
-                  handleVolumeChange(Number(event.target.value) / 100)
-                }
-                className={volumeRangeClass}
-                aria-label="Volume"
-              />
+              <div
+                className={cn(
+                  "max-w-0 overflow-hidden opacity-0 transition-[max-width,opacity] duration-200 ease-out",
+                  "group-hover/volume:max-w-16 group-hover/volume:opacity-100",
+                  "group-focus-within/volume:max-w-16 group-focus-within/volume:opacity-100",
+                  volumeSliderPinned && "max-w-16 opacity-100",
+                )}
+              >
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={muted ? 0 : volume * 100}
+                  onChange={(event) =>
+                    handleVolumeChange(Number(event.target.value) / 100)
+                  }
+                  onFocus={() => setVolumeSliderPinned(true)}
+                  className={volumeRangeClass}
+                  aria-label="Volume"
+                  aria-valuetext={`${Math.round((muted ? 0 : volume) * 100)} por cento`}
+                />
+              </div>
             </div>
 
             <button
@@ -388,17 +532,57 @@ function NativeVideoPlayer({
             </button>
           </div>
 
-          <div className="px-4 pb-2">
-            <div className="relative h-1">
+          <div className="px-4 py-1.5 sm:py-0 sm:pb-2">
+            <div
+              ref={timelineRef}
+              className="relative -my-1 overflow-visible py-3.5 sm:py-2.5"
+              onMouseEnter={handleTimelineMouseEnter}
+              onMouseMove={handleTimelineMouseMove}
+              onMouseLeave={handleTimelineMouseLeave}
+              onPointerDown={handleTimelinePointerDown}
+              onPointerUp={handleTimelinePointerUp}
+              onPointerCancel={handleTimelinePointerUp}
+            >
               <div
-                className="pointer-events-none absolute inset-0 overflow-hidden rounded-full bg-white/25"
-                aria-hidden
+                className={cn(
+                  "pointer-events-none relative h-1 origin-center transition-transform duration-200 ease-out",
+                  isTimelineZoomed && "scale-x-[1.02] scale-y-[2.75] sm:scale-y-[2.25]",
+                )}
               >
                 <div
-                  className="h-full rounded-full bg-[var(--neuma-coral)]"
-                  style={{ width: `${progress}%` }}
+                  className="absolute inset-0 overflow-hidden rounded-full bg-white/25"
+                  aria-hidden
+                >
+                  {showHoverPreview && hoverPercent !== null ? (
+                    <div
+                      className="absolute inset-y-0 bg-white/20"
+                      style={{
+                        left: `${progress}%`,
+                        width: `${hoverPercent - progress}%`,
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    className="h-full rounded-full bg-[var(--neuma-coral)]"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+
+                <div
+                  className="absolute top-1/2 z-[1] size-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/25 bg-[var(--neuma-coral)] shadow-[0_0_0_1px_rgba(0,0,0,0.15)] sm:size-1.5"
+                  style={{ left: `${progress}%` }}
+                  aria-hidden
                 />
+
+                {showHoverPreview && hoverPercent !== null ? (
+                  <div
+                    className="absolute top-1/2 z-[2] h-3 w-px -translate-x-1/2 -translate-y-1/2 bg-white/45"
+                    style={{ left: `${hoverPercent}%` }}
+                    aria-hidden
+                  />
+                ) : null}
               </div>
+
               <input
                 type="range"
                 min={0}
@@ -409,9 +593,17 @@ function NativeVideoPlayer({
                   setIsSeeking(true);
                   handleSeek(Number(event.target.value));
                 }}
-                onMouseUp={() => setIsSeeking(false)}
-                onTouchEnd={() => setIsSeeking(false)}
-                className={timelineInputClass}
+                onMouseDown={() => setIsSeeking(true)}
+                onTouchStart={() => setIsSeeking(true)}
+                onMouseUp={() => {
+                  setIsSeeking(false);
+                  setIsTimelinePointerActive(false);
+                }}
+                onTouchEnd={() => {
+                  setIsSeeking(false);
+                  setIsTimelinePointerActive(false);
+                }}
+                className={cn(timelineInputClass, "outline-none focus:outline-none")}
                 aria-label="Linha do tempo"
                 aria-valuetext={`${formatTime(currentTime)} de ${formatTime(duration)}`}
               />

@@ -1,9 +1,5 @@
 import Link from "next/link";
-import {
-  Video,
-  MessageSquare,
-  FileText,
-} from "lucide-react";
+import { Video, FileText } from "lucide-react";
 
 import type {
   StudentNode,
@@ -115,39 +111,32 @@ function CheckInActions({
   blockedMessage?: string | null;
   preview?: boolean;
 }) {
-  if (preview || node.status === "completed") return null;
+  if (preview) return null;
+
+  if (node.status === "completed") {
+    return null;
+  }
+
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <div className="flex min-w-0 flex-col gap-2">
-        {canSubmitCheckIn ? (
-          <Button
-            render={<Link href={`/checkins/new?node=${node.id}`} />}
-            nativeButton={false}
-            className="h-14 w-full gap-2 text-base font-semibold"
-          >
-            <Video className="size-4" />
-            {practiceStyle ? "Fazer check-in" : "Confirmar que concluíste"}
-          </Button>
-        ) : (
-          <Button
-            disabled
-            className="h-14 w-full gap-2 text-base font-semibold"
-          >
-            <Video className="size-4" />
-            {practiceStyle ? "Fazer check-in" : "Confirmar que concluíste"}
-          </Button>
-        )}
-        {practiceStyle ? (
-          <Button
-            render={<Link href="/session" />}
-            nativeButton={false}
-            variant="secondary"
-            className="w-full gap-2"
-          >
-            <MessageSquare className="size-4" /> Falar no Mentor
-          </Button>
-        ) : null}
-      </div>
+      {canSubmitCheckIn ? (
+        <Button
+          render={<Link href={`/checkins/new?node=${node.id}`} />}
+          nativeButton={false}
+          className="h-14 w-full gap-2 text-base font-semibold"
+        >
+          <Video className="size-4" />
+          {practiceStyle ? "Fazer check-in" : "Confirmar que concluíste"}
+        </Button>
+      ) : (
+        <Button
+          disabled
+          className="h-14 w-full gap-2 text-base font-semibold"
+        >
+          <Video className="size-4" />
+          {practiceStyle ? "Fazer check-in" : "Confirmar que concluíste"}
+        </Button>
+      )}
       {!canSubmitCheckIn && blockedMessage ? (
         <p className="break-words text-xs leading-snug text-muted-foreground">
           {blockedMessage}
@@ -301,15 +290,9 @@ function PracticeLayout({
 function CheckpointLayout({
   node,
   levelNumber,
-  canSubmitCheckIn = true,
-  blockedMessage = null,
-  preview = false,
 }: {
   node: StudentNode;
   levelNumber: number;
-  canSubmitCheckIn?: boolean;
-  blockedMessage?: string | null;
-  preview?: boolean;
 }) {
   return (
     <div className="min-w-0 w-full max-w-full space-y-6">
@@ -329,44 +312,6 @@ function CheckpointLayout({
           title={node.title}
           label="Abrir anexo de apoio"
         />
-      ) : null}
-
-      {!preview ? (
-        <div className="flex min-w-0 flex-col gap-2">
-          <div className="flex min-w-0 flex-wrap gap-2">
-            {node.status !== "completed" ? (
-              canSubmitCheckIn ? (
-                <Button
-                  render={<Link href={`/checkins/new?node=${node.id}`} />}
-                  nativeButton={false}
-                  variant="secondary"
-                  className="gap-2"
-                >
-                  <Video className="size-4" /> Fazer check-in
-                </Button>
-              ) : (
-                <Button disabled variant="secondary" className="gap-2">
-                  <Video className="size-4" /> Fazer check-in
-                </Button>
-              )
-            ) : null}
-            <Button
-              render={<Link href="/session" />}
-              nativeButton={false}
-              variant="secondary"
-              className="gap-2"
-            >
-              <MessageSquare className="size-4" /> Falar no Mentor
-            </Button>
-          </div>
-          {node.status !== "completed" &&
-          !canSubmitCheckIn &&
-          blockedMessage ? (
-            <p className="text-xs leading-snug text-muted-foreground">
-              {blockedMessage}
-            </p>
-          ) : null}
-        </div>
       ) : null}
     </div>
   );
@@ -426,13 +371,7 @@ export function StudentNodePlayer({
 
   if (node.kind === "milestone") {
     return (
-      <CheckpointLayout
-        node={node}
-        levelNumber={levelNumber}
-        canSubmitCheckIn={canSubmitCheckIn}
-        blockedMessage={checkInBlockedMessage}
-        preview={preview}
-      />
+      <CheckpointLayout node={node} levelNumber={levelNumber} />
     );
   }
 

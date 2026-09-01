@@ -212,7 +212,7 @@ export function StudentPathMap({
             {openable ? (
               <Link
                 href={`/path/${node.id}`}
-                prefetch
+                prefetch={true}
                 className="min-w-0 flex-1 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
               >
                 {body}

@@ -18,7 +18,7 @@ export async function markStudentFeedbackViewedAction(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return;
+  if (!user) throw new Error("Sessão expirada. Inicia sessão novamente.");
 
   await markStudentFeedbackViewed(supabase, user.id, refs);
 
@@ -32,7 +32,7 @@ export async function markNodeFeedbackViewedAction(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return;
+  if (!user) throw new Error("Sessão expirada. Inicia sessão novamente.");
 
   await markNodeFeedbackViewed(supabase, user.id, nodeId);
   revalidateStudentFeedbackPaths(nodeId);
@@ -45,7 +45,7 @@ export async function markCheckInFeedbackViewedAction(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return;
+  if (!user) throw new Error("Sessão expirada. Inicia sessão novamente.");
 
   await markCheckInFeedbackViewed(supabase, user.id, checkInId);
   revalidateStudentFeedbackPaths();

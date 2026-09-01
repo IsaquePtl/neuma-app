@@ -129,7 +129,9 @@ export function FeedbackDecisionBlock({
   const showNextLevel = status === "approved" && Boolean(nextLevel);
   const continueHref = nodeId ? `/path/${nodeId}` : "/path";
   const showContinue =
-    !showNextLevel && Boolean(nodeId || feedbackRefs?.length);
+    !showNextLevel &&
+    status !== "approved" &&
+    Boolean(nodeId || feedbackRefs?.length);
   const detail =
     status === "pending" && showContinue
       ? "O mentor prolongou o prazo deste nível."

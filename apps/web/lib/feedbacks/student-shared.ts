@@ -135,7 +135,7 @@ export type NextLevelPreview = {
   levelNumber: number;
 };
 
-/** Next active level preview after approval, or null if none is available yet. */
+/** Next level preview after approval, or null if this is the last level. */
 export function resolveNextLevel(
   nodes: NextLevelNode[],
   currentNodeId: string,
@@ -145,7 +145,6 @@ export function resolveNextLevel(
   if (currentIndex < 0 || currentIndex >= sorted.length - 1) return null;
 
   const nextNode = sorted[currentIndex + 1]!;
-  if (nextNode.status !== "active") return null;
 
   return {
     href: `/path/${nextNode.id}`,
@@ -158,7 +157,7 @@ export function resolveNextLevel(
   };
 }
 
-/** Link to the next active level after approval, or null if none is available yet. */
+/** Link to the next level after approval, or null if this is the last level. */
 export function resolveNextLevelHref(
   nodes: Pick<StudentNode, "id" | "order_index" | "status">[],
   currentNodeId: string,

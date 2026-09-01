@@ -36,6 +36,7 @@ import { ScreenLoader } from "@/components/screen-loader";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
 import { MENTOR_BADGES_REFRESH_EVENT } from "@/lib/mentor-badges-client";
+import { STUDENT_BADGES_REFRESH_EVENT } from "@/lib/student-badges-client";
 import { cn } from "@/lib/utils";
 
 type NavIcon = LucideIcon | typeof MusicStaffIcon;
@@ -291,6 +292,27 @@ export function AppShell({
       window.removeEventListener(MENTOR_BADGES_REFRESH_EVENT, refreshBadges);
     };
   }, [hydrateBadges, role]);
+
+  useEffect(() => {
+    if (role !== "student") return;
+    let cancelled = false;
+
+    function refreshStudentBadge() {
+      void import("@/lib/actions/student-badges").then(({ fetchStudentNavBadge }) =>
+        fetchStudentNavBadge().then((count) => {
+          if (!cancelled) {
+            setBadges((prev) => ({ ...prev, checkins: count }));
+          }
+        }),
+      );
+    }
+
+    window.addEventListener(STUDENT_BADGES_REFRESH_EVENT, refreshStudentBadge);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(STUDENT_BADGES_REFRESH_EVENT, refreshStudentBadge);
+    };
+  }, [role]);
 
   const journeysBadge = badges.checkins + badges.onboardings;
 

@@ -2,6 +2,8 @@ import { cache } from "react";
 
 import { ensureDefaultMentorForStudent } from "@/lib/auth/default-mentor";
 import { createClient } from "@/lib/supabase/server";
+import { loadStudentUnviewedFeedback } from "@/lib/feedbacks/student";
+import { loadMyPathWithNodes } from "@/lib/students/queries";
 import { getTallyConfig, isOnboardingTallySubmission } from "@/lib/tally";
 
 /** Deduplica getUser() no mesmo request RSC. */
@@ -89,13 +91,25 @@ export const getMentorProposalBadge = cache(async () => {
 /** @deprecated use getMentorNavBadge */
 export const getMentorPendingCheckIns = getMentorNavBadge;
 
-/** Badge leve: so needs_revision do aluno (sem waterfall de feedbacks). */
+/** Badge leve: revisões pendentes + feedbacks por ver (Mentor tab). */
 export const getStudentNavBadge = cache(async (studentId: string) => {
   const supabase = await createClient();
-  const { count } = await supabase
+  const { count: revisionCount } = await supabase
     .from("check_ins")
     .select("id", { count: "exact", head: true })
     .eq("student_id", studentId)
     .eq("status", "needs_revision");
-  return count ?? 0;
+
+  const revisions = revisionCount ?? 0;
+
+  const { nodes } = await loadMyPathWithNodes(studentId);
+  if (nodes.length === 0) return revisions;
+
+  const { count: unviewedFeedback } = await loadStudentUnviewedFeedback(
+    supabase,
+    studentId,
+    nodes,
+  );
+
+  return revisions + unviewedFeedback;
 });
