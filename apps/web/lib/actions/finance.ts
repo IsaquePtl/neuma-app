@@ -332,6 +332,28 @@ export async function revokeComplimentaryAccess(
   }
 }
 
+export async function resyncSubscription(
+  subscriptionId: string,
+): Promise<FinanceActionResult> {
+  try {
+    const { mentorId } = await requireMentor();
+    const sub = await loadSubscription(subscriptionId);
+
+    await syncSubscription(sub.stripe_subscription_id);
+    await recordSubscriptionEvent({
+      subscriptionId: sub.id,
+      profileId: sub.profile_id,
+      actorId: mentorId,
+      action: "resync",
+    });
+
+    revalidateFinance();
+    return { ok: true };
+  } catch (error) {
+    return fail(error, "Não foi possível ressincronizar a subscrição.");
+  }
+}
+
 export async function updateFinanceSetting(
   key: string,
   value: Json,

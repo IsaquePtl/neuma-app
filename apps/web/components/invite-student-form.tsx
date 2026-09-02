@@ -106,6 +106,20 @@ export function InviteStudentForm() {
             />
           </div>
         </div>
+        <label className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3 text-sm">
+          <input
+            type="checkbox"
+            name="charge_via_stripe"
+            className="mt-0.5 size-4 rounded border-white/20"
+          />
+          <span>
+            <span className="font-medium">Cobrar via Stripe</span>
+            <span className="mt-0.5 block text-muted-foreground">
+              Desligado por omissão: o aluno entra com acesso de cortesia. Liga
+              isto se quiseres que passe pelo paywall.
+            </span>
+          </span>
+        </label>
         {error ? (
           <p className="text-sm text-destructive" role="alert">
             {error}

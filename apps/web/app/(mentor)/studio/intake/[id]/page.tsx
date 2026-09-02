@@ -118,6 +118,8 @@ export default async function TallySubmissionDetailPage({
               linkedStudentId={submission.student_id}
               showView={false}
               submissionKind={submission.submission_kind}
+              respondentEmail={submission.respondent_email}
+              respondentName={submission.respondent_name}
             />
           )}
         </div>

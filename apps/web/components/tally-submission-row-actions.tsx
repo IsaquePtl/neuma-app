@@ -3,7 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Eye, MoreHorizontal, UserPlus, Archive, Trash2 } from "lucide-react";
+import {
+  Eye,
+  MoreHorizontal,
+  UserPlus,
+  Archive,
+  Trash2,
+  HeartHandshake,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -12,6 +19,7 @@ import {
   linkTallySubmissionToStudent,
 } from "@/lib/actions/tally";
 import { requestMentorBadgesRefresh } from "@/lib/mentor-badges-client";
+import { AcceptOneToOneDialog } from "@/components/accept-one-to-one-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -43,6 +51,8 @@ export function TallySubmissionRowActions({
   showView = true,
   submissionKind,
   emphasizeLink = false,
+  respondentEmail,
+  respondentName,
 }: {
   submissionId: string;
   students: StudentOption[];
@@ -51,10 +61,14 @@ export function TallySubmissionRowActions({
   submissionKind?: string | null;
   /** Destaca o botão Vincular quando ainda não há aluno. */
   emphasizeLink?: boolean;
+  /** Necessários para propor Neuma 1:1 a partir do dropdown. */
+  respondentEmail?: string | null;
+  respondentName?: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [linkOpen, setLinkOpen] = useState(false);
+  const [oneToOneOpen, setOneToOneOpen] = useState(false);
   const [studentId, setStudentId] = useState(linkedStudentId ?? "");
 
   function runAction(
@@ -132,6 +146,12 @@ export function TallySubmissionRowActions({
               <UserPlus className="size-4" />
               Associar a aluno
             </DropdownMenuItem>
+            {!linkedStudentId && submissionKind === "onboarding" ? (
+              <DropdownMenuItem onClick={() => setOneToOneOpen(true)}>
+                <HeartHandshake className="size-4" />
+                Aceitar 1:1
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               disabled={pending}
@@ -275,6 +295,16 @@ export function TallySubmissionRowActions({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {!linkedStudentId && submissionKind === "onboarding" ? (
+        <AcceptOneToOneDialog
+          submissionId={submissionId}
+          email={respondentEmail ?? null}
+          fullName={respondentName ?? null}
+          open={oneToOneOpen}
+          onOpenChange={setOneToOneOpen}
+        />
+      ) : null}
     </>
   );
 }

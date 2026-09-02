@@ -1881,6 +1881,15 @@ export interface Database {
         Args: { uid: string };
         Returns: boolean;
       };
+      finance_dashboard: {
+        Args: {
+          p_from: string;
+          p_to: string;
+          p_bucket?: string;
+          p_tz?: string;
+        };
+        Returns: Json;
+      };
     };
     Enums: {
       user_role: UserRole;

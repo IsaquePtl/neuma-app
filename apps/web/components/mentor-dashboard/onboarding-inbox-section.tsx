@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
+import { AcceptOneToOneDialog } from "@/components/accept-one-to-one-dialog";
 import { TallySubmissionRowActions } from "@/components/tally-submission-row-actions";
 import { Card } from "@/components/ui/card";
 import {
@@ -93,14 +94,24 @@ export function OnboardingInboxSection({
                 </Link>
                 <div className={intakeRowActionsClass}>
                   {unlinkedItem ? (
-                    <TallySubmissionRowActions
-                      submissionId={submission.id}
-                      students={students}
-                      linkedStudentId={submission.student_id}
-                      submissionKind="onboarding"
-                      emphasizeLink
-                      showView={false}
-                    />
+                    <>
+                      <AcceptOneToOneDialog
+                        submissionId={submission.id}
+                        email={submission.respondent_email}
+                        fullName={submission.respondent_name}
+                        triggerClassName="gap-1 border-transparent bg-[var(--neuma-coral)]/15 text-[var(--neuma-coral)] hover:bg-[var(--neuma-coral)]/25"
+                      />
+                      <TallySubmissionRowActions
+                        submissionId={submission.id}
+                        students={students}
+                        linkedStudentId={submission.student_id}
+                        submissionKind="onboarding"
+                        emphasizeLink
+                        showView={false}
+                        respondentEmail={submission.respondent_email}
+                        respondentName={submission.respondent_name}
+                      />
+                    </>
                   ) : (
                     <ChevronRight className="hidden size-5 text-muted-foreground sm:block" />
                   )}

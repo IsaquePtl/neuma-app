@@ -13,10 +13,7 @@ import {
   clearSignupProfileDraft,
   readSignupProfileDraft,
 } from "@/lib/auth/signup-profile";
-import {
-  clearSignupFinishingCookie,
-  clearSignupWizardStep,
-} from "@/lib/auth/signup-wizard";
+import { writeSignupWizardStep } from "@/lib/auth/signup-wizard";
 import { prepareAvatarFile } from "@/lib/images/prepare-avatar";
 import { cn } from "@/lib/utils";
 import { profileInitials } from "@/components/user-avatar";
@@ -26,8 +23,11 @@ import { Label } from "@/components/ui/label";
 
 export function SignupProfileStep({
   displayName,
+  onContinue,
 }: {
   displayName?: string | null;
+  /** Avanca para o passo do plano. Sem isto, vai para /home (legado). */
+  onContinue?: () => void;
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -89,9 +89,12 @@ export function SignupProfileStep({
           }
         }
 
+        if (onContinue) {
+          writeSignupWizardStep("plan");
+          onContinue();
+          return;
+        }
         router.replace("/home?welcome=1");
-        clearSignupFinishingCookie();
-        clearSignupWizardStep();
         router.refresh();
       } catch (err) {
         const raw = err instanceof Error ? err.message : "";

@@ -70,7 +70,8 @@ export async function updateSession(request: NextRequest) {
     PUBLIC_PATHS.includes(path) ||
     path.startsWith("/api/tally/") ||
     (path.startsWith("/login/") && !isPostSignup) ||
-    path.startsWith("/auth/");
+    path.startsWith("/auth/") ||
+    path.startsWith("/1-1/");
 
   if (!user && !isPublic) {
     // APIs devem devolver JSON — nunca HTML do /login (quebra fetch().json()).

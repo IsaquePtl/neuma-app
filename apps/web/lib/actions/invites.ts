@@ -82,6 +82,9 @@ export async function inviteStudent(formData: FormData): Promise<InviteResult> {
       role: "student",
       mentor_id: mentorId,
       onboarding_completed: false,
+      // Por omissao, alunos convidados a mao nao passam pelo paywall.
+      // O mentor pode exigir cobranca com o interruptor "Cobrar via Stripe".
+      billing_exempt: formData.get("charge_via_stripe") !== "on",
     },
     { onConflict: "id" },
   );
