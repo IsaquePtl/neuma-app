@@ -14,6 +14,10 @@ const PUBLIC_PATHS = [
   "/soundworks",
   "/api/tally/webhook",
   "/api/cal/webhook",
+  // A Stripe chama isto sem sessao; a autenticidade vem da assinatura.
+  "/api/stripe/webhook",
+  "/subscrever",
+  "/subscrever/sucesso",
 ];
 
 /** Pós-signup: autenticado pode ficar; anónimo é redireccionado para login. */
