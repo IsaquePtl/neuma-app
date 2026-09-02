@@ -1,4 +1,5 @@
 import type {
+  BillingPlan,
   CheckInKind,
   CheckInStatus,
   LibraryAssetKind,
@@ -8,6 +9,7 @@ import type {
   NodeStatus,
   PathStatus,
   PathTemplateStatus,
+  SubscriptionStatus,
 } from "@/lib/types/database.types";
 
 export const nodeKindLabel: Record<NodeKind, string> = {
@@ -94,6 +96,49 @@ export const mentorCalendarEventKindLabel: Record<
   meeting: "Reunião",
   event: "Evento",
   misc: "Diversos",
+};
+
+export const billingPlanLabel: Record<BillingPlan, string> = {
+  monthly: "Mensal",
+  quarterly: "Trimestral",
+  annual: "Anual",
+  one_to_one: "Neuma 1:1",
+};
+
+export const subscriptionStatusLabel: Record<SubscriptionStatus, string> = {
+  incomplete: "Incompleta",
+  incomplete_expired: "Expirada",
+  trialing: "Em teste",
+  active: "Activa",
+  past_due: "Em atraso",
+  canceled: "Cancelada",
+  unpaid: "Não paga",
+  paused: "Em pausa",
+};
+
+/** Tom semântico para badges de estado de subscrição. */
+export const subscriptionStatusTone: Record<
+  SubscriptionStatus,
+  "ok" | "warn" | "bad" | "muted"
+> = {
+  incomplete: "warn",
+  incomplete_expired: "bad",
+  trialing: "ok",
+  active: "ok",
+  past_due: "warn",
+  canceled: "muted",
+  unpaid: "bad",
+  paused: "warn",
+};
+
+export const subscriptionStatusToneClass: Record<
+  "ok" | "warn" | "bad" | "muted",
+  string
+> = {
+  ok: "border-transparent bg-emerald-500/15 text-emerald-400",
+  warn: "border-transparent bg-amber-500/15 text-amber-400",
+  bad: "border-transparent bg-rose-500/15 text-rose-400",
+  muted: "border-border text-muted-foreground",
 };
 
 export function formatDate(value: string | null | undefined): string {
