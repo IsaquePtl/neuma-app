@@ -402,13 +402,35 @@ export async function syncInvoice(
   let plan: BillingPlan | null = null;
 
   if (stripeSubscriptionId) {
-    const { data } = await admin
+    // A factura muitas vezes chega antes do customer.subscription.created.
+    // Sincronizamos a sub primeiro para nao gravar o pagamento sem plano.
+    let { data } = await admin
       .from("subscriptions")
       .select("id, plan")
       .eq("stripe_subscription_id", stripeSubscriptionId)
       .maybeSingle();
+
+    if (!data?.plan) {
+      await syncSubscription(stripeSubscriptionId);
+      ({ data } = await admin
+        .from("subscriptions")
+        .select("id, plan")
+        .eq("stripe_subscription_id", stripeSubscriptionId)
+        .maybeSingle());
+    }
+
     subscriptionRowId = data?.id ?? null;
     plan = data?.plan ?? null;
+  }
+
+  if (!plan) {
+    const priceId = idOf(
+      invoice.lines?.data?.[0]?.pricing?.price_details?.price ?? null,
+    );
+    if (priceId) {
+      const priceObj = await stripe.prices.retrieve(priceId);
+      plan = await planForPrice(priceObj);
+    }
   }
 
   let profileSnapshot: { full_name: string | null; email: string | null } | null =
