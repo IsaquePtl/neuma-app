@@ -20,6 +20,7 @@ import {
   CalendarDays,
   ChevronLeft,
   Bot,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -95,6 +96,12 @@ const mentorNavDesktop: NavItem[] = [
 
 const mentorExtraNav: NavItem[] = [
   {
+    label: "Finanças",
+    href: "/studio/finance",
+    icon: Wallet,
+    match: (p) => p.startsWith("/studio/finance"),
+  },
+  {
     label: "Recursos",
     href: "/studio/tools",
     icon: MusicStaffIcon,
@@ -153,6 +160,9 @@ const MENTOR_ROOT_PATHS = new Set([
   "/studio/calendar",
   "/studio/agent",
   "/studio/tools",
+  "/studio/finance",
+  "/studio/finance/subscriptions",
+  "/studio/finance/one-to-one",
   "/studio/settings",
 ]);
 

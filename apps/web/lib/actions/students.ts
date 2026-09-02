@@ -139,6 +139,39 @@ export async function removeStudent(input: {
     };
   }
 
+  // Cancela subscricoes Stripe ANTES de apagar a conta, senao continuamos
+  // a cobrar o cartao de alguem que ja nao existe na app.
+  try {
+    const { data: subs } = await admin
+      .from("subscriptions")
+      .select("stripe_subscription_id, status")
+      .eq("profile_id", studentId)
+      .in("status", ["active", "trialing", "past_due", "paused", "unpaid", "incomplete"]);
+
+    if (subs?.length) {
+      const { getStripe } = await import("@/lib/stripe/client");
+      const stripe = getStripe();
+      if (stripe) {
+        for (const sub of subs) {
+          try {
+            await stripe.subscriptions.cancel(sub.stripe_subscription_id, {
+              prorate: false,
+              invoice_now: false,
+            });
+          } catch (error) {
+            console.error(
+              "[removeStudent:stripe]",
+              sub.stripe_subscription_id,
+              error,
+            );
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error("[removeStudent:list-subs]", error);
+  }
+
   // Best-effort: limpar ficheiros de storage do aluno antes de apagar o user.
   await removeStudentStorage(admin, studentId);
 

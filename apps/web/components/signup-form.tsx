@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { ChevronLeft } from "lucide-react";
 
@@ -29,6 +30,7 @@ import {
   OAuthSignInButtons,
 } from "@/components/oauth-sign-in-buttons";
 import { SignupProfileStep } from "@/components/signup-profile-step";
+import { PlanPicker } from "@/components/plan-picker";
 
 const STEP_META: Record<
   SignupWizardStep,
@@ -36,29 +38,37 @@ const STEP_META: Record<
 > = {
   identity: {
     title: "Criar conta",
-    subtitle: "1 de 3 — Identificação",
-    oauthSubtitle: "1 de 2 — Identificação",
+    subtitle: "1 de 4 — Identificação",
+    oauthSubtitle: "1 de 3 — Identificação",
   },
   credentials: {
     title: "A tua conta",
-    subtitle: "2 de 3 — Acesso",
+    subtitle: "2 de 4 — Acesso",
   },
   profile: {
     title: "O teu perfil",
-    subtitle: "3 de 3 — Perfil",
-    oauthSubtitle: "2 de 2 — Perfil",
+    subtitle: "3 de 4 — Perfil",
+    oauthSubtitle: "2 de 3 — Perfil",
+  },
+  plan: {
+    title: "O teu plano",
+    subtitle: "4 de 4 — Subscrição",
+    oauthSubtitle: "3 de 3 — Subscrição",
   },
 };
 
 export function SignupWizard({
   error: initialError,
   oauthFromLogin = false,
+  billingEnabled = false,
   onStepChange,
 }: {
   error?: string;
   oauthFromLogin?: boolean;
+  billingEnabled?: boolean;
   onStepChange?: (step: SignupWizardStep) => void;
 }) {
+  const router = useRouter();
   const [step, setStepState] = useState<SignupWizardStep>("identity");
   const [hydrated, setHydrated] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -98,7 +108,16 @@ export function SignupWizard({
 
       if (user && finishing) {
         setSignupFinishingCookie();
-        if (draft || saved === "profile") {
+        if (saved === "plan") {
+          if (!billingEnabled) {
+            if (!cancelled) {
+              router.replace("/home?welcome=1");
+              router.refresh();
+            }
+          } else if (!cancelled) {
+            setStep("plan");
+          }
+        } else if (draft || saved === "profile") {
           if (!cancelled) setStep("profile");
         } else if (fromLoginOAuth) {
           const { firstName: fn, lastName: ln } = namesFromOAuthMetadata(
@@ -208,6 +227,30 @@ export function SignupWizard({
   const stepSubtitle =
     oauthMode && meta.oauthSubtitle ? meta.oauthSubtitle : meta.subtitle;
 
+  if (step === "plan") {
+    return (
+      <div key="plan" className="animate-fade-in">
+        <div className="mb-5">
+          <button
+            type="button"
+            onClick={() => setStep("profile")}
+            className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ChevronLeft className="size-4" />
+            Voltar
+          </button>
+          <h1 className="font-heading text-2xl font-bold tracking-tight">
+            {meta.title}
+          </h1>
+          {stepSubtitle ? (
+            <p className="mt-1.5 text-sm text-muted-foreground">{stepSubtitle}</p>
+          ) : null}
+        </div>
+        <PlanPicker title="Escolhe o teu plano" subtitle="Sem período experimental. Pagas e entras." />
+      </div>
+    );
+  }
+
   if (step === "profile") {
     return (
       <div key="profile" className="animate-fade-in">
@@ -219,7 +262,17 @@ export function SignupWizard({
             <p className="mt-1.5 text-sm text-muted-foreground">{stepSubtitle}</p>
           ) : null}
         </div>
-        <SignupProfileStep displayName={composeLocalName()} />
+        <SignupProfileStep
+          displayName={composeLocalName()}
+          onContinue={
+            billingEnabled
+              ? () => {
+                  setStep("plan");
+                  setError(undefined);
+                }
+              : undefined
+          }
+        />
       </div>
     );
   }

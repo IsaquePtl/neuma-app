@@ -14,6 +14,10 @@ const PUBLIC_PATHS = [
   "/soundworks",
   "/api/tally/webhook",
   "/api/cal/webhook",
+  // A Stripe chama isto sem sessao; a autenticidade vem da assinatura.
+  "/api/stripe/webhook",
+  "/subscrever",
+  "/subscrever/sucesso",
 ];
 
 /** Pós-signup: autenticado pode ficar; anónimo é redireccionado para login. */
@@ -66,7 +70,8 @@ export async function updateSession(request: NextRequest) {
     PUBLIC_PATHS.includes(path) ||
     path.startsWith("/api/tally/") ||
     (path.startsWith("/login/") && !isPostSignup) ||
-    path.startsWith("/auth/");
+    path.startsWith("/auth/") ||
+    path.startsWith("/1-1/");
 
   if (!user && !isPublic) {
     // APIs devem devolver JSON — nunca HTML do /login (quebra fetch().json()).

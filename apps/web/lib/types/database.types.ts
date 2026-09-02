@@ -37,6 +37,22 @@ export type MentorCalendarEventKind =
 export type LibraryAssetKind = "video" | "text" | "image" | "file" | "link";
 export type LibraryAssetUsage = "practice" | "lesson";
 export type PathTemplateStatus = "draft" | "ready" | "archived";
+export type BillingPlan = "monthly" | "quarterly" | "annual" | "one_to_one";
+export type SubscriptionStatus =
+  | "incomplete"
+  | "incomplete_expired"
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "canceled"
+  | "unpaid"
+  | "paused";
+export type OneToOneInviteStatus =
+  | "pending"
+  | "sent"
+  | "paid"
+  | "expired"
+  | "revoked";
 
 export type Json =
   | string
@@ -67,6 +83,8 @@ export interface Database {
           mentor_style_notes: string | null;
           internal_notes: string | null;
           mentor_id: string | null;
+          billing_exempt: boolean;
+          is_one_to_one: boolean;
           created_at: string;
         };
         Insert: {
@@ -86,6 +104,8 @@ export interface Database {
           mentor_style_notes?: string | null;
           internal_notes?: string | null;
           mentor_id?: string | null;
+          billing_exempt?: boolean;
+          is_one_to_one?: boolean;
           created_at?: string;
         };
         Update: {
@@ -105,6 +125,8 @@ export interface Database {
           mentor_style_notes?: string | null;
           internal_notes?: string | null;
           mentor_id?: string | null;
+          billing_exempt?: boolean;
+          is_one_to_one?: boolean;
           created_at?: string;
         };
         Relationships: [
@@ -1452,6 +1474,398 @@ export interface Database {
         };
         Relationships: [];
       };
+      finance_settings: {
+        Row: {
+          key: string;
+          value: Json;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          key: string;
+          value?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          key?: string;
+          value?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
+      billing_customers: {
+        Row: {
+          profile_id: string;
+          stripe_customer_id: string;
+          email: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          profile_id: string;
+          stripe_customer_id: string;
+          email?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          profile_id?: string;
+          stripe_customer_id?: string;
+          email?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      subscriptions: {
+        Row: {
+          id: string;
+          profile_id: string | null;
+          student_name: string | null;
+          student_email: string | null;
+          stripe_customer_id: string | null;
+          stripe_subscription_id: string;
+          stripe_price_id: string | null;
+          stripe_item_id: string | null;
+          plan: BillingPlan | null;
+          status: SubscriptionStatus;
+          currency: string;
+          unit_amount: number | null;
+          interval: string | null;
+          interval_count: number;
+          current_period_start: string | null;
+          current_period_end: string | null;
+          cancel_at_period_end: boolean;
+          canceled_at: string | null;
+          ended_at: string | null;
+          trial_end: string | null;
+          collection_paused: boolean;
+          paused_at: string | null;
+          past_due_since: string | null;
+          card_brand: string | null;
+          card_last4: string | null;
+          latest_invoice_id: string | null;
+          stripe_event_at: string | null;
+          raw: Json | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          profile_id?: string | null;
+          student_name?: string | null;
+          student_email?: string | null;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id: string;
+          stripe_price_id?: string | null;
+          stripe_item_id?: string | null;
+          plan?: BillingPlan | null;
+          status: SubscriptionStatus;
+          currency?: string;
+          unit_amount?: number | null;
+          interval?: string | null;
+          interval_count?: number;
+          current_period_start?: string | null;
+          current_period_end?: string | null;
+          cancel_at_period_end?: boolean;
+          canceled_at?: string | null;
+          ended_at?: string | null;
+          trial_end?: string | null;
+          collection_paused?: boolean;
+          paused_at?: string | null;
+          past_due_since?: string | null;
+          card_brand?: string | null;
+          card_last4?: string | null;
+          latest_invoice_id?: string | null;
+          stripe_event_at?: string | null;
+          raw?: Json | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          profile_id?: string | null;
+          student_name?: string | null;
+          student_email?: string | null;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string;
+          stripe_price_id?: string | null;
+          stripe_item_id?: string | null;
+          plan?: BillingPlan | null;
+          status?: SubscriptionStatus;
+          currency?: string;
+          unit_amount?: number | null;
+          interval?: string | null;
+          interval_count?: number;
+          current_period_start?: string | null;
+          current_period_end?: string | null;
+          cancel_at_period_end?: boolean;
+          canceled_at?: string | null;
+          ended_at?: string | null;
+          trial_end?: string | null;
+          collection_paused?: boolean;
+          paused_at?: string | null;
+          past_due_since?: string | null;
+          card_brand?: string | null;
+          card_last4?: string | null;
+          latest_invoice_id?: string | null;
+          stripe_event_at?: string | null;
+          raw?: Json | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_profile_id_fkey";
+            columns: ["profile_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      payments: {
+        Row: {
+          id: string;
+          profile_id: string | null;
+          subscription_id: string | null;
+          student_name: string | null;
+          student_email: string | null;
+          stripe_invoice_id: string | null;
+          stripe_payment_intent_id: string | null;
+          stripe_charge_id: string | null;
+          stripe_customer_id: string | null;
+          plan: BillingPlan | null;
+          amount_cents: number;
+          amount_refunded_cents: number;
+          currency: string;
+          status: string | null;
+          description: string | null;
+          hosted_invoice_url: string | null;
+          invoice_pdf: string | null;
+          paid_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          profile_id?: string | null;
+          subscription_id?: string | null;
+          student_name?: string | null;
+          student_email?: string | null;
+          stripe_invoice_id?: string | null;
+          stripe_payment_intent_id?: string | null;
+          stripe_charge_id?: string | null;
+          stripe_customer_id?: string | null;
+          plan?: BillingPlan | null;
+          amount_cents?: number;
+          amount_refunded_cents?: number;
+          currency?: string;
+          status?: string | null;
+          description?: string | null;
+          hosted_invoice_url?: string | null;
+          invoice_pdf?: string | null;
+          paid_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          profile_id?: string | null;
+          subscription_id?: string | null;
+          student_name?: string | null;
+          student_email?: string | null;
+          stripe_invoice_id?: string | null;
+          stripe_payment_intent_id?: string | null;
+          stripe_charge_id?: string | null;
+          stripe_customer_id?: string | null;
+          plan?: BillingPlan | null;
+          amount_cents?: number;
+          amount_refunded_cents?: number;
+          currency?: string;
+          status?: string | null;
+          description?: string | null;
+          hosted_invoice_url?: string | null;
+          invoice_pdf?: string | null;
+          paid_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payments_profile_id_fkey";
+            columns: ["profile_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      refunds: {
+        Row: {
+          id: string;
+          payment_id: string | null;
+          profile_id: string | null;
+          stripe_refund_id: string;
+          amount_cents: number;
+          currency: string;
+          reason: string | null;
+          created_by: string | null;
+          refunded_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          payment_id?: string | null;
+          profile_id?: string | null;
+          stripe_refund_id: string;
+          amount_cents: number;
+          currency?: string;
+          reason?: string | null;
+          created_by?: string | null;
+          refunded_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          payment_id?: string | null;
+          profile_id?: string | null;
+          stripe_refund_id?: string;
+          amount_cents?: number;
+          currency?: string;
+          reason?: string | null;
+          created_by?: string | null;
+          refunded_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      subscription_events: {
+        Row: {
+          id: string;
+          subscription_id: string | null;
+          profile_id: string | null;
+          actor_id: string | null;
+          action: string;
+          detail: Json | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          subscription_id?: string | null;
+          profile_id?: string | null;
+          actor_id?: string | null;
+          action: string;
+          detail?: Json | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          subscription_id?: string | null;
+          profile_id?: string | null;
+          actor_id?: string | null;
+          action?: string;
+          detail?: Json | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      stripe_events: {
+        Row: {
+          id: string;
+          type: string;
+          api_version: string | null;
+          payload: Json | null;
+          received_at: string;
+          processed_at: string | null;
+          error: string | null;
+        };
+        Insert: {
+          id: string;
+          type: string;
+          api_version?: string | null;
+          payload?: Json | null;
+          received_at?: string;
+          processed_at?: string | null;
+          error?: string | null;
+        };
+        Update: {
+          id?: string;
+          type?: string;
+          api_version?: string | null;
+          payload?: Json | null;
+          received_at?: string;
+          processed_at?: string | null;
+          error?: string | null;
+        };
+        Relationships: [];
+      };
+      one_to_one_invites: {
+        Row: {
+          id: string;
+          email: string;
+          full_name: string | null;
+          token_hash: string;
+          amount_cents: number;
+          currency: string;
+          interval: string;
+          interval_count: number;
+          stripe_price_id: string | null;
+          stripe_checkout_session_id: string | null;
+          status: OneToOneInviteStatus;
+          notes: string | null;
+          source_submission_id: string | null;
+          created_by: string | null;
+          expires_at: string | null;
+          redeemed_profile_id: string | null;
+          redeemed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          email: string;
+          full_name?: string | null;
+          token_hash: string;
+          amount_cents: number;
+          currency?: string;
+          interval?: string;
+          interval_count?: number;
+          stripe_price_id?: string | null;
+          stripe_checkout_session_id?: string | null;
+          status?: OneToOneInviteStatus;
+          notes?: string | null;
+          source_submission_id?: string | null;
+          created_by?: string | null;
+          expires_at?: string | null;
+          redeemed_profile_id?: string | null;
+          redeemed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          email?: string;
+          full_name?: string | null;
+          token_hash?: string;
+          amount_cents?: number;
+          currency?: string;
+          interval?: string;
+          interval_count?: number;
+          stripe_price_id?: string | null;
+          stripe_checkout_session_id?: string | null;
+          status?: OneToOneInviteStatus;
+          notes?: string | null;
+          source_submission_id?: string | null;
+          created_by?: string | null;
+          expires_at?: string | null;
+          redeemed_profile_id?: string | null;
+          redeemed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<never, never>;
     Functions: {
@@ -1461,6 +1875,19 @@ export interface Database {
       };
       mentor_dashboard_facts: {
         Args: Record<string, never>;
+        Returns: Json;
+      };
+      has_app_access: {
+        Args: { uid: string };
+        Returns: boolean;
+      };
+      finance_dashboard: {
+        Args: {
+          p_from: string;
+          p_to: string;
+          p_bucket?: string;
+          p_tz?: string;
+        };
         Returns: Json;
       };
     };
@@ -1476,6 +1903,9 @@ export interface Database {
       library_asset_kind: LibraryAssetKind;
       library_asset_usage: LibraryAssetUsage;
       path_template_status: PathTemplateStatus;
+      billing_plan: BillingPlan;
+      subscription_status: SubscriptionStatus;
+      one_to_one_invite_status: OneToOneInviteStatus;
     };
   };
 }
