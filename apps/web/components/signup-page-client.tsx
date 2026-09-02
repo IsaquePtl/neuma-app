@@ -11,9 +11,12 @@ import { cn } from "@/lib/utils";
 export function SignupPageClient({
   error,
   oauthFromLogin = false,
+  billingEnabled = false,
 }: {
   error?: string;
   oauthFromLogin?: boolean;
+  /** Só com billing ligado o signup avança para o passo de plano. */
+  billingEnabled?: boolean;
 }) {
   const [step, setStep] = useState<SignupWizardStep>("identity");
   const instant = step !== "identity";
@@ -45,6 +48,7 @@ export function SignupPageClient({
         <SignupWizard
           error={error}
           oauthFromLogin={oauthFromLogin}
+          billingEnabled={billingEnabled}
           onStepChange={setStep}
         />
       </Card>

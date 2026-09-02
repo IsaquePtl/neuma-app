@@ -1,4 +1,5 @@
 import { SignupPageClient } from "@/components/signup-page-client";
+import { isBillingEnabled } from "@/lib/billing/access";
 
 export default async function SignupPage({
   searchParams,
@@ -7,6 +8,10 @@ export default async function SignupPage({
 }) {
   const { error, oauth } = await searchParams;
   return (
-    <SignupPageClient error={error} oauthFromLogin={oauth === "1"} />
+    <SignupPageClient
+      error={error}
+      oauthFromLogin={oauth === "1"}
+      billingEnabled={isBillingEnabled()}
+    />
   );
 }

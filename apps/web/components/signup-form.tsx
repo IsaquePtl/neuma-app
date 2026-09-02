@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { ChevronLeft } from "lucide-react";
 
@@ -59,12 +60,15 @@ const STEP_META: Record<
 export function SignupWizard({
   error: initialError,
   oauthFromLogin = false,
+  billingEnabled = false,
   onStepChange,
 }: {
   error?: string;
   oauthFromLogin?: boolean;
+  billingEnabled?: boolean;
   onStepChange?: (step: SignupWizardStep) => void;
 }) {
+  const router = useRouter();
   const [step, setStepState] = useState<SignupWizardStep>("identity");
   const [hydrated, setHydrated] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -105,7 +109,14 @@ export function SignupWizard({
       if (user && finishing) {
         setSignupFinishingCookie();
         if (saved === "plan") {
-          if (!cancelled) setStep("plan");
+          if (!billingEnabled) {
+            if (!cancelled) {
+              router.replace("/home?welcome=1");
+              router.refresh();
+            }
+          } else if (!cancelled) {
+            setStep("plan");
+          }
         } else if (draft || saved === "profile") {
           if (!cancelled) setStep("profile");
         } else if (fromLoginOAuth) {
@@ -253,10 +264,14 @@ export function SignupWizard({
         </div>
         <SignupProfileStep
           displayName={composeLocalName()}
-          onContinue={() => {
-            setStep("plan");
-            setError(undefined);
-          }}
+          onContinue={
+            billingEnabled
+              ? () => {
+                  setStep("plan");
+                  setError(undefined);
+                }
+              : undefined
+          }
         />
       </div>
     );
