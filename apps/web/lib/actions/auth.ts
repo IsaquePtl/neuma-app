@@ -59,8 +59,6 @@ export async function createSignupAccount(
   }
 
   const fullName = composeFullName(firstName, lastName);
-  const hdrs = await headers();
-  const origin = getAppOrigin(hdrs.get("origin"));
   const userMeta = {
     first_name: firstName,
     last_name: lastName,
@@ -69,93 +67,51 @@ export async function createSignupAccount(
     gender,
   };
 
+  // Criamos via admin com email já confirmado para NÃO disparar o email de
+  // confirmação do Auth. O SMTP built-in do Supabase limita a 2 emails/hora e
+  // rebenta o signup em produção com "email rate limit exceeded".
+  const admin = createAdminClient();
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.signUp({
+
+  let userId: string | null = null;
+  const { data: created, error: createErr } = await admin.auth.admin.createUser({
     email,
     password,
-    options: {
-      emailRedirectTo: `${origin}/auth/callback?intent=signup&next=${encodeURIComponent("/login/signup")}`,
-      data: userMeta,
-    },
+    email_confirm: true,
+    user_metadata: userMeta,
   });
 
-  if (error) {
+  if (createErr) {
     const already =
-      /already|registered|exists|já existe/i.test(error.message) ||
-      error.message.toLowerCase().includes("user already");
+      /already|registered|exists|já existe|duplicate/i.test(createErr.message) ||
+      createErr.message.toLowerCase().includes("user already");
+    if (!already) {
+      return {
+        ok: false,
+        error: createErr.message || "Não foi possível criar a conta.",
+      };
+    }
+    // Conta já existe — deixa o sign-in abaixo falhar com mensagem clara,
+    // ou recupera se a password bater (raro neste fluxo).
+  } else {
+    userId = created.user?.id ?? null;
+  }
+
+  const { data: signedIn, error: signInError } =
+    await supabase.auth.signInWithPassword({ email, password });
+
+  if (signInError || !signedIn.session || !signedIn.user) {
+    if (createErr) {
+      return { ok: false, error: "Já existe uma conta com este email." };
+    }
     return {
       ok: false,
-      error: already
-        ? "Já existe uma conta com este email."
-        : error.message || "Não foi possível criar a conta.",
+      error:
+        "Conta criada, mas não foi possível iniciar sessão. Tenta entrar com o mesmo email.",
     };
   }
 
-  // Conta já existente (Supabase devolve user “falso” sem identities / sem sessão).
-  if (
-    data.user &&
-    !data.session &&
-    (data.user.identities?.length ?? 0) === 0
-  ) {
-    return { ok: false, error: "Já existe uma conta com este email." };
-  }
-
-  let userId = data.user?.id ?? null;
-
-  // Sem sessão = "Confirm email" activo no Dashboard. Confirmamos e iniciamos sessão.
-  if (!data.session) {
-    try {
-      const admin = createAdminClient();
-      if (userId) {
-        const { error: confirmErr } = await admin.auth.admin.updateUserById(
-          userId,
-          { email_confirm: true, user_metadata: userMeta },
-        );
-        if (confirmErr) {
-          return {
-            ok: false,
-            error:
-              confirmErr.message ||
-              "Não foi possível activar a conta. Tenta outra vez.",
-          };
-        }
-      } else {
-        const { data: created, error: createErr } =
-          await admin.auth.admin.createUser({
-            email,
-            password,
-            email_confirm: true,
-            user_metadata: userMeta,
-          });
-        if (createErr || !created.user) {
-          return {
-            ok: false,
-            error:
-              createErr?.message || "Não foi possível criar a conta.",
-          };
-        }
-        userId = created.user.id;
-      }
-
-      const { data: signedIn, error: signInError } =
-        await supabase.auth.signInWithPassword({ email, password });
-      if (signInError || !signedIn.session || !signedIn.user) {
-        return {
-          ok: false,
-          error:
-            "Conta criada, mas não foi possível iniciar sessão. Tenta entrar com o mesmo email.",
-        };
-      }
-      userId = signedIn.user.id;
-    } catch (err) {
-      console.error("[auth.createSignupAccount] sessão pós-signup falhou:", err);
-      return {
-        ok: false,
-        error:
-          "Não foi possível concluir o registo. Verifica a configuração do servidor.",
-      };
-    }
-  }
+  userId = signedIn.user.id;
 
   // Garante perfil actualizado mesmo se o trigger já correu com metadata parcial.
   if (userId) {
