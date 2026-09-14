@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition, Fragment } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -38,7 +38,7 @@ import type {
 } from "@/components/library-asset-picker";
 import { cn } from "@/lib/utils";
 import { LIBRARY_PATH } from "@/lib/library-routes";
-import { nodeKindLabel } from "@/lib/labels";
+import { isPhaseBoundary, nodeKindLabel, phaseKeyLabel } from "@/lib/labels";
 import {
   computeEndDate,
   formatPathEndDate,
@@ -279,8 +279,15 @@ export function PathTemplateComposer({
           const period = durationLabel(node.duration_weeks);
 
           return (
+            <Fragment key={node.id}>
+              {isPhaseBoundary(nodes, i) ? (
+                <li className="relative list-none pb-3 pt-1 first:pt-0">
+                  <p className="pl-[4.25rem] text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                    {phaseKeyLabel(node.phase_key)}
+                  </p>
+                </li>
+              ) : null}
             <li
-              key={node.id}
               className="relative flex gap-4 pb-8 sm:gap-5"
             >
               <span
@@ -363,6 +370,7 @@ export function PathTemplateComposer({
                 </div>
               )}
             </li>
+            </Fragment>
           );
         })}
 

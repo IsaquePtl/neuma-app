@@ -22,6 +22,10 @@ import {
 } from "@/lib/feedbacks/student";
 import { formatDate } from "@/lib/labels";
 import {
+  nodeRequiresCheckIn,
+  nodeUsesVideoCheckInSlot,
+} from "@/lib/nodes/pass-rule";
+import {
   loadMyMentor,
   loadMyPathWithNodes,
   STUDENT_VISIBLE_PATH_STATUSES,
@@ -97,7 +101,7 @@ export default async function StudentSessionPage({
   const { data: activeNode } = activePath
     ? await supabase
         .from("nodes")
-        .select("id, title, due_date, status")
+        .select("id, title, due_date, status, pass_rule, check_in_kind")
         .eq("path_id", activePath.id)
         .eq("status", "active")
         .maybeSingle()
@@ -111,15 +115,22 @@ export default async function StudentSessionPage({
   const revisionCount =
     checkIns?.filter((c) => c.status === "needs_revision").length ?? 0;
 
+  const needsCheckIn = nodeRequiresCheckIn(activeNode?.pass_rule);
+  const videoCheckIn = nodeUsesVideoCheckInSlot(
+    activeNode?.pass_rule,
+    activeNode?.check_in_kind,
+  );
+
   // Check-in: só com percurso; nível actual se existir
   const checkInHref = activeNode
     ? `/checkins/new?node=${activeNode.id}`
     : "/checkins/new";
 
-  const checkInAllowance = activeNode
-    ? await getCheckInAllowance(supabase, activeNode.id, user!.id)
-    : null;
-  const canSubmitCheckIn = !activeNode || (checkInAllowance?.allowed ?? true);
+  const checkInAllowance =
+    activeNode && videoCheckIn
+      ? await getCheckInAllowance(supabase, activeNode.id, user!.id)
+      : null;
+  const canSubmitCheckIn = !videoCheckIn || (checkInAllowance?.allowed ?? true);
   const checkInBlocked = checkInAllowance
     ? checkInBlockedMessage(checkInAllowance)
     : null;
@@ -198,14 +209,41 @@ export default async function StudentSessionPage({
       ) : null}
 
       <section id="agendar" className="grid shrink-0 gap-2.5">
-        {hasPath && canSubmitCheckIn ? (
+        {needsCheckIn && hasPath && canSubmitCheckIn ? (
           <Button
             render={<Link href={checkInHref} />}
             nativeButton={false}
             size="lg"
             className="h-[3.5rem] w-full gap-2 text-base font-semibold"
           >
-            <Video className="size-5" /> Fazer check-in
+            {videoCheckIn ? (
+              <Video className="size-5" />
+            ) : (
+              <MessageSquareText className="size-5" />
+            )}
+            {videoCheckIn ? "Fazer check-in" : "Enviar notas"}
+          </Button>
+        ) : needsCheckIn && hasPath ? (
+          <div className="grid gap-1.5">
+            <Button
+              size="lg"
+              disabled
+              className="h-[3.5rem] w-full gap-2 text-base font-semibold"
+            >
+              <Video className="size-5" /> Fazer check-in
+            </Button>
+            <p className="-mt-0.5 text-center text-xs leading-snug text-muted-foreground">
+              {checkInBlocked}
+            </p>
+          </div>
+        ) : activeNode ? (
+          <Button
+            render={<Link href={`/path/${activeNode.id}`} />}
+            nativeButton={false}
+            size="lg"
+            className="h-[3.5rem] w-full gap-2 text-base font-semibold"
+          >
+            Abrir nível
           </Button>
         ) : (
           <div className="grid gap-1.5">
@@ -219,7 +257,7 @@ export default async function StudentSessionPage({
             <p className="-mt-0.5 text-center text-xs leading-snug text-muted-foreground">
               {!hasPath
                 ? "O check-in fica disponível quando o teu percurso estiver ativo."
-                : checkInBlocked}
+                : "Este nível não pede check-in."}
             </p>
           </div>
         )}

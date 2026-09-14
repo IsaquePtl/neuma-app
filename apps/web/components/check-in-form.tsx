@@ -43,8 +43,10 @@ export type CheckInConfidence =
 
 export function CheckInForm({
   nodeId,
+  kind = "video",
 }: {
   nodeId?: string | null;
+  kind?: "video" | "text";
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState(1);
@@ -55,6 +57,8 @@ export function CheckInForm({
   const [difficultyNotes, setDifficultyNotes] = useState("");
   const [confidence, setConfidence] = useState<CheckInConfidence | "">("");
   const [dragOver, setDragOver] = useState(false);
+  const isText = kind === "text";
+  const totalSteps = isText ? 2 : TOTAL_STEPS;
 
   async function uploadVideo(file: File) {
     if (!file.type.startsWith("video/")) {
@@ -90,7 +94,7 @@ export function CheckInForm({
   }
 
   function goNext() {
-    if (step === 1) {
+    if (!isText && step === 1) {
       if (!videoUrl || uploading) {
         toast.error("Submete o teu vídeo antes de continuar");
         return;
@@ -98,12 +102,12 @@ export function CheckInForm({
       setStep(2);
       return;
     }
-    if (step === 2) {
+    if (step === (isText ? 1 : 2)) {
       if (!difficultyNotes.trim()) {
         toast.error("Descreve como correu antes de continuar");
         return;
       }
-      setStep(3);
+      setStep((s) => s + 1);
     }
   }
 
@@ -112,16 +116,16 @@ export function CheckInForm({
   }
 
   function handleSend() {
-    if (step !== TOTAL_STEPS) return;
+    if (step !== totalSteps) return;
 
-    if (!videoUrl) {
+    if (!isText && !videoUrl) {
       toast.error("Submete o teu vídeo antes de enviar");
       setStep(1);
       return;
     }
     if (!difficultyNotes.trim()) {
       toast.error("Descreve como correu");
-      setStep(2);
+      setStep(isText ? 1 : 2);
       return;
     }
     if (!confidence) {
@@ -130,8 +134,8 @@ export function CheckInForm({
     }
 
     const fd = new FormData();
-    fd.set("video_url", videoUrl);
-    fd.set("kind", "video");
+    if (!isText) fd.set("video_url", videoUrl);
+    fd.set("kind", isText ? "text" : "video");
     fd.set("confidence", confidence);
     fd.set("difficulty_notes", difficultyNotes.trim());
     if (nodeId) fd.set("node_id", nodeId);
@@ -154,15 +158,17 @@ export function CheckInForm({
   }
 
   const videoReady = Boolean(videoUrl) && !uploading;
-  const canAdvanceStep1 = videoReady && !uploading;
-  const canAdvanceStep2 = difficultyNotes.trim().length > 0;
+  const canAdvanceStep1 = isText
+    ? difficultyNotes.trim().length > 0
+    : videoReady && !uploading;
+  const canAdvanceStep2 = isText ? Boolean(confidence) : difficultyNotes.trim().length > 0;
   const canAdvance =
-    (step === 1 && canAdvanceStep1) || (step === 2 && canAdvanceStep2);
+    (step === 1 && canAdvanceStep1) || (!isText && step === 2 && canAdvanceStep2);
   const canSubmit = Boolean(confidence) && !pending && !uploading;
 
   return (
     <form onSubmit={onSubmit} className="flex w-full flex-col gap-6">
-      {step === 1 ? (
+      {step === 1 && !isText ? (
         <section className="space-y-3">
           <div className="flex h-8 shrink-0 items-center" />
           <h2 className="text-base font-semibold leading-snug sm:text-lg">
@@ -253,20 +259,24 @@ export function CheckInForm({
         </section>
       ) : null}
 
-      {step === 2 ? (
+      {step === (isText ? 1 : 2) ? (
         <section className="space-y-3">
           <div className="flex h-8 shrink-0 items-center">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label="Anterior"
-              disabled={pending || uploading}
-              onClick={goBack}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <ArrowLeft className="size-4" />
-            </Button>
+            {step > 1 ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Anterior"
+                disabled={pending || uploading}
+                onClick={goBack}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft className="size-4" />
+              </Button>
+            ) : (
+              <span className="size-9 shrink-0" aria-hidden />
+            )}
           </div>
           <h2 className="text-base font-semibold leading-snug sm:text-lg">
             Como correu? Onde sentiste mais dificuldade?
@@ -282,7 +292,7 @@ export function CheckInForm({
         </section>
       ) : null}
 
-      {step === 3 ? (
+      {step === (isText ? 2 : 3) ? (
         <section className="space-y-3">
           <div className="flex h-8 shrink-0 items-center">
             <Button
@@ -347,15 +357,12 @@ export function CheckInForm({
       ) : null}
 
       <div className="flex flex-col gap-2">
-        {step < TOTAL_STEPS ? (
+        {step < totalSteps ? (
           <Button
             type="button"
             size="lg"
             variant="secondary"
-            disabled={
-              (step === 1 && !canAdvanceStep1) ||
-              (step === 2 && !canAdvanceStep2)
-            }
+            disabled={step === 1 ? !canAdvanceStep1 : !canAdvanceStep2}
             onClick={goNext}
             className={cn(
               "h-11 w-full gap-2 rounded-2xl border text-sm font-medium shadow-none",

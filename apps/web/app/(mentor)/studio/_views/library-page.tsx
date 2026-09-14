@@ -85,7 +85,7 @@ export default async function LibraryPage({
       supabase
         .from("path_template_nodes")
         .select(
-          "id, title, description, kind, week_number, duration_weeks, order_index, default_resource_url, library_asset_id, library_assets(title)",
+          "id, title, description, kind, week_number, duration_weeks, order_index, default_resource_url, library_asset_id, check_in_kind, phase_key, node_code, pass_rule, pass_score, library_assets(title)",
         )
         .eq("template_id", compose)
         .order("order_index", { ascending: true }),
@@ -111,6 +111,11 @@ export default async function LibraryPage({
           default_resource_url: n.default_resource_url,
           library_asset_id: n.library_asset_id,
           asset_title: asset?.title ?? null,
+          pass_rule: n.pass_rule,
+          pass_score: n.pass_score,
+          check_in_kind: n.check_in_kind,
+          phase_key: n.phase_key,
+          node_code: n.node_code,
         };
       });
 

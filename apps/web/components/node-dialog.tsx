@@ -26,7 +26,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { nodeKindHint, nodeKindLabel } from "@/lib/labels";
-import type { NodeKind, NodeStatus } from "@/lib/types/database.types";
+import { NodeGateFields } from "@/components/node-gate-fields";
+import { defaultPassRule } from "@/lib/nodes/pass-rule";
+import type { NodeKind, NodePassRule, NodeStatus } from "@/lib/types/database.types";
 import { cn } from "@/lib/utils";
 
 export type NodeEditorData = {
@@ -39,6 +41,11 @@ export type NodeEditorData = {
   due_date: string | null;
   resource_url?: string | null;
   content_body?: string | null;
+  pass_rule?: NodePassRule | null;
+  pass_score?: number | null;
+  check_in_kind?: string | null;
+  phase_key?: string | null;
+  node_code?: string | null;
 };
 
 function normalizeKind(kind: NodeKind): NodeKind {
@@ -83,6 +90,9 @@ export function NodeEditorForm({
   const [pending, startTransition] = useTransition();
   const [kind, setKind] = useState<NodeKind>(
     normalizeKind(node?.kind ?? "practice"),
+  );
+  const [passRule, setPassRule] = useState<NodePassRule>(
+    node?.pass_rule ?? defaultPassRule(normalizeKind(node?.kind ?? "practice")),
   );
   const [title, setTitle] = useState(node?.title ?? "");
   const [resourceUrl, setResourceUrl] = useState(node?.resource_url ?? "");
@@ -134,6 +144,7 @@ export function NodeEditorForm({
             const next = e.target.value as NodeKind;
             setKind(next);
             setPickedAssetId("");
+            setPassRule(defaultPassRule(next));
           }}
           className={selectClass}
         >
@@ -143,6 +154,40 @@ export function NodeEditorForm({
           <option value="lesson">{nodeKindLabel.lesson}</option>
         </select>
         <p className="text-xs text-muted-foreground">{nodeKindHint[kind]}</p>
+      </div>
+
+      <NodeGateFields
+        kind={kind}
+        passRule={passRule}
+        onPassRuleChange={setPassRule}
+        checkInKind={node?.check_in_kind}
+        passScore={node?.pass_score}
+        inputClass={inputClass}
+        selectClass={selectClass}
+        idPrefix={idPrefix}
+      />
+
+      <div className={cn("grid grid-cols-2 gap-3")}>
+        <div className={cn("space-y-2", inline && "space-y-1.5")}>
+          <Label htmlFor={fieldId("phase")}>Fase</Label>
+          <Input
+            id={fieldId("phase")}
+            name="phase_key"
+            defaultValue={node?.phase_key ?? ""}
+            placeholder="A"
+            className={inputClass}
+          />
+        </div>
+        <div className={cn("space-y-2", inline && "space-y-1.5")}>
+          <Label htmlFor={fieldId("code")}>Código</Label>
+          <Input
+            id={fieldId("code")}
+            name="node_code"
+            defaultValue={node?.node_code ?? ""}
+            placeholder="A1"
+            className={inputClass}
+          />
+        </div>
       </div>
 
       <div className={cn("space-y-2", inline && "space-y-1.5")}>

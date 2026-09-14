@@ -124,8 +124,11 @@ function QuizResults({
           </div>
 
           <p className="text-xs leading-relaxed text-muted-foreground">
-            O mentor valida a passagem de nível. Podes voltar ao nível e
-            continuar o percurso.
+            {result.unlocked
+              ? "Nota suficiente — o nível seguinte já está desbloqueado."
+              : result.pass_score != null && result.score < result.pass_score
+                ? `Precisas de ${result.pass_score}% para avançar. Podes repetir o quiz.`
+                : "O mentor valida a passagem de nível. Podes voltar ao nível e continuar o percurso."}
           </p>
         </div>
       </div>
