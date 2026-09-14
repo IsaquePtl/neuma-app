@@ -217,7 +217,10 @@ export async function getQuizForStudent(nodeId: string): Promise<{
 }> {
   const questions = await listQuizQuestions(nodeId);
   return {
-    questions: questions.map(({ correct_option_id: _, ...rest }) => rest),
+    questions: questions.map(({ correct_option_id: _correct, ...rest }) => {
+      void _correct;
+      return rest;
+    }),
   };
 }
 
