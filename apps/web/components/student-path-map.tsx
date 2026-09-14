@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, Fragment } from "react";
 import Link from "next/link";
 import {
   Lock,
@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 
 import type { StudentNode } from "@/lib/students/queries";
-import { formatDate, nodeKindLabel } from "@/lib/labels";
+import { formatDate, isPhaseBoundary, nodeKindLabel, phaseKeyLabel } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import type { NodeKind } from "@/lib/types/database.types";
 import {
@@ -183,8 +183,15 @@ export function StudentPathMap({
         );
 
         return (
+          <Fragment key={node.id}>
+            {isPhaseBoundary(nodes, i) ? (
+              <li className="relative list-none pb-3 pt-1 first:pt-0">
+                <p className="pl-[3.75rem] text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground sm:pl-[4.25rem]">
+                  {phaseKeyLabel(node.phase_key)}
+                </p>
+              </li>
+            ) : null}
           <li
-            key={node.id}
             ref={isActive ? activeStepRef : undefined}
             data-student-path-active={isActive ? "" : undefined}
             className={cn(
@@ -223,6 +230,7 @@ export function StudentPathMap({
               </div>
             )}
           </li>
+          </Fragment>
         );
       })}
     </ol>

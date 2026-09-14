@@ -3,6 +3,11 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import {
+  parseCheckInKind,
+  parsePassRule,
+  parsePassScore,
+} from "@/lib/nodes/pass-rule";
 import type { NodeKind, NodeStatus } from "@/lib/types/database.types";
 
 async function mentorClient() {
@@ -55,6 +60,11 @@ export async function createNode(formData: FormData) {
   // Primeiro node de um percurso comeca ativo; restantes bloqueados.
   const status: NodeStatus = nextIndex === 0 ? "active" : "locked";
 
+  const kind = ((formData.get("kind") as NodeKind) || "practice");
+  const passRule = parsePassRule(
+    (formData.get("pass_rule") as string) || "",
+    kind,
+  );
   await supabase.from("nodes").insert({
     path_id: pathId,
     title: (formData.get("title") as string)?.trim() || "Novo bloco",
@@ -62,11 +72,20 @@ export async function createNode(formData: FormData) {
     week_number: formData.get("week_number")
       ? Number(formData.get("week_number"))
       : null,
-    kind: ((formData.get("kind") as NodeKind) || "practice"),
+    kind,
     due_date: (formData.get("due_date") as string) || null,
     resource_url: ((formData.get("resource_url") as string) || "").trim() || null,
     content_body:
       ((formData.get("content_body") as string) || "").trim() || null,
+    pass_rule: passRule,
+    pass_score: parsePassScore((formData.get("pass_score") as string) || ""),
+    check_in_kind: parseCheckInKind(
+      (formData.get("check_in_kind") as string) || "",
+      kind,
+      passRule,
+    ),
+    phase_key: ((formData.get("phase_key") as string) || "").trim() || null,
+    node_code: ((formData.get("node_code") as string) || "").trim() || null,
     order_index: nextIndex,
     status,
   });
@@ -86,6 +105,11 @@ export async function updateNode(formData: FormData) {
   const id = formData.get("id") as string;
   const pathId = formData.get("path_id") as string;
 
+  const kind = ((formData.get("kind") as NodeKind) || "practice");
+  const passRule = parsePassRule(
+    (formData.get("pass_rule") as string) || "",
+    kind,
+  );
   await supabase
     .from("nodes")
     .update({
@@ -94,12 +118,21 @@ export async function updateNode(formData: FormData) {
       week_number: formData.get("week_number")
         ? Number(formData.get("week_number"))
         : null,
-      kind: ((formData.get("kind") as NodeKind) || "practice"),
+      kind,
       status: ((formData.get("status") as NodeStatus) || "locked"),
       due_date: (formData.get("due_date") as string) || null,
       resource_url: ((formData.get("resource_url") as string) || "").trim() || null,
       content_body:
         ((formData.get("content_body") as string) || "").trim() || null,
+      pass_rule: passRule,
+      pass_score: parsePassScore((formData.get("pass_score") as string) || ""),
+      check_in_kind: parseCheckInKind(
+        (formData.get("check_in_kind") as string) || "",
+        kind,
+        passRule,
+      ),
+      phase_key: ((formData.get("phase_key") as string) || "").trim() || null,
+      node_code: ((formData.get("node_code") as string) || "").trim() || null,
     })
     .eq("id", id);
 

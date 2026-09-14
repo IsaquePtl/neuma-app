@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, Fragment } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -37,7 +37,7 @@ import {
 } from "@/lib/actions/nodes";
 import { deletePath, setPathStatus } from "@/lib/actions/paths";
 import { useJourneyEditDirty } from "@/lib/journey-path/edit-dirty-context";
-import { formatDate, nodeKindLabel } from "@/lib/labels";
+import { formatDate, isPhaseBoundary, nodeKindLabel, phaseKeyLabel } from "@/lib/labels";
 import type { StudentNode, StudentPath } from "@/lib/students/queries";
 import type { NodeKind } from "@/lib/types/database.types";
 import { cn } from "@/lib/utils";
@@ -243,8 +243,15 @@ export function JourneyPathComposer({
             const isOpen = expanded === node.id;
 
             return (
+              <Fragment key={node.id}>
+                {isPhaseBoundary(nodes, i) ? (
+                  <li className="relative list-none pb-3 pt-1 first:pt-0">
+                    <p className="pl-[3.5rem] text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground sm:pl-[4.25rem]">
+                      {phaseKeyLabel(node.phase_key)}
+                    </p>
+                  </li>
+                ) : null}
               <li
-                key={node.id}
                 className="relative flex min-w-0 gap-3 pb-8 sm:gap-5"
               >
                 {i < nodes.length - 1 ? (
@@ -401,6 +408,7 @@ export function JourneyPathComposer({
                   ) : null}
                 </div>
               </li>
+              </Fragment>
             );
           })}
         </ol>

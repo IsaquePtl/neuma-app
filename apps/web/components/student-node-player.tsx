@@ -11,7 +11,13 @@ import { isPlayableVideoUrl } from "@/components/video-embed";
 import { CheckpointQuiz } from "@/components/checkpoint-quiz";
 import { SessionBookingSection } from "@/components/session-booking-section";
 import { SupportMediaToggle } from "@/components/support-media-toggle";
-import { formatDate, nodeKindLabel } from "@/lib/labels";
+import { markNodeSeen } from "@/lib/actions/journey-level";
+import { formatDate, nodeKindLabel, phaseKeyLabel } from "@/lib/labels";
+import {
+  nodeAllowsMarkSeen,
+  nodeRequiresCheckIn,
+  nodeUsesQuizGate,
+} from "@/lib/nodes/pass-rule";
 import { cn } from "@/lib/utils";
 
 /** Full-width lesson video — matches sibling content column (e.g. text card). */
@@ -79,6 +85,14 @@ function NodeLevelHeader({
         </span>
         <div className="min-w-0 space-y-0.5">
           <p className="text-xs font-medium uppercase leading-none tracking-[0.2em] text-muted-foreground">
+            {node.phase_key ? (
+              <>
+                {phaseKeyLabel(node.phase_key)}
+                <span aria-hidden className="mx-2 text-white/25">
+                  ·
+                </span>
+              </>
+            ) : null}
             {nodeKindLabel[node.kind]}
             {node.due_date ? (
               <>
@@ -117,24 +131,50 @@ function CheckInActions({
     return null;
   }
 
+  if (nodeAllowsMarkSeen(node.pass_rule)) {
+    return (
+      <form action={markNodeSeen} className="flex min-w-0 flex-col gap-2">
+        <input type="hidden" name="node_id" value={node.id} />
+        <Button type="submit" className="h-14 w-full gap-2 text-base font-semibold">
+          Marcar como visto
+        </Button>
+      </form>
+    );
+  }
+
+  if (!nodeRequiresCheckIn(node.pass_rule)) {
+    return null;
+  }
+
+  const video = node.check_in_kind !== "text";
+  const href = `/checkins/new?node=${node.id}`;
+
   return (
     <div className="flex min-w-0 flex-col gap-2">
       {canSubmitCheckIn ? (
         <Button
-          render={<Link href={`/checkins/new?node=${node.id}`} />}
+          render={<Link href={href} />}
           nativeButton={false}
           className="h-14 w-full gap-2 text-base font-semibold"
         >
-          <Video className="size-4" />
-          {practiceStyle ? "Fazer check-in" : "Confirmar que concluíste"}
+          {video ? <Video className="size-4" /> : <FileText className="size-4" />}
+          {practiceStyle
+            ? video
+              ? "Fazer check-in em vídeo"
+              : "Fazer check-in em texto"
+            : "Confirmar que concluíste"}
         </Button>
       ) : (
         <Button
           disabled
           className="h-14 w-full gap-2 text-base font-semibold"
         >
-          <Video className="size-4" />
-          {practiceStyle ? "Fazer check-in" : "Confirmar que concluíste"}
+          {video ? <Video className="size-4" /> : <FileText className="size-4" />}
+          {practiceStyle
+            ? video
+              ? "Fazer check-in em vídeo"
+              : "Fazer check-in em texto"
+            : "Confirmar que concluíste"}
         </Button>
       )}
       {!canSubmitCheckIn && blockedMessage ? (
@@ -304,7 +344,11 @@ function CheckpointLayout({
         </div>
       ) : null}
 
-      <CheckpointQuiz nodeId={node.id} />
+      <CheckpointQuiz
+        nodeId={node.id}
+        quizGate={nodeUsesQuizGate(node.pass_rule)}
+        passScore={node.pass_score}
+      />
 
       {node.resource_url ? (
         <SupportMediaToggle

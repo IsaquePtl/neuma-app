@@ -15,7 +15,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { nodeKindHint, nodeKindLabel } from "@/lib/labels";
-import type { NodeKind } from "@/lib/types/database.types";
+import { NodeGateFields } from "@/components/node-gate-fields";
+import { defaultPassRule } from "@/lib/nodes/pass-rule";
+import type { NodeKind, NodePassRule } from "@/lib/types/database.types";
 
 export type TemplateNodeData = {
   id: string;
@@ -26,6 +28,11 @@ export type TemplateNodeData = {
   duration_weeks: number | null;
   default_resource_url: string | null;
   library_asset_id: string | null;
+  pass_rule?: NodePassRule | null;
+  pass_score?: number | null;
+  check_in_kind?: string | null;
+  phase_key?: string | null;
+  node_code?: string | null;
 };
 
 function normalizeKind(kind: NodeKind): NodeKind {
@@ -61,6 +68,9 @@ export function TemplateNodeEditor({
   const [pending, startTransition] = useTransition();
   const [kind, setKind] = useState<NodeKind>(
     normalizeKind(node?.kind ?? "practice"),
+  );
+  const [passRule, setPassRule] = useState<NodePassRule>(
+    node?.pass_rule ?? defaultPassRule(normalizeKind(node?.kind ?? "practice")),
   );
   const [title, setTitle] = useState(node?.title ?? "");
   const [assetId, setAssetId] = useState(node?.library_asset_id ?? "");
@@ -136,6 +146,7 @@ export function TemplateNodeEditor({
               setKind(next);
               setAssetId("");
               setResourceUrl("");
+              setPassRule(defaultPassRule(next));
             }}
             className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
           >
@@ -145,6 +156,36 @@ export function TemplateNodeEditor({
             <option value="lesson">{nodeKindLabel.lesson}</option>
           </select>
           <p className="text-xs text-muted-foreground">{nodeKindHint[kind]}</p>
+        </div>
+
+        <NodeGateFields
+          kind={kind}
+          passRule={passRule}
+          onPassRuleChange={setPassRule}
+          checkInKind={node?.check_in_kind}
+          passScore={node?.pass_score}
+          selectClass="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+        />
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="tn-phase">Fase</Label>
+            <Input
+              id="tn-phase"
+              name="phase_key"
+              defaultValue={node?.phase_key ?? ""}
+              placeholder="A"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tn-code">Código</Label>
+            <Input
+              id="tn-code"
+              name="node_code"
+              defaultValue={node?.node_code ?? ""}
+              placeholder="A1"
+            />
+          </div>
         </div>
 
         <LibraryAssetPicker

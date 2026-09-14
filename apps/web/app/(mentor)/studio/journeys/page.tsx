@@ -5,6 +5,7 @@ import { CreatePathButton } from "@/components/create-path-button";
 import { JourneyPathRowActions } from "@/components/journey-path-row-actions";
 import { LibraryAgentNeedsYou } from "@/components/library-agent-needs";
 import { PathTemplateRowActions } from "@/components/path-template-row-actions";
+import { SeedTeoriaMusicalButton } from "@/components/seed-teoria-musical-button";
 import {
   isAgentPathPending,
   shellsForPathNodes,
@@ -314,6 +315,7 @@ export default async function JourneysListPage() {
               ({templates?.length ?? 0})
             </span>
           </h2>
+          <SeedTeoriaMusicalButton />
         </div>
 
         {(templates ?? []).length === 0 ? (

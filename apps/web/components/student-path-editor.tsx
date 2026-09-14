@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import {
   CalendarRange,
   ChevronDown,
@@ -28,7 +29,7 @@ import {
 } from "@/components/status-badges";
 import { activateNode, deleteNode, moveNode } from "@/lib/actions/nodes";
 import { deletePath, setPathStatus } from "@/lib/actions/paths";
-import { formatDate } from "@/lib/labels";
+import { formatDate, isPhaseBoundary, phaseKeyLabel } from "@/lib/labels";
 import type { StudentNode, StudentPath } from "@/lib/students/queries";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -224,7 +225,15 @@ export function StudentPathEditor({
           ) : (
             <ol className="space-y-3">
               {nodes.map((node, i) => (
-                <li key={node.id}>
+                <Fragment key={node.id}>
+                  {isPhaseBoundary(nodes, i) ? (
+                    <li className="list-none pt-2 first:pt-0">
+                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                        {phaseKeyLabel(node.phase_key)}
+                      </p>
+                    </li>
+                  ) : null}
+                <li>
                   <Card className="space-y-3 p-4">
                     <div className="flex items-start gap-3">
                       <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-white/8 text-sm font-semibold tabular-nums">
@@ -323,6 +332,7 @@ export function StudentPathEditor({
                     </div>
                   </Card>
                 </li>
+                </Fragment>
               ))}
             </ol>
           )}
