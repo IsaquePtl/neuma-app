@@ -235,6 +235,7 @@ export interface Database {
           check_in_kind: CheckInKind | null;
           phase_key: string | null;
           node_code: string | null;
+          duration_weeks: number | null;
           created_at: string;
         };
         Insert: {
@@ -255,6 +256,7 @@ export interface Database {
           check_in_kind?: CheckInKind | null;
           phase_key?: string | null;
           node_code?: string | null;
+          duration_weeks?: number | null;
           created_at?: string;
         };
         Update: {
@@ -275,6 +277,7 @@ export interface Database {
           check_in_kind?: CheckInKind | null;
           phase_key?: string | null;
           node_code?: string | null;
+          duration_weeks?: number | null;
           created_at?: string;
         };
         Relationships: [

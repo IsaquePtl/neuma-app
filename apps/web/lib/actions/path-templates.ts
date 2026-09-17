@@ -488,6 +488,7 @@ export async function applyPathTemplate(formData: FormData) {
         kind: n.kind,
         week_number,
         due_date,
+        duration_weeks: segment?.duration_weeks ?? n.duration_weeks ?? 1,
         order_index: i,
         status,
         resource_url: asset?.url ?? n.default_resource_url ?? null,

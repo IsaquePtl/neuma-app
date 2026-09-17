@@ -112,7 +112,16 @@ function NodeLevelHeader({
   );
 }
 
-function CheckInActions({
+function MentorWaitNotice() {
+  return (
+    <p className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm leading-relaxed text-muted-foreground">
+      Este nível só avança quando o mentor confirma no Studio. Podes consumir o
+      conteúdo e marcar a sessão — o avanço não é automático.
+    </p>
+  );
+}
+
+function NodeGateCta({
   node,
   practiceStyle = false,
   canSubmitCheckIn = true,
@@ -142,8 +151,18 @@ function CheckInActions({
     );
   }
 
+  if (nodeUsesQuizGate(node.pass_rule)) {
+    return (
+      <CheckpointQuiz
+        nodeId={node.id}
+        quizGate
+        passScore={node.pass_score}
+      />
+    );
+  }
+
   if (!nodeRequiresCheckIn(node.pass_rule)) {
-    return null;
+    return <MentorWaitNotice />;
   }
 
   const video = node.check_in_kind !== "text";
@@ -227,6 +246,8 @@ function SessionLayout({
         calUser={calUser}
         canBookSessions={preview ? false : canBookSessions}
       />
+
+      <NodeGateCta node={node} preview={preview} />
     </div>
   );
 }
@@ -254,7 +275,7 @@ function RecordingLayout({
           title={node.title}
           fallbackLabel="Abrir aula"
         />
-      ) : (
+      ) : node.content_body ? null : (
         <p className="rounded-xl border border-dashed border-white/10 px-4 py-6 text-sm text-muted-foreground">
           Ainda sem vídeo neste nível.
         </p>
@@ -266,7 +287,7 @@ function RecordingLayout({
         </div>
       ) : null}
 
-      <CheckInActions
+      <NodeGateCta
         node={node}
         canSubmitCheckIn={canSubmitCheckIn}
         blockedMessage={blockedMessage}
@@ -316,7 +337,7 @@ function PracticeLayout({
         )
       ) : null}
 
-      <CheckInActions
+      <NodeGateCta
         node={node}
         practiceStyle
         canSubmitCheckIn={canSubmitCheckIn}
@@ -330,9 +351,15 @@ function PracticeLayout({
 function CheckpointLayout({
   node,
   levelNumber,
+  canSubmitCheckIn = true,
+  blockedMessage = null,
+  preview = false,
 }: {
   node: StudentNode;
   levelNumber: number;
+  canSubmitCheckIn?: boolean;
+  blockedMessage?: string | null;
+  preview?: boolean;
 }) {
   return (
     <div className="min-w-0 w-full max-w-full space-y-6">
@@ -344,12 +371,6 @@ function CheckpointLayout({
         </div>
       ) : null}
 
-      <CheckpointQuiz
-        nodeId={node.id}
-        quizGate={nodeUsesQuizGate(node.pass_rule)}
-        passScore={node.pass_score}
-      />
-
       {node.resource_url ? (
         <SupportMediaToggle
           url={node.resource_url}
@@ -357,6 +378,13 @@ function CheckpointLayout({
           label="Abrir anexo de apoio"
         />
       ) : null}
+
+      <NodeGateCta
+        node={node}
+        canSubmitCheckIn={canSubmitCheckIn}
+        blockedMessage={blockedMessage}
+        preview={preview}
+      />
     </div>
   );
 }
@@ -415,7 +443,13 @@ export function StudentNodePlayer({
 
   if (node.kind === "milestone") {
     return (
-      <CheckpointLayout node={node} levelNumber={levelNumber} />
+      <CheckpointLayout
+        node={node}
+        levelNumber={levelNumber}
+        canSubmitCheckIn={canSubmitCheckIn}
+        blockedMessage={checkInBlockedMessage}
+        preview={preview}
+      />
     );
   }
 

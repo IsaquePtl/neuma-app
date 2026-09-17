@@ -9,6 +9,21 @@ export const DEFAULT_QUIZ_PASS_SCORE = 60;
 
 export type NodeCheckInKind = Extract<CheckInKind, "video" | "text"> | null;
 
+const NODE_KINDS: NodeKind[] = [
+  "practice",
+  "lesson",
+  "resource",
+  "call",
+  "milestone",
+];
+
+/** Unknown kinds fall back to practice so agent drafts never insert invalid enums. */
+export function parseNodeKind(raw: string | null | undefined): NodeKind {
+  const value = (raw ?? "").trim();
+  if (NODE_KINDS.includes(value as NodeKind)) return value as NodeKind;
+  return "practice";
+}
+
 export function defaultPassRule(kind: NodeKind): NodePassRule {
   if (kind === "practice") return "check_in";
   if (kind === "lesson" || kind === "resource") return "none";
