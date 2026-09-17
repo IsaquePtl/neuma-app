@@ -4,6 +4,12 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { confirmCheckInNudges } from "@/lib/actions/mentor-agent";
+import {
+  parseCheckInKind,
+  parseNodeKind,
+  parsePassRule,
+  parsePassScore,
+} from "@/lib/nodes/pass-rule";
 
 async function requireMentor() {
   const supabase = await createClient();
@@ -72,6 +78,11 @@ type PathDraftPayload = {
     kind?: string;
     order_index?: number;
     week_number?: number;
+    pass_rule?: string;
+    check_in_kind?: string;
+    phase_key?: string;
+    node_code?: string;
+    pass_score?: string | number | null;
   }>;
 };
 
@@ -111,17 +122,29 @@ export async function approveProposal(proposalId: string) {
     const nodes = Array.isArray(p.nodes) ? p.nodes : [];
     if (nodes.length) {
       const rows = nodes
-        .map((n, i) => ({
-          path_id: path.id,
-          title: n.title,
-          description: n.description ?? null,
-          kind: (["lesson", "practice", "call", "milestone"].includes(n.kind ?? "")
-            ? n.kind
-            : "practice") as "lesson" | "practice" | "call" | "milestone",
-          order_index: n.order_index ?? i + 1,
-          week_number: n.week_number ?? null,
-          status: "locked" as const,
-        }))
+        .map((n, i) => {
+          const kind = parseNodeKind(n.kind);
+          const passRule = parsePassRule(
+            n.pass_rule == null ? "" : String(n.pass_rule),
+            kind,
+          );
+          return {
+            path_id: path.id,
+            title: n.title,
+            description: n.description ?? null,
+            kind,
+            order_index: n.order_index ?? i + 1,
+            week_number: n.week_number ?? null,
+            status: "locked" as const,
+            pass_rule: passRule,
+            pass_score: parsePassScore(
+              n.pass_score == null ? "" : String(n.pass_score),
+            ),
+            check_in_kind: parseCheckInKind(n.check_in_kind, kind, passRule),
+            phase_key: n.phase_key?.trim() || null,
+            node_code: n.node_code?.trim() || null,
+          };
+        })
         .sort((a, b) => a.order_index - b.order_index);
       // First node stays locked until mentor activates path; draft mode.
       const { error: nodeErr } = await supabase.from("nodes").insert(rows);

@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { completeCurrentAndActivateNext } from "@/lib/nodes/complete-and-activate";
 import { tryIncrementWeekExtensions } from "@/lib/nodes/week-extensions";
+import {
+  nodeAllowsMarkSeen,
+  nodeRequiresCheckIn,
+} from "@/lib/nodes/pass-rule";
 
 async function mentorClient() {
   const supabase = await createClient();
@@ -46,45 +51,7 @@ export async function advanceLevel(formData: FormData) {
   const pathId = String(formData.get("path_id") ?? "");
   if (!nodeId || !pathId) throw new Error("Dados em falta");
 
-  const { data: node } = await supabase
-    .from("nodes")
-    .select("id, path_id, order_index")
-    .eq("id", nodeId)
-    .eq("path_id", pathId)
-    .single();
-  if (!node) throw new Error("Nível não encontrado");
-
-  await supabase
-    .from("nodes")
-    .update({ status: "completed" })
-    .eq("id", node.id);
-
-  const { data: next } = await supabase
-    .from("nodes")
-    .select("id")
-    .eq("path_id", pathId)
-    .gt("order_index", node.order_index)
-    .order("order_index", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (next) {
-    // Lock other non-completed nodes; activate next
-    const { data: siblings } = await supabase
-      .from("nodes")
-      .select("id, status")
-      .eq("path_id", pathId);
-    for (const s of siblings ?? []) {
-      if (s.id === next.id) {
-        await supabase.from("nodes").update({ status: "active" }).eq("id", s.id);
-      } else if (s.id !== node.id && s.status !== "completed") {
-        await supabase.from("nodes").update({ status: "locked" }).eq("id", s.id);
-      }
-    }
-    await supabase.from("paths").update({ status: "active" }).eq("id", pathId);
-  } else {
-    await supabase.from("paths").update({ status: "completed" }).eq("id", pathId);
-  }
+  await completeCurrentAndActivateNext(supabase, nodeId, pathId);
 
   const { data: path } = await supabase
     .from("paths")
@@ -93,6 +60,55 @@ export async function advanceLevel(formData: FormData) {
     .single();
 
   await revalidateJourney(supabase, pathId, path?.student_id, nodeId);
+}
+
+/**
+ * Aluno marca um nível `pass_rule=none` como visto e avança.
+ * Check-in e quiz têm os seus próprios gates. Mentor continua a poder usar advanceLevel.
+ */
+export async function markNodeSeen(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado");
+
+  const nodeId = String(formData.get("node_id") ?? "");
+  if (!nodeId) throw new Error("Dados em falta");
+
+  const { data: node } = await supabase
+    .from("nodes")
+    .select(
+      "id, path_id, kind, status, pass_rule, path:paths!inner(id, student_id, status)",
+    )
+    .eq("id", nodeId)
+    .maybeSingle();
+  if (!node) throw new Error("Nível não encontrado");
+
+  const path = Array.isArray(node.path) ? node.path[0] : node.path;
+  if (!path || path.student_id !== user.id) {
+    throw new Error("Este nível não pertence ao teu percurso.");
+  }
+  if (path.status !== "active") {
+    throw new Error(
+      path.status === "paused"
+        ? "Este percurso está em pausa."
+        : "Este percurso ainda não está activo.",
+    );
+  }
+  if (node.status !== "active") {
+    throw new Error("Só podes concluir o nível activo.");
+  }
+  if (!nodeAllowsMarkSeen(node.pass_rule)) {
+    throw new Error(
+      nodeRequiresCheckIn(node.pass_rule)
+        ? "Este nível pede check-in — envia o check-in em vez de marcar visto."
+        : "Este nível não se conclui só com «visto».",
+    );
+  }
+
+  await completeCurrentAndActivateNext(supabase, node.id, path.id);
+  await revalidateJourney(supabase, path.id, user.id, node.id);
 }
 
 function resolveExtensionDays(formData: FormData): number {

@@ -8,6 +8,10 @@ import {
   getCheckInAllowance,
 } from "@/lib/checkins/allowance";
 import { ORPHAN_CHECKIN_LABEL } from "@/lib/labels";
+import {
+  nodeRequiresCheckIn,
+  parseCheckInKind,
+} from "@/lib/nodes/pass-rule";
 
 async function levelNumberForNode(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -54,7 +58,7 @@ export default async function NewCheckinPage({
 
   const { data: node } = await supabase
     .from("nodes")
-    .select("id, title, path_id")
+    .select("id, title, path_id, kind, pass_rule, check_in_kind")
     .eq("id", nodeId)
     .maybeSingle();
 
@@ -75,6 +79,19 @@ export default async function NewCheckinPage({
     getCheckInAllowance(supabase, node.id, user.id),
   ]);
 
+  const checkInKind = parseCheckInKind(
+    node.check_in_kind,
+    node.kind,
+    node.pass_rule,
+  );
+  const videoSlot = checkInKind !== "text";
+  const blocked =
+    nodeRequiresCheckIn(node.pass_rule) && videoSlot && !allowance.allowed
+      ? checkInBlockedMessage(allowance)
+      : !nodeRequiresCheckIn(node.pass_rule)
+        ? "Este nível não pede check-in. Marca como visto na página do nível ou espera o feedback do mentor."
+        : null;
+
   return (
     <CheckInTallyPanel
       nodeId={node.id}
@@ -82,9 +99,8 @@ export default async function NewCheckinPage({
       pathTitle={pathRow.title}
       levelNumber={levelNumber}
       studentId={user.id}
-      blockedMessage={
-        allowance.allowed ? null : checkInBlockedMessage(allowance)
-      }
+      checkInKind={checkInKind === "text" ? "text" : "video"}
+      blockedMessage={blocked}
     />
   );
 }

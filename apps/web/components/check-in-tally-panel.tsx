@@ -22,6 +22,7 @@ export function CheckInTallyPanel({
   pathTitle,
   levelNumber,
   blockedMessage,
+  checkInKind = "video",
 }: {
   formId?: string;
   nodeId?: string | null;
@@ -33,6 +34,7 @@ export function CheckInTallyPanel({
   studentId?: string;
   /** When set, hide the form and show this PT message instead. */
   blockedMessage?: string | null;
+  checkInKind?: "video" | "text";
 }) {
   const hasLevel = Boolean(nodeId) && levelNumber != null;
   const isOrphan =
@@ -87,7 +89,7 @@ export function CheckInTallyPanel({
             {blockedMessage}
           </p>
         ) : (
-          <CheckInForm nodeId={nodeId} />
+          <CheckInForm nodeId={nodeId} kind={checkInKind} />
         )}
       </div>
     </div>

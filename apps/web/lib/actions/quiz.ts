@@ -3,6 +3,11 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { completeCurrentAndActivateNext } from "@/lib/nodes/complete-and-activate";
+import {
+  nodeUsesQuizGate,
+  quizPassScore,
+} from "@/lib/nodes/pass-rule";
 import type { Json } from "@/lib/types/database.types";
 
 export type QuizOption = { id: string; label: string };
@@ -29,6 +34,8 @@ export type QuizAttemptSummary = {
   correct_count: number;
   total: number;
   created_at: string;
+  unlocked?: boolean;
+  pass_score?: number;
 };
 
 function parseOptions(raw: Json): QuizOption[] {
@@ -210,7 +217,10 @@ export async function getQuizForStudent(nodeId: string): Promise<{
 }> {
   const questions = await listQuizQuestions(nodeId);
   return {
-    questions: questions.map(({ correct_option_id: _, ...rest }) => rest),
+    questions: questions.map(({ correct_option_id: _correct, ...rest }) => {
+      void _correct;
+      return rest;
+    }),
   };
 }
 
@@ -248,10 +258,37 @@ export async function submitQuizAttempt(
 
   if (error) throw new Error(error.message);
 
+  let unlocked = false;
+  const { data: node } = await supabase
+    .from("nodes")
+    .select(
+      "id, path_id, status, pass_rule, pass_score, path:paths!inner(student_id, status)",
+    )
+    .eq("id", nodeId)
+    .maybeSingle();
+  const path = Array.isArray(node?.path) ? node?.path[0] : node?.path;
+  const threshold = quizPassScore(node?.pass_score);
+  if (
+    node &&
+    path &&
+    path.student_id === user.id &&
+    path.status === "active" &&
+    node.status === "active" &&
+    nodeUsesQuizGate(node.pass_rule) &&
+    score >= threshold
+  ) {
+    await completeCurrentAndActivateNext(supabase, node.id, node.path_id);
+    unlocked = true;
+  }
+
   revalidatePath(`/path/${nodeId}`);
   revalidatePath(`/path/${nodeId}/quiz`);
   revalidatePath("/home");
   revalidatePath("/path");
+  revalidatePath("/session");
+  if (node?.path_id) {
+    revalidatePath(`/studio/journeys/${node.path_id}`);
+  }
 
-  return data;
+  return { ...data, unlocked, pass_score: threshold };
 }

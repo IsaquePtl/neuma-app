@@ -92,13 +92,13 @@ export function segmentNodeTimeline(
 ): NodeTimelineSegment[] {
   if (nodeCount <= 0) return [];
 
+  const custom = existingDurationWeeks;
   const hasCustomDurations =
-    existingDurationWeeks?.length === nodeCount &&
-    existingDurationWeeks.every((w) => w != null && w >= 1);
+    custom?.length === nodeCount && custom.some((w) => w != null && w >= 1);
 
   let durations: number[];
-  if (hasCustomDurations) {
-    durations = existingDurationWeeks as number[];
+  if (hasCustomDurations && custom) {
+    durations = custom.map((w) => (w != null && w >= 1 ? w : 1));
   } else {
     const base = Math.max(1, Math.floor(totalWeeks / nodeCount));
     const remainder = totalWeeks % nodeCount;

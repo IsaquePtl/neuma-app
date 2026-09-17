@@ -9,6 +9,7 @@ import type {
   CheckInKind,
   CheckInStatus,
   NodeKind,
+  NodePassRule,
   NodeStatus,
   PathStatus,
 } from "@/lib/types/database.types";
@@ -46,6 +47,11 @@ export type StudentNode = {
   resource_url: string | null;
   content_body: string | null;
   order_index: number;
+  pass_rule: NodePassRule;
+  pass_score: number | null;
+  check_in_kind: CheckInKind | null;
+  phase_key: string | null;
+  node_code: string | null;
 };
 
 export type StudentCheckIn = {
@@ -278,6 +284,11 @@ export function mapNode(n: {
   resource_url: string | null;
   content_body: string | null;
   order_index: number;
+  pass_rule?: NodePassRule | null;
+  pass_score?: number | null;
+  check_in_kind?: CheckInKind | null;
+  phase_key?: string | null;
+  node_code?: string | null;
 }): StudentNode {
   return {
     id: n.id,
@@ -290,6 +301,11 @@ export function mapNode(n: {
     resource_url: n.resource_url,
     content_body: n.content_body ?? null,
     order_index: n.order_index,
+    pass_rule: n.pass_rule ?? (n.kind === "practice" ? "check_in" : n.kind === "lesson" || n.kind === "resource" ? "none" : "mentor"),
+    pass_score: n.pass_score ?? null,
+    check_in_kind: n.check_in_kind ?? null,
+    phase_key: n.phase_key ?? null,
+    node_code: n.node_code ?? null,
   };
 }
 
@@ -305,7 +321,7 @@ export async function loadMyPathWithNodes(studentId: string): Promise<{
   const { data: nodes } = await supabase
     .from("nodes")
     .select(
-      "id, title, description, week_number, kind, status, due_date, resource_url, content_body, order_index",
+      "id, title, description, week_number, kind, status, due_date, resource_url, content_body, order_index, pass_rule, pass_score, check_in_kind, phase_key, node_code",
     )
     .eq("path_id", pathRow.id)
     .order("order_index", { ascending: true });

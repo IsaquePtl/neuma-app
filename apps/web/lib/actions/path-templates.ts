@@ -15,6 +15,8 @@ import type {
   PathStatus,
   PathTemplateStatus,
 } from "@/lib/types/database.types";
+import { defaultPassRule, parseCheckInKind, parsePassRule, parsePassScore } from "@/lib/nodes/pass-rule";
+import type { Json } from "@/lib/types/database.types";
 
 async function requireMentor() {
   const supabase = await createClient();
@@ -175,7 +177,7 @@ export async function savePathAsTemplate(formData: FormData) {
       supabase
         .from("nodes")
         .select(
-          "title, description, kind, week_number, order_index, resource_url",
+          "title, description, kind, week_number, order_index, resource_url, check_in_kind, phase_key, node_code, pass_rule, pass_score, id",
         )
         .eq("path_id", pathId)
         .order("order_index", { ascending: true }),
@@ -207,6 +209,23 @@ export async function savePathAsTemplate(formData: FormData) {
   }
 
   if (nodes?.length) {
+    const nodeIds = nodes.map((n) => n.id);
+    const { data: quizzes } = await supabase
+      .from("node_quiz_questions")
+      .select("node_id, order_index, prompt, options, correct_option_id")
+      .in("node_id", nodeIds)
+      .order("order_index", { ascending: true });
+    const quizzesByNode = new Map<string, Json>();
+    for (const q of quizzes ?? []) {
+      const list = (quizzesByNode.get(q.node_id) as Json[] | undefined) ?? [];
+      list.push({
+        prompt: q.prompt,
+        options: q.options,
+        correct_option_id: q.correct_option_id,
+      });
+      quizzesByNode.set(q.node_id, list);
+    }
+
     const rows = nodes.map((n, i) => ({
       template_id: template.id,
       title: n.title,
@@ -215,6 +234,12 @@ export async function savePathAsTemplate(formData: FormData) {
       week_number: n.week_number,
       order_index: n.order_index ?? i,
       default_resource_url: n.resource_url,
+      check_in_kind: n.check_in_kind,
+      pass_rule: n.pass_rule,
+      pass_score: n.pass_score,
+      phase_key: n.phase_key,
+      node_code: n.node_code,
+      quiz_questions: quizzesByNode.get(n.id) ?? [],
     }));
     const { error: insertErr } = await supabase
       .from("path_template_nodes")
@@ -246,10 +271,15 @@ export async function upsertTemplateNode(formData: FormData) {
   const id = (formData.get("id") as string) || null;
   const templateId = formData.get("template_id") as string;
 
+  const kind = ((formData.get("kind") as NodeKind) || "practice");
+  const passRule = parsePassRule(
+    (formData.get("pass_rule") as string) || "",
+    kind,
+  );
   const payload = {
     title: (formData.get("title") as string)?.trim() || "Nível",
     description: ((formData.get("description") as string) || "").trim() || null,
-    kind: ((formData.get("kind") as NodeKind) || "practice"),
+    kind,
     week_number: formData.get("week_number")
       ? Number(formData.get("week_number"))
       : null,
@@ -260,6 +290,15 @@ export async function upsertTemplateNode(formData: FormData) {
       ((formData.get("default_resource_url") as string) || "").trim() || null,
     library_asset_id:
       ((formData.get("library_asset_id") as string) || "").trim() || null,
+    pass_rule: passRule,
+    pass_score: parsePassScore((formData.get("pass_score") as string) || ""),
+    check_in_kind: parseCheckInKind(
+      (formData.get("check_in_kind") as string) || "",
+      kind,
+      passRule,
+    ),
+    phase_key: ((formData.get("phase_key") as string) || "").trim() || null,
+    node_code: ((formData.get("node_code") as string) || "").trim() || null,
   };
 
   if (id) {
@@ -352,7 +391,7 @@ export async function applyPathTemplate(formData: FormData) {
   const { data: template, error: tErr } = await supabase
     .from("path_templates")
     .select(
-      "id, title, description, goal, duration_label, period_months, start_date, end_date, path_template_nodes(id, order_index, title, description, kind, week_number, duration_weeks, default_resource_url, library_asset_id, library_assets(url, body))",
+      "id, title, description, goal, duration_label, period_months, start_date, end_date, path_template_nodes(id, order_index, title, description, kind, week_number, duration_weeks, default_resource_url, library_asset_id, check_in_kind, phase_key, node_code, pass_rule, pass_score, quiz_questions, library_assets(url, body))",
     )
     .eq("id", templateId)
     .single();
@@ -449,15 +488,61 @@ export async function applyPathTemplate(formData: FormData) {
         kind: n.kind,
         week_number,
         due_date,
+        duration_weeks: segment?.duration_weeks ?? n.duration_weeks ?? 1,
         order_index: i,
         status,
         resource_url: asset?.url ?? n.default_resource_url ?? null,
         content_body: asset?.body ?? null,
+        check_in_kind: n.check_in_kind ?? (n.kind === "practice" ? "video" : null),
+        pass_rule: n.pass_rule ?? defaultPassRule(n.kind),
+        pass_score: n.pass_score,
+        phase_key: n.phase_key ?? null,
+        node_code: n.node_code ?? null,
       };
     });
 
-    const { error: nErr } = await supabase.from("nodes").insert(rows);
+    const { data: inserted, error: nErr } = await supabase
+      .from("nodes")
+      .insert(rows)
+      .select("id, order_index");
     if (nErr) throw new Error(nErr.message);
+
+    const quizRows: Array<{
+      node_id: string;
+      order_index: number;
+      prompt: string;
+      options: Json;
+      correct_option_id: string;
+    }> = [];
+    for (const created of inserted ?? []) {
+      const src = rawNodes[created.order_index];
+      const questions = Array.isArray(src?.quiz_questions)
+        ? src.quiz_questions
+        : [];
+      questions.forEach((q, qi) => {
+        if (!q || typeof q !== "object" || Array.isArray(q)) return;
+        const rec = q as Record<string, unknown>;
+        const prompt = String(rec.prompt ?? "").trim();
+        const options = rec.options;
+        const correct = String(rec.correct_option_id ?? "");
+        if (!prompt || !Array.isArray(options) || options.length < 2 || !correct) {
+          return;
+        }
+        quizRows.push({
+          node_id: created.id,
+          order_index: qi,
+          prompt,
+          options: options as Json,
+          correct_option_id: correct,
+        });
+      });
+    }
+    if (quizRows.length) {
+      const { error: qErr } = await supabase
+        .from("node_quiz_questions")
+        .insert(quizRows);
+      if (qErr) throw new Error(qErr.message);
+    }
   }
 
   revalidatePath(`/studio/students/${studentId}`);

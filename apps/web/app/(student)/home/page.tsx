@@ -23,6 +23,11 @@ import {
   type StudentTodoItem,
 } from "@/components/student-todo-list";
 import { formatDate, nodeKindLabel } from "@/lib/labels";
+import {
+  nodeAllowsMarkSeen,
+  nodeRequiresCheckIn,
+  nodeUsesQuizGate,
+} from "@/lib/nodes/pass-rule";
 import { studentHasOnboardingSubmission } from "@/lib/onboarding/submission";
 import {
   firstNameFromFullName,
@@ -97,11 +102,6 @@ export default async function StudentHomePage() {
   const activeContent =
     activeNode &&
     (activeNode.kind === "lesson" || activeNode.kind === "resource")
-      ? activeNode
-      : null;
-  const activeCheckin =
-    activeNode &&
-    (activeNode.kind === "practice" || activeNode.kind === "milestone")
       ? activeNode
       : null;
 
@@ -189,21 +189,42 @@ export default async function StudentHomePage() {
       });
     }
 
-    if (activeCheckin) {
+    if (activeNode && nodeUsesQuizGate(activeNode.pass_rule)) {
+      const week = weekNumberLabel(activeNode.week_number);
+      todos.push({
+        key: `quiz:${activeNode.id}`,
+        title: `Fazer quiz da semana ${week}`,
+        href: `/path/${activeNode.id}/quiz`,
+        tag: "QUIZ",
+      });
+    } else if (activeNode && nodeRequiresCheckIn(activeNode.pass_rule)) {
       const allowance = await getCheckInAllowance(
         supabase,
-        activeCheckin.id,
+        activeNode.id,
         user!.id,
       );
       if (allowance.allowed) {
-        const week = weekNumberLabel(activeCheckin.week_number);
+        const week = weekNumberLabel(activeNode.week_number);
         todos.push({
-          key: `checkin:${activeCheckin.id}`,
+          key: `checkin:${activeNode.id}`,
           title: `Fazer check-in da semana ${week}`,
-          href: `/path/${activeCheckin.id}`,
-          tag: todoTagLabel(`checkin:${activeCheckin.id}`),
+          href: `/path/${activeNode.id}`,
+          tag: todoTagLabel(`checkin:${activeNode.id}`),
         });
       }
+    } else if (
+      activeNode &&
+      !activeContent &&
+      !activeCall &&
+      !nodeAllowsMarkSeen(activeNode.pass_rule)
+    ) {
+      const week = weekNumberLabel(activeNode.week_number);
+      todos.push({
+        key: `mentor:${activeNode.id}`,
+        title: `Abrir nível da semana ${week} (avança o mentor)`,
+        href: `/path/${activeNode.id}`,
+        tag: "CHECKPOINT",
+      });
     }
   }
 
