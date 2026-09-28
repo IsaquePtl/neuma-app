@@ -28,6 +28,7 @@ Those three are fixed on `cursor/neuma-stripe-e2e-audit-3f45` and are **not** li
 - Browser click-through of either role: still not done. Blockers are listed in Real flow tests.
 - **Level kinds are not 100%.** Live enums are `practice`, `call`, `milestone`, `lesson`, `resource`. Quiz is a pass rule, not a kind. **0/5 kinds** finish every gate the editor can set. 11 of 25 editor states pass. Coverage of every kind is mandatory, so this alone keeps the verdict at do-not-ship. Detail is under Real flow tests → Level kinds.
 - **Evaluation does not follow the level type.** On every kind, a passing quiz stays put, a failing quiz can still be advanced by the mentor, a check-in can be skipped with no submission, and the screen has no “did not pass” review. **0/5 kinds** are evaluated correctly. Detail is under Real flow tests → Evaluation by level type.
+- **Stripe test mode is not 100%.** This VM has no `STRIPE_SECRET_KEY`, so Checkout, webhooks, and Finanças actions were not executed here. The live ledger already shows the gap that matters for access: 6 subscriptions and 6 payments, every `profile_id` null, so a recorded charge does not unlock the student. Detail is under Stripe test mode.
 
 `NEUMA_BILLING_ENABLED` defaults off. Turning the flag on in production without `0035`+`0036`, a Stripe webhook secret, and the service role key does not “turn on billing”. It either grandfather-opens the app (cutoff null) or breaks checkout.
 
@@ -66,6 +67,7 @@ Every item Isaque named is in this file. A row is **FAIL** when the live behavio
 | Feedback | Rows 13–14, check-in revision case, `level_feedbacks` session note. | Student can read a mentor note. Session-note writer has no screen. |
 | 1:1 check-ins | Rows 10–16 (pedagogical check-in → feedback → advance). Invite redeem is code-only (H2), not executed against Stripe. | Submit **PASS**. Self-approve denied **PASS**. Old approve can leave two active nodes **FAIL**. Redeem of an existing email **FAIL**. |
 | Advance gates | How to read the four gates, plus the kind matrix. | `none` and `quiz` student writes **FAIL**. `check_in` submit **PASS**, mentor clean advance **PASS**, skip-with-no-submission **FAIL**. `mentor` denial **PASS**, mentor advance **PASS**. |
+| Stripe, test mode as live | Stripe test mode. Signup/plan, Checkout, webhooks, sync, paywall, Finanças, cancel/reactivate, 1:1. | **Not 100%.** No key in this VM. Live rows do not link a payment to a student. |
 
 ---
 
@@ -303,6 +305,91 @@ Not executed. `redeemOneToOneInvite` calls `auth.admin.createUser` and then Stri
 **Not run.** Opening `/login` without a session does not exercise these loops. A faithful browser pass still needs a staging project or a local GoTrue, two passwords, `NEUMA_BILLING_ENABLED=true`, and the branch deployed there so the helper and `0038` are what the buttons call. Until then, rows 3, 5, 7, 12, 17, 19, and 20 are the live failures, and the Level kinds matrix stays **0/5**.
 
 ---
+
+## Stripe test mode
+
+Isaque will run Stripe in **test mode** and later switch the same flows to live. Test mode is the release bar. A flow is **PASS** only when a test-mode payment, webhook, or Studio action does what the student or the mentor should see. This VM has no `STRIPE_SECRET_KEY`, no `STRIPE_WEBHOOK_SECRET`, and no `NEUMA_BILLING_ENABLED`. Checkout was not opened. No test card was charged. The Stripe MCP is not authenticated. What follows is the code path those keys would hit, plus a read of the live billing tables (no personal data, no writes).
+
+The API version is pinned at `2026-08-26.dahlia` (`lib/stripe/client.ts`, SDK `stripe` ^22.6.1). `getStripe()` returns null without a key so the app still boots. `requireStripe()` throws “STRIPE_SECRET_KEY nao esta configurada”. `isStripeTestMode()` is true only for `sk_test_…` and **no screen calls it**, so Finanças does not say whether the server is on test or live.
+
+### Switch
+
+| Control | Off (current default) | On, test key, same code as live |
+| --- | --- | --- |
+| `NEUMA_BILLING_ENABLED` | Anything other than `true` or `1`. Signup at the plan step goes to `/home?welcome=1` and never calls Checkout. `getAccessState` returns `billing_disabled` and everyone enters. | Plan step calls `createCheckoutSession`. Student layout sends `!hasAccess` to `/subscrever`. |
+| `NEUMA_PAYWALL_START_AT` | If set, it wins over the database. | Unset in the example, so the cutoff is `finance_settings.paywall_start_at`. |
+| `paywall_start_at` | Live value is `2026-09-01T00:00:00Z`. The example still says production keeps it null. | Accounts created on or after that date must have a healthy subscription, grace, or `billing_exempt`. Older accounts are grandfathered. |
+| Who can read the cutoff | Students have no `SELECT` on `finance_settings`. | The audit branch reads it with the service role. Without that key the catch falls back to the user client, the date is null, and **every student is grandfathered**. |
+
+Today is 2026-09-28, so a new student is past the cutoff. With the flag on and the service-role read deployed, they should hit the paywall until they pay. With the flag off, Stripe test keys do nothing.
+
+### Signup / plan / Checkout
+
+Plans in code, in cents: monthly `neuma_monthly` 2494 / month, quarterly `neuma_quarterly` 6294 / 3 months, annual `neuma_annual` 19894 / year. `resolvePriceId` uses the lookup key, then `STRIPE_PRICE_*`. If both miss, Checkout throws and the plan button returns that error.
+
+`createCheckoutSession` is subscription mode, `client_reference_id` = profile id, metadata `neuma_profile_id` and `neuma_plan`, success `/subscrever/sucesso?session_id=…`, cancel `/subscrever?cancelado=1`. `finalizeCheckoutSession` refuses a session whose `client_reference_id` is someone else, then `syncSubscription` (four tries) and `syncInvoice`. Invoice sync errors are logged and ignored, so a paid Checkout can still return `{ ok: true }` with no payment row (M8 if the subscription sync also fails).
+
+Live rows that already came from Stripe match those amounts and intervals: monthly 2494 / 1 month (canceled), quarterly 6294 / 3 months (one active, one canceled), annual 19894 / 1 year (one active, one canceled), one custom 1:1 at 15000 / 1 month (active, `cancel_at_period_end`). That is a **PASS** for “the prices that were charged match the catalogue”. It is not a **PASS** for lookup keys still being attached, because this VM cannot call the Stripe API.
+
+### Webhooks and sync
+
+`POST /api/stripe/webhook` returns **503** when the secret or the key is missing, **400** on a bad signature, **500** if the event row cannot be saved (Stripe retries). Duplicate `event.id` with `processed_at` set returns 200. Handled types: `checkout.session.completed`, subscription created/updated/deleted/paused/resumed, `invoice.paid`, `invoice.payment_succeeded`, `invoice.payment_failed`, `invoice.payment_action_required`, `charge.succeeded`, `charge.refunded`. Anything else is stored and ignored.
+
+`syncInvoice` returns immediately unless `invoice.status === 'paid'`, so a failed invoice does not enter the revenue table. That filter is on this branch.
+
+`checkout.session.completed` with `mode=setup` sets the new card as `default_payment_method` on the subscription (or on every live subscription of that customer) and syncs. `markInviteAsPaid` runs for any completed session that carries `neuma_invite_id`. It does not read `payment_status`, and it does not check the update. A session that completes before the money is captured can mark the invite paid.
+
+Live `stripe_events`: **81** rows, **0** unprocessed, **0** with `error`. Types that actually did work include `checkout.session.completed` (2), `invoice.paid` (5), `invoice.payment_succeeded` (5), `charge.succeeded` (5), `customer.subscription.created` (5), `customer.subscription.deleted` (3). There is **no** `customer.subscription.updated` in the log, so pause, plan change, and cancel-at-period-end have not been observed as webhooks. The code handles that type. **Not run** here.
+
+### Paywall vs the ledger
+
+`getMySubscription` only reads `subscriptions.profile_id = auth.uid()`. A row with a null profile does not unlock anyone.
+
+Live counts:
+
+| Fact | Count |
+| --- | --- |
+| Subscriptions | 3 `active`, 3 `canceled` |
+| Those rows with `profile_id` null | **6 / 6** |
+| Stored subscription email matching a profile | **0** |
+| Payments | 6, all with `profile_id` null; 2 also missing `subscription_id` |
+| `billing_customers` linked to a profile | 2 |
+| `billing_exempt` profiles | 9 (8 of them also `is_one_to_one`) |
+| `one_to_one` profiles that are not exempt | 1 |
+| Paid 1:1 invites | 1 |
+| `collection_paused` | 0 |
+
+**FAIL.** The webhook pipeline has accepted events and the catalogue cents are right, and none of those charges are attached to a student. With the paywall on, paying does not by itself open the app for these rows. Grandfathering or `billing_exempt` is what lets people in. `profileIdFromCustomer` only links a customer through `billing_customers`, `metadata.neuma_profile_id`, or an email match. These six emails match nobody.
+
+### Finanças, cancel, reactivate
+
+Studio **Pausar** sets `pause_collection.behavior = void` and syncs. The confirm copy says future invoices are void and **the student keeps access**. Stripe leaves the subscription `active`, and `getAccessState` allows `active`, so the code matches that copy. **Retomar** clears `pause_collection`. Neither was executed here.
+
+Student **cancel** sets `cancel_at_period_end` and keeps access until the period ends. **Reactivar** clears that flag. Studio can also cancel immediately (`subscriptions.cancel`). One active 1:1 row already has `cancel_at_period_end`. Not exercised from this VM.
+
+**Conceder cortesia** / **Revogar** flip `billing_exempt` with the mentor session. That is the access override, not a Stripe coupon. **Reembolsar** and **Mudar plano** call Stripe and then sync. **Ressincronizar** refetches the subscription. All of those throw without a secret key. **Not run.**
+
+`past_due` access uses `NEUMA_PAST_DUE_GRACE_DAYS` (default 7), not `finance_settings.past_due_grace_days` (H4). No `invoice.payment_failed` event is in the live log, so grace has not been observed.
+
+### 1:1 redeem
+
+`redeemOneToOneInvite` creates the auth user, sets `is_one_to_one` **before** payment (`billing_exempt` stays false, so the flag is not an access bypass), then opens a subscription Checkout with `neuma_invite_id` and `neuma_one_to_one=1`. The public page then signs in with the new password and redirects to Stripe.
+
+**FAIL** for an email that already exists, including a person who started redeem, closed Checkout, and opened the link again: `createUser` returns “already”, and the page has no logged-in branch (H2). The invite is not marked paid until `checkout.session.completed`, so the link still looks usable and then dead-ends.
+
+A brand-new email can reach Checkout only when the test secret key and the invite price exist. That was not run. Webhook success is supposed to set the invite `paid` and `is_one_to_one` again, and `syncSubscription` sets `is_one_to_one` when the plan resolves to `one_to_one`. Access still requires the subscription row’s `profile_id`. The live 1:1 subscription does not have one.
+
+### What has to be true before live
+
+Test mode is not ready to flip to live. Minimum that is still red:
+
+1. A test signup with `NEUMA_BILLING_ENABLED=true`, card `4242…`, and the success page landing on `/home` with `subscriptions.profile_id` equal to that student.
+2. The same student’s row visible in Finanças, then pause (access remains), resume, cancel-at-period-end, reactivate, and an immediate cancel that locks `/home`.
+3. A failed invoice that stays out of `payments` and, after grace, locks the app.
+4. A new 1:1 invite paid in test mode, and the same invite opened by an account that already exists.
+5. Webhook secret from the **test** endpoint. Live later needs its own secret, its own `sk_live_…`, and the same lookup keys on live prices. Changing only the secret key, without those prices, makes Checkout throw.
+
+**Stripe test-mode verdict: FAIL.** Do not switch the account to live on this evidence.
 
 ## Fixes on `cursor/neuma-stripe-e2e-audit-3f45`
 
@@ -815,6 +902,8 @@ The audit branch is safe to review. It does not flip `NEUMA_BILLING_ENABLED`, do
 Level kinds are a separate ship block. **0 of 5 kinds** (`lesson`, `resource`, `practice`, `call`, `milestone`) pass every gate the editor can set. 11 of 25 editor states pass; `check_in_kind=call` fails on every kind. The helper on this branch does not add the missing quiz, mark-seen, or check-in controls on `call`, `milestone`, and non-milestone quiz levels. Kind coverage is mandatory, and it is not 100%.
 
 Evaluation is a second ship block. A passing quiz does not advance on any kind, a failing quiz becomes completed when the mentor presses **Avançar**, and a check-in level can be completed with no submission. The review screen has no fail decision. **0 of 5 kinds** match pass/fail to `pass_rule` / `check_in_kind`.
+
+Stripe test mode is a third. No test charge was made from this VM. The charges already in the database are not linked to a student (`profile_id` null on all 6 subscriptions and all 6 payments), so the paywall cannot treat them as access. Do not switch Stripe from test to live on this branch.
 
 Recommended order when someone is ready, still not now:
 
