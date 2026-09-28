@@ -26,6 +26,7 @@ Those three are fixed on `cursor/neuma-stripe-e2e-audit-3f45` and are **not** li
 - Migrations through billing are already on the live database. `0038` is **not** applied: a student session can still `SELECT` `correct_option_id`.
 - Live RLS round-trips (rolled back) confirm the student write no-op, the quiz-key leak, the stray-active-node approve, and the paywall read. `finance_settings.paywall_start_at` is **`2026-09-01T00:00:00Z`**, not null. Students see 0 rows, so the cutoff does not bind.
 - Browser click-through of either role: still not done. Blockers are listed in Real flow tests.
+- **Level kinds are not 100%.** Live enums are `practice`, `call`, `milestone`, `lesson`, `resource`. Quiz is a pass rule, not a kind. **0/5 kinds** finish every gate the editor can set. 11 of 25 editor states pass. Coverage of every kind is mandatory, so this alone keeps the verdict at do-not-ship. Detail is under Real flow tests → Level kinds.
 
 `NEUMA_BILLING_ENABLED` defaults off. Turning the flag on in production without `0035`+`0036`, a Stripe webhook secret, and the service role key does not “turn on billing”. It either grandfather-opens the app (cutoff null) or breaks checkout.
 
@@ -39,6 +40,7 @@ Those three are fixed on `cursor/neuma-stripe-e2e-audit-3f45` and are **not** li
 | Reachable screens + primary CTAs | **100% of screens** | Every `page.tsx` has its primary actions and a verdict. Dense client tools (metronome, chord builders) are one row each: they are local UI, not server flows. |
 | End-to-end code trace (student + mentor flows in the brief) | **100% of the named steps** | Breaks are called out in the flow section. |
 | Live database role loops | **Done, rolled back** | Mentor ↔ student cycles for paths, four pass rules, check-in, feedback, isolation, extend, and the paywall read. See Real flow tests. |
+| Level kinds × gates | **0/5 kinds fully working** | 60/60 stored combinations (5 kinds × 4 pass rules × 3 check-in kinds) ran on the live database and were rolled back. 11/25 editor-reachable states pass. |
 | Live browser E2E | **0%** | No GoTrue session and no Stripe keys. Playwright smoke was not run. Local Docker/Supabase CLI is not available. |
 | Typecheck | Pass | `tsc --noEmit` and `next build` TypeScript step. |
 | Lint | Fail (pre-existing) | `eslint .`: 56 errors, 10 warnings. Edited files are clean. |
@@ -137,6 +139,79 @@ Second rolled-back session, same live database, mentor then student. Cleanup aft
 
 If a check-in is already `pending`, prolonging also leaves it `pending` (row 19). The toast still says the feedback was sent.
 
+### Level kinds — every type must be 100%
+
+Isaque’s bar for this pass: every node/level kind, and every `pass_rule` / `check_in_kind` combination, has to work end to end (student complete, and the mentor side when the gate needs it). A kind that misses any of those is **FAIL**. Kind coverage is mandatory for a ship recommendation.
+
+There is no node kind called `quiz`. The live enums are:
+
+| Enum | Values on the live database |
+| --- | --- |
+| `node_kind` | `practice`, `call`, `milestone`, `lesson`, `resource` |
+| `node_pass_rule` | `mentor`, `quiz`, `check_in`, `none` |
+| `check_in_kind` | `video`, `text`, `call` |
+
+Defaults (`defaultPassRule` / `defaultCheckInKind` in `lib/nodes/pass-rule.ts`): practice → `check_in` / `video`; lesson and resource → `none`; call and milestone → `mentor`. The editor (`node-gate-fields.tsx`) offers all four pass rules on every kind. Check-in type is only **Vídeo** or **Texto**, and only when the pass rule is `check_in`. `parseCheckInKind` stores `null` for every other rule, and a posted value of `call` is dropped: practice falls back to `video`, every other kind falls back to `text`.
+
+The player picks a layout by **kind**, then `CheckInActions` looks at the pass rule (`student-node-player.tsx`):
+
+| Kind | Layout | What the student can press |
+| --- | --- | --- |
+| `lesson`, `resource` | `RecordingLayout` | `none` → **Marcar como visto**. `check_in` → **Confirmar que concluíste**. `quiz` and `mentor` → no complete button. `resource` uses the same layout and the label “Aula”. |
+| `practice` | `PracticeLayout` | Same actions, with **Fazer check-in em vídeo** / **em texto**. |
+| `call` | `SessionLayout` | Cal.com booking only. No mark-seen, no check-in, no quiz, for every pass rule. |
+| `milestone` | `CheckpointLayout` | **Abrir quiz** always. No mark-seen and no check-in. The quiz unlocks the next level only when `pass_rule=quiz`. |
+
+`check_in_kind` other than `text` is rendered as a video check-in (`check_in_kind !== "text"`). On `/checkins/new`, `parseCheckInKind` runs again, so a stored `call` becomes text on lesson, resource, call, and milestone, and video on practice. The level button and the form then disagree.
+
+**Fully working** here means: the screen for that kind exposes the actor who is supposed to finish the gate, that write sticks on the **live** schema (the audit-branch helper is not deployed), and the path is left with exactly one `active` node. Reproducing a stuck level is **FAIL**.
+
+#### Live session
+
+One transaction on project `gkxvlduobwvwarqfxyuh`, then `ROLLBACK`. Throwaway mentor `audit-kinds-mentor-3f45@example.invalid` and student `audit-kinds-student-3f45@example.invalid`. One path per combination: the level under test `active`, the next level `locked`. Student session, then mentor session. Follow-up read: `users_left = 0`.
+
+60 rows = 5 kinds × 4 pass rules × 3 check-in kinds (`video`, `text`, `call`), including states the editor will not save.
+
+| Check | Result |
+| --- | --- |
+| Insert of every kind, every pass rule, every check-in kind | 60/60, `insert_fail = 0` |
+| Student `SELECT` of the active level | 60/60 visible |
+| Student `UPDATE nodes SET status=completed` | **60/60 wrote 0 rows**, status stayed `active` |
+| Quiz rows (`pass_rule=quiz`, 15) | Student read `correct_option_id = b` on 15/15. Attempt insert 15/15. Unlock write still 0. |
+| Check-in rows (`pass_rule=check_in`, 15, including `kind=call`) | First insert 15/15, second insert 15/15, student self-approve 0/15 |
+| Mentor complete + activate next + lock other non-completed siblings | **60/60** `mentor=ok`, `active_count=1`, map `1:completed,2:active` |
+
+The 60 detail lines are the same shape, so they are not repeated row by row. Representative: `lesson|none|video` → visible 1, student update 0, status `active`, mentor `1:completed,2:active`. `milestone|quiz|video` → same, plus `quiz_key=b` and `quiz_attempt=inserted`. `practice|check_in|call` → both check-ins `inserted`, self-approve 0, mentor map the same.
+
+RLS does not cap check-ins at one video. The second insert succeeded for video, text, and call on every kind. The one-slot rule is only in `lib/checkins/allowance.ts`, and it cannot be raised here because `nodes.week_extensions` does not exist (see Prolongar prazo).
+
+#### Editor-reachable states (the ship matrix)
+
+These are the combinations the mentor can save. **PASS** count: **11/25**. **Kind count at 100%: 0/5.**
+
+| Kind | `none` (Visto) | `quiz` | `check_in` / `video` | `check_in` / `text` | `mentor` | Kind |
+| --- | --- | --- | --- | --- | --- | --- |
+| `lesson` (default `none`) | **FAIL** — button **Marcar como visto** posts `markNodeSeen`; live update 0 rows, level stays active | **FAIL** — this layout has no quiz. Attempt can be stored only by hitting the quiz tables directly. Unlock write 0. Key readable. | **PASS** — button opens `/checkins/new`, insert sticks, student cannot approve, mentor leaves `1:completed,2:active` | **PASS** — same loop, text copy | **PASS** — no student complete button (correct). Mentor advance leaves one active node. | **FAIL** |
+| `resource` (default `none`, same screen as lesson) | **FAIL** — same write 0 | **FAIL** — no quiz on this layout; unlock 0; key readable | **PASS** — same check-in loop as lesson | **PASS** | **PASS** — mentor advance | **FAIL** |
+| `practice` (default `check_in` / `video`) | **FAIL** — **Marcar como visto** is shown; write 0 | **FAIL** — no quiz on `PracticeLayout`; unlock 0; key readable | **PASS** — **Fazer check-in em vídeo**, insert, mentor finishes the level | **PASS** — **Fazer check-in em texto** | **PASS** — mentor advance | **FAIL** |
+| `call` (default `mentor`) | **FAIL** — `SessionLayout` has no mark-seen control, and the write would be 0 anyway | **FAIL** — no quiz control. Direct attempt insert works; unlock 0; key readable | **FAIL** — no check-in button. A raw insert into `check_ins` succeeds, so the database would take a submission the screen never offers | **FAIL** — same missing control | **PASS** — mentor advance. The student surface is the Cal.com booker; that widget was not opened in a browser (no Cal session in this VM). | **FAIL** |
+| `milestone` (default `mentor`) | **FAIL** — `CheckpointLayout` has no **Marcar como visto**. Write 0. | **FAIL** — **Abrir quiz** is on screen, the 100% attempt is stored, the key `b` is readable, and the level stays `active` | **FAIL** — no check-in button. Raw insert succeeds. | **FAIL** — same missing control | **PASS** — mentor advance. The quiz copy says the score does not block the path, which matches `pass_rule=mentor`. | **FAIL** |
+
+`check_in_kind=call` is a live enum value and the insert of `check_ins.kind='call'` succeeded on all five kinds. It is **FAIL** on every kind: the editor cannot save it, and a hand-written `call` is shown as video on the level while `/checkins/new` rewrites it to text (or to video, on practice). That is five more failed states on top of the 25.
+
+#### What the audit-branch helper does not repair
+
+Deploying `completeCurrentAndActivateNext` (service-role fallback) plus migration `0038` would move the student write for gates that already have a button. These states stay **FAIL** after that, because the layout never offers the control:
+
+- `call` + `none`, `call` + `quiz`, `call` + `check_in` (video or text)
+- `milestone` + `none`, `milestone` + `check_in` (video or text)
+- `lesson`, `resource`, and `practice` + `quiz`
+- `check_in_kind=call` on every kind
+
+`milestone` + `quiz` would still be **FAIL** until `0038` is applied, because the student session can read `correct_option_id` and the helper would then honor a perfect score.
+
+**Kind coverage for ship: 0/5. Verdict stays do-not-ship.**
+
 ### How to read the four gates
 
 | Gate | Who may advance | Live result |
@@ -146,13 +221,15 @@ If a check-in is already `pending`, prolonging also leaves it `pending` (row 19)
 | `check_in` | Student submits; mentor approves | Submit **PASS**. Student cannot approve (**PASS**). Mentor approve with the old statement list can leave two `active` nodes (**FAIL**). The helper leaves one (**PASS**, not deployed). |
 | `mentor` | Mentor only | Student write **PASS** as a denial. Mentor complete **PASS**. |
 
+The four gates are not enough on their own. The player mounts the control from the **kind**. `call` never shows mark-seen, check-in, or quiz. `milestone` only shows the quiz. `lesson`, `resource`, and `practice` never show the quiz. The full matrix is **Level kinds** above.
+
 ### 1:1 invite redeem
 
 Not executed. `redeemOneToOneInvite` calls `auth.admin.createUser` and then Stripe. Doing that here would create a real auth user and a real Checkout session. The code path is unchanged: an email that already exists returns “Entra e abre o link do convite outra vez”, and the page has no logged-in branch. The pedagogical 1:1 loop (check-in → feedback → mentor advance) is rows 10–16 above.
 
 ### Browser
 
-**Not run.** Opening `/login` without a session does not exercise these loops. A faithful browser pass still needs a staging project or a local GoTrue, two passwords, `NEUMA_BILLING_ENABLED=true`, and the branch deployed there so the helper and `0038` are what the buttons call. Until then, rows 3, 5, 7, 12, 17, 19, and 20 are the live failures.
+**Not run.** Opening `/login` without a session does not exercise these loops. A faithful browser pass still needs a staging project or a local GoTrue, two passwords, `NEUMA_BILLING_ENABLED=true`, and the branch deployed there so the helper and `0038` are what the buttons call. Until then, rows 3, 5, 7, 12, 17, 19, and 20 are the live failures, and the Level kinds matrix stays **0/5**.
 
 ---
 
@@ -621,6 +698,7 @@ Student
 6. Practice check-in with a short video lands `pending` on the mentor queue.
 7. Call: book, see the row in `/studio/calendar`, cancel, see it disappear.
 8. After mentor approval, the next node is the only `active` node.
+9. Repeat the level once per kind (`lesson`, `resource`, `practice`, `call`, `milestone`) and once per pass rule the editor can save (`none`, `quiz`, `check_in` video, `check_in` text, `mentor`). Today this matrix is **0/5 kinds**. `call` and `milestone` still have no control for `none` / `check_in`, and only `milestone` shows the quiz, so those screens stay **FAIL** even after the helper is deployed.
 
 Mentor
 
@@ -642,7 +720,9 @@ Failure drills: webhook secret wrong (400), service role removed (student mark-s
 
 **Do not merge to `main`.** **Do not deploy.**
 
-The audit branch is safe to review. It does not flip `NEUMA_BILLING_ENABLED`, does not change Vercel, and does not apply migrations. Shipping `neuma-stripe` as-is would leave student lesson/quiz completion as a silent no-op. That no-op was reproduced on the live database: a student update of `nodes` changes 0 rows. The database paywall cutoff is already `2026-09-01T00:00:00Z` and students cannot read it. Shipping the audit branch without `0038` and a live pass would still leave H1, H2, H5, and the webhook fail-open in place.
+The audit branch is safe to review. It does not flip `NEUMA_BILLING_ENABLED`, does not change Vercel, and does not apply migrations. Shipping `neuma-stripe` as-is would leave student lesson/quiz completion as a silent no-op. That no-op was reproduced on the live database: a student update of `nodes` changes 0 rows, on all 60 kind × pass rule × check-in kind combinations. The database paywall cutoff is already `2026-09-01T00:00:00Z` and students cannot read it. Shipping the audit branch without `0038` and a live pass would still leave H1, H2, H5, and the webhook fail-open in place.
+
+Level kinds are a separate ship block. **0 of 5 kinds** (`lesson`, `resource`, `practice`, `call`, `milestone`) pass every gate the editor can set. 11 of 25 editor states pass; `check_in_kind=call` fails on every kind. The helper on this branch does not add the missing quiz, mark-seen, or check-in controls on `call`, `milestone`, and non-milestone quiz levels. Kind coverage is mandatory, and it is not 100%.
 
 Recommended order when someone is ready, still not now:
 
