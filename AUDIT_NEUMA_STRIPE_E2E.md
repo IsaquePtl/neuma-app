@@ -746,7 +746,7 @@ Student
 2. Grandfather: an older account still enters `/home`. A brand-new account without a subscription does not.
 3. `past_due` inside grace sees the banner and can open **Actualizar cartão**. After grace, `/home` redirects to `/subscrever`.
 4. Path map → lesson **Marcar como visto** → node becomes `completed` and the next becomes `active` (refresh and a second browser).
-5. Quiz below 60 stays put. Quiz at or above 60 advances. View-source / a direct `node_quiz_questions` select from the student session returns **no** `correct_option_id` (proves `0038`).
+5. Quiz below 60 stays put. Quiz at or above 60 advances. A score of 70 against a threshold of 80 stays put and the headline must not say the attempt passed. View-source / a direct `node_quiz_questions` select from the student session returns **no** `correct_option_id` (proves `0038`). Mentor **Avançar** on a failed quiz must leave the level `active` if the quiz rule is the evaluation.
 6. Practice check-in with a short video lands `pending` on the mentor queue.
 7. Call: book, see the row in `/studio/calendar`, cancel, see it disappear.
 8. After mentor approval, the next node is the only `active` node.
