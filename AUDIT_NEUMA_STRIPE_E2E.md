@@ -2,7 +2,7 @@
 
 Branch audited: `neuma-stripe` (base). Fixes, if any, live on `cursor/neuma-stripe-e2e-audit-3f45`.
 
-Date: 2026-09-28. Method: full route manifest from `next build`, code trace of every `page.tsx` / route handler / layout gate, plus the server actions those screens call. No production credentials were present in this environment (no `apps/web/.env.local`), so nothing was clicked against a real Supabase or Stripe account.
+Date: 2026-09-28. Method: full route manifest from `next build`, code trace of every page, then real role round-trips against the live Neuma App database (project `gkxvlduobwvwarqfxyuh`) inside a single transaction that was rolled back. A follow-up read confirmed zero leftover audit users, the quiz SELECT policy still present, and `paywall_start_at` restored. No browser session was possible: this environment has no app `.env.local`, no Stripe keys, and no GoTrue passwords, and the test did not commit users or Checkout sessions.
 
 There is no separate `admin` role. Studio **is** the mentor/admin surface (`profiles.role` is only `mentor` | `student`).
 
@@ -23,8 +23,9 @@ Those three are fixed on `cursor/neuma-stripe-e2e-audit-3f45` and are **not** li
 - Journey editor **Guardar** toasts “Alterações guardadas” and writes nothing.
 - Approving an agent `path_edit` proposal marks it applied and edits nothing.
 - Lint is red (56 errors / 10 warnings) on code that already existed on `neuma-stripe`.
-- Migrations `0035`–`0038` must be applied before any of the billing or quiz-key behaviour is real. `0038` is new on the fix branch.
-- Zero live click-through of either role.
+- Migrations through billing are already on the live database. `0038` is **not** applied: a student session can still `SELECT` `correct_option_id`.
+- Live RLS round-trips (rolled back) confirm the student write no-op, the quiz-key leak, the stray-active-node approve, and the paywall read. `finance_settings.paywall_start_at` is **`2026-09-01T00:00:00Z`**, not null. Students see 0 rows, so the cutoff does not bind.
+- Browser click-through of either role: still not done. Blockers are listed in Real flow tests.
 
 `NEUMA_BILLING_ENABLED` defaults off. Turning the flag on in production without `0035`+`0036`, a Stripe webhook secret, and the service role key does not “turn on billing”. It either grandfather-opens the app (cutoff null) or breaks checkout.
 
@@ -37,12 +38,94 @@ Those three are fixed on `cursor/neuma-stripe-e2e-audit-3f45` and are **not** li
 | Route inventory | **100%** (56/56) | Every route printed by `next build` on this branch is listed below, including redirects, webhooks, manifest, and `_not-found`. |
 | Reachable screens + primary CTAs | **100% of screens** | Every `page.tsx` has its primary actions and a verdict. Dense client tools (metronome, chord builders) are one row each: they are local UI, not server flows. |
 | End-to-end code trace (student + mentor flows in the brief) | **100% of the named steps** | Breaks are called out in the flow section. |
-| Live browser E2E | **0%** | No Supabase URL, anon key, service role, or Stripe key in the cloud env. Playwright smoke exists and was not run. |
+| Live database role loops | **Done, rolled back** | Mentor ↔ student cycles for paths, four pass rules, check-in, feedback, isolation, extend, and the paywall read. See Real flow tests. |
+| Live browser E2E | **0%** | No GoTrue session and no Stripe keys. Playwright smoke was not run. Local Docker/Supabase CLI is not available. |
 | Typecheck | Pass | `tsc --noEmit` and `next build` TypeScript step. |
 | Lint | Fail (pre-existing) | `eslint .`: 56 errors, 10 warnings. Edited files are clean. |
 | Production build | Pass | `next build` (Next.js 16.2.10, Turbopack). Font warning: `Nata Sans` has no fallback metrics. |
 
 Button verdicts: **WORKING** (handler persists or navigates), **CONDITIONAL** (works only in a stated state), **STUB** (control or copy pretends to do something it does not), **BROKEN** (handler runs and the outcome is wrong), **UNREACHABLE** (no control for a supported server path), **DEAD** (no handler). Nothing in the inventory was classified DEAD; the closest cases are STUB and BROKEN.
+
+---
+
+## Real flow tests
+
+These are not a static reading of the handlers. They are `SET ROLE authenticated` sessions on the **live** Neuma database, with `request.jwt.claim.sub` set to a throwaway mentor, a throwaway student, and a second student. The whole script is one transaction ending in `ROLLBACK`. After it returned, a second query showed `users_left = 0`, `profiles_left = 0`, the student quiz policy still installed, and `paywall_start_at` back to `2026-09-01T00:00:00Z`.
+
+What this is: the same RLS the app’s user client hits, including `is_mentor()`, student SELECT-only on `nodes`/`paths`, check-in insert, feedback read, and `finance_settings`. Service-role steps are the table owner (RLS bypass), which is what `createAdminClient()` does.
+
+What this is not: a browser. No screen was clicked. Stripe Checkout, Resend, R2, and Cal.com were not called. The branch’s TypeScript helper was not deployed; the “service role” steps below re-issue the writes that helper performs, on this database, then roll them back.
+
+Product verdict is **PASS** only when the behaviour a user should get actually happened. Reproducing a known bug is **FAIL**.
+
+### Blockers for a browser loop
+
+| Blocker | Evidence |
+| --- | --- |
+| No app env in this VM | No `apps/web/.env.local`. `env` has no `SUPABASE_*` or `STRIPE_*`. |
+| No Docker | `docker info` fails, so `supabase start` cannot boot GoTrue + PostgREST locally. Postgres 16 is installed on the VM and was not needed once the live rolled-back session worked. |
+| No test passwords | Creating a durable `auth.users` row, or a Stripe Checkout session, would write to the live project. That was not done. |
+| Playwright | `e2e/smoke.spec.ts` only checks HTTP status and a redirect to `/login`. It cannot log in. |
+
+### Loop
+
+One path, then a second path. Actors alternate.
+
+1. **Mentor** creates an active path for the student with four levels: lesson `pass_rule=none` (active), milestone `quiz` (locked, pass score 60, one question whose key is `b`), practice `check_in`/`text` (locked), call `mentor` (locked).
+2. **Student** reads the path and tries to mark the lesson seen.
+3. **Mentor** sees the lesson still active and advances it.
+4. **Student** opens the quiz (reads the key, inserts a 100% attempt) and tries to complete the node.
+5. **Service role** (the audit-branch helper) completes the quiz node and activates practice.
+6. **Student** sees practice active, inserts a text check-in, tries to approve it.
+7. **Mentor** runs the old approve (complete current, activate next, no sibling lock) against a stray active node, then the new helper, and writes feedback.
+8. **Student** reads the feedback and tries to complete the call.
+9. **Mentor** completes the call and the path.
+10. **Student** reads the path as completed.
+11. **Mentor** creates a second two-lesson path. **Student** fails both self-advances. **Service role** completes both. **Another student** sees neither path.
+12. **Mentor** “extends” the practice node. The check-in status is not touched.
+
+### Results
+
+| # | Flow | Steps | Expected | Actual | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Percurso create | Mentor session inserts path + 4 nodes | 4 nodes, node 1 `active` | `4 nodes`, first `active` | **PASS** |
+| 2 | Student sees the path | Student `SELECT` on own `paths`/`nodes` | 4 nodes | `4` | **PASS** |
+| 3 | Pass rule `none` | Student `UPDATE nodes SET status=completed` on the active lesson (what **Marcar como visto** does) | Node becomes `completed`, next becomes `active` | `updated=0 status=active` | **FAIL** |
+| 4 | Mentor repair | Mentor updates lesson `completed`, quiz `active`, others `locked` | `1:completed,2:active,3:locked,4:locked` | that map | **PASS** |
+| 5 | Quiz key | Student `SELECT correct_option_id` | No row / no key | `visible=1 key=b` | **FAIL** |
+| 6 | Quiz attempt stored | Student `INSERT` into `node_quiz_attempts` score 100 | Row inserted (RLS allows it) | Insert succeeded (later steps ran) | **PASS** |
+| 7 | Pass rule `quiz` | Student `UPDATE` of the quiz node after the passing attempt | Node `completed`, practice `active` | `updated=0 status=active` | **FAIL** |
+| 8 | Service-role helper | Owner update: quiz `completed`, practice `active`, call `locked` | That map | `1:completed,2:completed,3:active,4:locked` | **PASS** (this is the branch fix; it is not deployed) |
+| 9 | Student sees the next level | Student reads practice | `active` | `active` | **PASS** |
+| 10 | 1:1 check-in | Student inserts `check_ins` kind `text`, status `pending` | Pending row | `pending` | **PASS** |
+| 11 | Student self-approve | Student `UPDATE check_ins SET status=approved` | Denied | `updated=0 status=pending` | **PASS** (denial is correct) |
+| 12 | Old mentor approve | Quiz node forced back to `active`, then mentor completes practice and activates the call only | One active node | `active_count=2` map `1:completed,2:active,3:completed,4:active` | **FAIL** |
+| 13 | New helper + feedback | Lock every non-completed sibling except the call; mentor inserts `feedbacks.notes='boa pratica'`, `approved=true`; check-in `approved` | Exactly 1 active node | `active_count=1` | **PASS** (helper not deployed) |
+| 14 | Student reads avaliação | Student joins `feedbacks` to own check-in and reads the call | Notes visible, call `active` | `boa pratica / saw=active` | **PASS** |
+| 15 | Pass rule `mentor` | Student tries to complete the call | Stays `active` | `write=0` and status stays `active` | **PASS** (denial is correct) |
+| 16 | Mentor finishes the path | Mentor sets call `completed` and path `completed`; student reads the path | `completed` | `completed` | **PASS** |
+| 17 | Second path, both `none` gates | Student write on A returns 0; helper activates B; student sees B and write on B returns 0; helper completes the path | Student blocked twice, path `completed` only after the helper | `writeA=0 sawB=active writeB=0 path=completed` | **FAIL** for the student button, **PASS** for the undeployed helper |
+| 18 | Isolation | Second student selects both path ids | 0 | `0` | **PASS** |
+| 19 | Prolongar prazo | Mentor sets the practice node `active` and `due_date = today+7`, and does not touch `check_ins` (what `extendLevelWeek` does) | Check-in leaves the pending queue | `node=active check_in=pending` | **FAIL** |
+| 20 | Paywall cutoff | Set `paywall_start_at` inside the transaction; student counts rows; owner reads the value | Student sees the cutoff the app is supposed to enforce | `student_rows=0 db=2020-01-01T00:00:00Z` during the test. After rollback the live value is `2026-09-01T00:00:00Z` | **FAIL** |
+| 21 | `0038` dry-run | `DROP POLICY` student quiz select, student counts questions, then rollback | 0 rows | `0`, and the policy is present again after rollback | **PASS** for the migration text. **Not applied.** |
+
+### How to read the four gates
+
+| Gate | Who may advance | Live result |
+| --- | --- | --- |
+| `none` | Student, **Marcar como visto** | **FAIL.** Update matches 0 rows and raises nothing. The lesson stays active. Mentor advance in the next step **PASS**. |
+| `quiz` | Student, score ≥ `pass_score` (60) | Attempt **PASS**. Advance **FAIL** for the same RLS reason. The answer key is readable (**FAIL**). |
+| `check_in` | Student submits; mentor approves | Submit **PASS**. Student cannot approve (**PASS**). Mentor approve with the old statement list can leave two `active` nodes (**FAIL**). The helper leaves one (**PASS**, not deployed). |
+| `mentor` | Mentor only | Student write **PASS** as a denial. Mentor complete **PASS**. |
+
+### 1:1 invite redeem
+
+Not executed. `redeemOneToOneInvite` calls `auth.admin.createUser` and then Stripe. Doing that here would create a real auth user and a real Checkout session. The code path is unchanged: an email that already exists returns “Entra e abre o link do convite outra vez”, and the page has no logged-in branch. The pedagogical 1:1 loop (check-in → feedback → mentor advance) is rows 10–16 above.
+
+### Browser
+
+**Not run.** Opening `/login` without a session does not exercise these loops. A faithful browser pass still needs a staging project or a local GoTrue, two passwords, `NEUMA_BILLING_ENABLED=true`, and the branch deployed there so the helper and `0038` are what the buttons call. Until then, rows 3, 5, 7, 12, 17, 19, and 20 are the live failures.
 
 ---
 
@@ -77,7 +160,7 @@ Not a product sign-off. Code-only, typecheck-clean, not exercised in a browser.
 
 - **Area:** Billing gate, `(student)/layout.tsx` → `getAccessState()`.
 - **Evidence:** `lib/billing/access.ts` `paywallStartAt()` used `createClient()` against `finance_settings`. `0035_billing.sql` grants mentor `ALL` on that table and no student policy. A denied read returns null, and a null cutoff is `reason: "grandfathered"` (`access.ts`, and the same rule in `has_app_access()`).
-- **Impact:** `NEUMA_BILLING_ENABLED=true` plus a cutoff written in the database does not block anyone. Only `NEUMA_PAYWALL_START_AT` (env) worked. `.env.example` says production reads the database setting.
+- **Impact:** Confirmed on the live database. `paywall_start_at` is `2026-09-01T00:00:00Z`. A student session reads **0 rows**. The service role reads the date. With `NEUMA_BILLING_ENABLED=true` and no env override, accounts created on or after 1 Sep 2026 are supposed to hit the paywall and do not. Only `NEUMA_PAYWALL_START_AT` (env) works today. `.env.example` says production reads the database setting.
 - **Fix:** Applied (admin read). There is still **no Studio control** that calls `updateFinanceSetting` — the cutoff is SQL or env, not a button. With the seeded value `'null'::jsonb`, billing-on still lets every account in. That part is intentional (`0035` comment: null cutoff keeps production unchanged).
 
 ### High
@@ -499,7 +582,7 @@ Objects the billing code reads are created in `0035`/`0036`. No missing table na
 
 ## Live E2E still needed
 
-Do this on a **preview** with migrations `0035`–`0038` applied, Stripe **test** mode, `NEUMA_BILLING_ENABLED=true`, and a cutoff in the past (`NEUMA_PAYWALL_START_AT` or `finance_settings.paywall_start_at`). Use one new student and one mentor. Do not point webhooks at production.
+The database role loops in **Real flow tests** are done and were rolled back. What is still missing is a browser session and Stripe. Do this on a **preview** with migrations `0035`–`0038` applied, Stripe **test** mode, `NEUMA_BILLING_ENABLED=true`, and the audit branch deployed so the buttons call the helper. The live database already has `paywall_start_at = 2026-09-01T00:00:00Z`; students cannot read it until the access fix is deployed. Use one new student and one mentor. Do not point webhooks at production.
 
 Student
 
@@ -532,7 +615,7 @@ Failure drills: webhook secret wrong (400), service role removed (student mark-s
 
 **Do not merge to `main`.** **Do not deploy.**
 
-The audit branch is safe to review. It does not flip `NEUMA_BILLING_ENABLED`, does not change Vercel, and does not apply migrations. Shipping `neuma-stripe` as-is would leave student lesson/quiz completion as a silent no-op and would leave the database paywall cutoff unread. Shipping the audit branch without `0038` and a live pass would still leave H1, H2, H5, and the webhook fail-open in place.
+The audit branch is safe to review. It does not flip `NEUMA_BILLING_ENABLED`, does not change Vercel, and does not apply migrations. Shipping `neuma-stripe` as-is would leave student lesson/quiz completion as a silent no-op. That no-op was reproduced on the live database: a student update of `nodes` changes 0 rows. The database paywall cutoff is already `2026-09-01T00:00:00Z` and students cannot read it. Shipping the audit branch without `0038` and a live pass would still leave H1, H2, H5, and the webhook fail-open in place.
 
 Recommended order when someone is ready, still not now:
 
