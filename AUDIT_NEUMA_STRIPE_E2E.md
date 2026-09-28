@@ -27,6 +27,7 @@ Those three are fixed on `cursor/neuma-stripe-e2e-audit-3f45` and are **not** li
 - Live RLS round-trips (rolled back) confirm the student write no-op, the quiz-key leak, the stray-active-node approve, and the paywall read. `finance_settings.paywall_start_at` is **`2026-09-01T00:00:00Z`**, not null. Students see 0 rows, so the cutoff does not bind.
 - Browser click-through of either role: still not done. Blockers are listed in Real flow tests.
 - **Level kinds are not 100%.** Live enums are `practice`, `call`, `milestone`, `lesson`, `resource`. Quiz is a pass rule, not a kind. **0/5 kinds** finish every gate the editor can set. 11 of 25 editor states pass. Coverage of every kind is mandatory, so this alone keeps the verdict at do-not-ship. Detail is under Real flow tests → Level kinds.
+- **Evaluation does not follow the level type.** On every kind, a passing quiz stays put, a failing quiz can still be advanced by the mentor, a check-in can be skipped with no submission, and the screen has no “did not pass” review. **0/5 kinds** are evaluated correctly. Detail is under Real flow tests → Evaluation by level type.
 
 `NEUMA_BILLING_ENABLED` defaults off. Turning the flag on in production without `0035`+`0036`, a Stripe webhook secret, and the service role key does not “turn on billing”. It either grandfather-opens the app (cutoff null) or breaks checkout.
 
@@ -41,6 +42,7 @@ Those three are fixed on `cursor/neuma-stripe-e2e-audit-3f45` and are **not** li
 | End-to-end code trace (student + mentor flows in the brief) | **100% of the named steps** | Breaks are called out in the flow section. |
 | Live database role loops | **Done, rolled back** | Mentor ↔ student cycles for paths, four pass rules, check-in, feedback, isolation, extend, and the paywall read. See Real flow tests. |
 | Level kinds × gates | **0/5 kinds fully working** | 60/60 stored combinations (5 kinds × 4 pass rules × 3 check-in kinds) ran on the live database and were rolled back. 11/25 editor-reachable states pass. |
+| Evaluation vs `pass_rule` | **0/5 kinds** | Pass, fail, and advance were run per kind (quiz threshold, check-in review, mentor gate, mark-seen, session note). See Evaluation by level type. |
 | Live browser E2E | **0%** | No GoTrue session and no Stripe keys. Playwright smoke was not run. Local Docker/Supabase CLI is not available. |
 | Typecheck | Pass | `tsc --noEmit` and `next build` TypeScript step. |
 | Lint | Fail (pre-existing) | `eslint .`: 56 errors, 10 warnings. Edited files are clean. |
@@ -211,6 +213,56 @@ Deploying `completeCurrentAndActivateNext` (service-role fallback) plus migratio
 `milestone` + `quiz` would still be **FAIL** until `0038` is applied, because the student session can read `correct_option_id` and the helper would then honor a perfect score.
 
 **Kind coverage for ship: 0/5. Verdict stays do-not-ship.**
+
+### Evaluation by level type
+
+The student has to be judged by the rule on that level, and pass or fail has to move the path the same way. The right instrument for each `pass_rule`:
+
+| Rule | Pass | Fail | Who |
+| --- | --- | --- | --- |
+| `quiz` | Score ≥ `pass_score` (60 when empty) stores the attempt and unlocks the next level | Score below the threshold stores the attempt and leaves the level `active` | Student. Only `milestone` even opens `/path/:id/quiz`. |
+| `check_in` | Mentor approves the submission (`video` or `text` matching `check_in_kind`) and the next level becomes the only `active` one | Mentor marks `needs_revision`, the level stays `active`, the student can read the note | Student submits. Mentor reviews. A missing submission is not a pass. |
+| `mentor` | Mentor advances. A quiz score, a session note, or **Marcar como visto** must not pass the level | Student cannot complete it | Mentor. |
+| `none` | **Marcar como visto** completes the level | There is no score. Leaving it unmarked leaves it `active` | Student. |
+| Call / session note | A `level_feedbacks` row is commentary. It is not a pass unless `pass_rule` says so | The note alone leaves the level `active` | Mentor writes it. Default for `call` is still the mentor gate. |
+
+`submitQuizAttempt` (`lib/actions/quiz.ts`) computes `Math.round(correct / total * 100)` and sets `unlocked` only when `pass_rule=quiz`, the node and path are `active`, and `score >= threshold`. That comparison was executed for the boundary values: 1/2 → 50, hold; 3/5 → 60, pass; 59 hold; 60 pass; 70 against a stored 80, hold; 80 pass; 100 on `pass_rule=mentor`, hold. A stored threshold of 0 passes a score of 0, which is what the editor allows.
+
+The result headline does not use that threshold. `getQuizScoreTier` in `checkpoint-quiz-form.tsx` paints 60–85 as “Bom trabalho” and above 85 as “Excelente”. A 70 against `pass_score=80` is a fail and still says “Bom trabalho”. When the quiz is not the gate, a score under 60 still says “Precisas de 60% para avançar”, because the action always returns `pass_score: threshold`.
+
+The quiz route redirects every non-milestone kind back to the level (`path/[nodeId]/quiz/page.tsx`, `node.kind !== "milestone"`). `lesson`, `resource`, `practice`, and `call` cannot be quiz-evaluated even when `pass_rule=quiz`.
+
+`markNodeSeen` refuses anything other than `pass_rule=none`. `submitCheckIn` refuses a node that is not `check_in`. `submitFeedback` approves and then calls `completeCurrentAndActivateNext` without reading `pass_rule`. The level screen’s only decisions are **Avançar nível** (`approved=on`, or `advanceLevel` when there is no check-in) and **Prolongar prazo**. Nothing in the UI sends `needs_revision`. `createLevelFeedback` inserts a session note and does not change `nodes.status`. No screen calls it.
+
+#### Live Admin ↔ Student session
+
+One transaction, then `ROLLBACK`. Mentor `audit-eval-mentor-3f45@example.invalid`, student `audit-eval-student-3f45@example.invalid`. Each case is its own path (level `active`, next `locked`). Follow-up: `users_left = 0`. The same detail came back for `lesson`, `resource`, `practice`, `call`, and `milestone`.
+
+| Case | What the rule requires | Actual on all 5 kinds | Verdict |
+| --- | --- | --- | --- |
+| Quiz 59, threshold 60 | Stay `active`, next `locked` | `status=active next=locked`. Student also read `key=b` | Hold is right. The key is a **FAIL** |
+| Quiz 60, threshold 60 | Student pass unlocks the next level | `upd=0 status=active next=locked key=b` | **FAIL** |
+| Quiz 70, threshold 80 | Stay `active`. The 70 must not be written as a pass | `after_attempt=active student_upd=0` | **PASS** for the hold |
+| Quiz 59, then mentor **Avançar** | A fail stays a fail | `level=completed next=active` | **FAIL** |
+| Check-in video submitted | `pending`, level stays `active` | `active/pending` | **PASS** |
+| Mentor fail (`needs_revision`, note, `approved=false`) | Level stays `active`, student reads the note | `needs_revision note=repetir o trecho approved=false node=active` | **PASS** for the writes. The screen never sends this, so the product path is **FAIL** |
+| Mentor approves a text check-in | One `active` node, student reads the note, student cannot self-approve | `student_self_approve=0 map=1:completed,2:active active=1 note=passou` | **PASS** for the database loop. `call` and `milestone` have no check-in button, so the student cannot start it |
+| Check-in gate, zero submissions, mentor advances | Must not pass | `0 level=completed next=active` | **FAIL** |
+| `none` / mark seen | Student completes the level | `upd=0 status=active` | **FAIL** |
+| `mentor` gate, quiz score 100 | Score must not pass | `score100_upd=0 status_after_score=active` | **PASS** |
+| Session note on that mentor gate | Note is not a pass; student can read it; mentor advance then opens the next level | `status_after_note=active student_read_note=nota da sessao next_after_mentor=active` | Note behaviour **PASS**. No screen writes the note, so call/session feedback as an evaluation is **FAIL** |
+
+#### Per kind
+
+| Kind | Assessment the screen actually gives | Verdict |
+| --- | --- | --- |
+| `lesson` (default `none`) | **Marcar como visto** does not persist. Quiz URL bounces away. Check-in pass/fail writes work, and the mentor can also pass the level with no check-in. | **FAIL** |
+| `resource` (same screen) | Same as `lesson`. | **FAIL** |
+| `practice` (default video check-in) | Submit stays pending. Approve advances and the student reads the note. There is no fail button. **Avançar** with no submission still completes the level. | **FAIL** |
+| `call` (default `mentor`) | Student score and mark-seen do not pass. A session note does not pass, and the student can read it once it exists. The mentor can pass the call with no note and no booking. Quiz and check-in are not on the layout. | **FAIL** |
+| `milestone` (default `mentor`; the only quiz screen) | 59 holds and 70 against 80 holds. 60 does not unlock. The key is readable. A 59 becomes `completed` when the mentor advances. The headline can praise a score the threshold failed. | **FAIL** |
+
+**Evaluation coverage: 0/5 kinds. Verdict stays do-not-ship.**
 
 ### How to read the four gates
 
@@ -723,6 +775,8 @@ Failure drills: webhook secret wrong (400), service role removed (student mark-s
 The audit branch is safe to review. It does not flip `NEUMA_BILLING_ENABLED`, does not change Vercel, and does not apply migrations. Shipping `neuma-stripe` as-is would leave student lesson/quiz completion as a silent no-op. That no-op was reproduced on the live database: a student update of `nodes` changes 0 rows, on all 60 kind × pass rule × check-in kind combinations. The database paywall cutoff is already `2026-09-01T00:00:00Z` and students cannot read it. Shipping the audit branch without `0038` and a live pass would still leave H1, H2, H5, and the webhook fail-open in place.
 
 Level kinds are a separate ship block. **0 of 5 kinds** (`lesson`, `resource`, `practice`, `call`, `milestone`) pass every gate the editor can set. 11 of 25 editor states pass; `check_in_kind=call` fails on every kind. The helper on this branch does not add the missing quiz, mark-seen, or check-in controls on `call`, `milestone`, and non-milestone quiz levels. Kind coverage is mandatory, and it is not 100%.
+
+Evaluation is a second ship block. A passing quiz does not advance on any kind, a failing quiz becomes completed when the mentor presses **Avançar**, and a check-in level can be completed with no submission. The review screen has no fail decision. **0 of 5 kinds** match pass/fail to `pass_rule` / `check_in_kind`.
 
 Recommended order when someone is ready, still not now:
 
