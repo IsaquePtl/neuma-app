@@ -1,6 +1,7 @@
 import { cache } from "react";
 
 import { getCurrentProfile, getSessionUser } from "@/lib/auth/session";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type {
   BillingPlan,
@@ -73,14 +74,26 @@ async function paywallStartAt(): Promise<Date | null> {
     if (!Number.isNaN(parsed.getTime())) return parsed;
   }
 
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("finance_settings")
-    .select("value")
-    .eq("key", "paywall_start_at")
-    .maybeSingle();
-
-  const raw = data?.value;
+  // Alunos nao tem SELECT em finance_settings (0035). Sem service role o
+  // cutoff da base fica invisivel e toda a gente cai em grandfathered.
+  let raw: unknown = null;
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("finance_settings")
+      .select("value")
+      .eq("key", "paywall_start_at")
+      .maybeSingle();
+    if (!error) raw = data?.value ?? null;
+  } catch {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("finance_settings")
+      .select("value")
+      .eq("key", "paywall_start_at")
+      .maybeSingle();
+    raw = data?.value ?? null;
+  }
   if (typeof raw !== "string" || !raw) return null;
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? null : parsed;

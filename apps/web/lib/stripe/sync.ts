@@ -392,6 +392,8 @@ export async function syncInvoice(
       : input;
 
   if (!invoice.id) return;
+  // payment_failed / open invoices must not land in the revenue ledger.
+  if (invoice.status !== "paid") return;
 
   const admin = createAdminClient();
   const customerId = idOf(invoice.customer);

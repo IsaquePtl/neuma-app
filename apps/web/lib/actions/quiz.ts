@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { completeCurrentAndActivateNext } from "@/lib/nodes/complete-and-activate";
 import {
@@ -95,17 +96,17 @@ async function revalidateNodePaths(
   }
 }
 
-export async function listQuizQuestions(
-  nodeId: string,
-): Promise<QuizQuestion[]> {
-  const { supabase } = await requireUser();
-  const { data, error } = await supabase
-    .from("node_quiz_questions")
-    .select("id, node_id, order_index, prompt, options, correct_option_id")
-    .eq("node_id", nodeId)
-    .order("order_index", { ascending: true });
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => ({
+function mapQuestions(
+  data: {
+    id: string;
+    node_id: string;
+    order_index: number;
+    prompt: string;
+    options: Json;
+    correct_option_id: string;
+  }[],
+): QuizQuestion[] {
+  return data.map((row) => ({
     id: row.id,
     node_id: row.node_id,
     order_index: row.order_index,
@@ -113,6 +114,49 @@ export async function listQuizQuestions(
     options: parseOptions(row.options),
     correct_option_id: row.correct_option_id,
   }));
+}
+
+/** Mentor editor only. Students must not receive correct_option_id. */
+export async function listQuizQuestions(
+  nodeId: string,
+): Promise<QuizQuestion[]> {
+  const { supabase } = await requireMentor();
+  const { data, error } = await supabase
+    .from("node_quiz_questions")
+    .select("id, node_id, order_index, prompt, options, correct_option_id")
+    .eq("node_id", nodeId)
+    .order("order_index", { ascending: true });
+  if (error) throw new Error(error.message);
+  return mapQuestions(data ?? []);
+}
+
+/**
+ * Answer key lives behind the service role. Students have no SELECT on
+ * node_quiz_questions (0038); the player only receives prompts and options.
+ */
+async function loadQuestionsForStudent(
+  nodeId: string,
+  userId: string,
+): Promise<QuizQuestion[]> {
+  const supabase = await createClient();
+  const { data: node } = await supabase
+    .from("nodes")
+    .select("id, path:paths!inner(student_id)")
+    .eq("id", nodeId)
+    .maybeSingle();
+  const path = Array.isArray(node?.path) ? node?.path[0] : node?.path;
+  if (!node || !path || path.student_id !== userId) {
+    throw new Error("Este check-point não pertence ao teu percurso.");
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("node_quiz_questions")
+    .select("id, node_id, order_index, prompt, options, correct_option_id")
+    .eq("node_id", nodeId)
+    .order("order_index", { ascending: true });
+  if (error) throw new Error(error.message);
+  return mapQuestions(data ?? []);
 }
 
 export async function saveQuizQuestions(
@@ -211,11 +255,12 @@ export async function listMyQuizAttempts(
   return data ?? [];
 }
 
-/** Student-facing: questions without correct answers exposed in the return type used by UI — still returns correct_option_id for client scoring; scoring is also verified server-side. */
+/** Student-facing: prompts and options only. Scoring stays on the server. */
 export async function getQuizForStudent(nodeId: string): Promise<{
   questions: Omit<QuizQuestion, "correct_option_id">[];
 }> {
-  const questions = await listQuizQuestions(nodeId);
+  const { user } = await requireUser();
+  const questions = await loadQuestionsForStudent(nodeId, user.id);
   return {
     questions: questions.map(({ correct_option_id: _correct, ...rest }) => {
       void _correct;
@@ -229,7 +274,7 @@ export async function submitQuizAttempt(
   answers: Record<string, string>,
 ): Promise<QuizAttemptSummary> {
   const { supabase, user } = await requireUser();
-  const questions = await listQuizQuestions(nodeId);
+  const questions = await loadQuestionsForStudent(nodeId, user.id);
   if (questions.length === 0) {
     throw new Error("Este check-point ainda nao tem perguntas");
   }
