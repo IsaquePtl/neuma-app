@@ -48,7 +48,24 @@ Those three are fixed on `cursor/neuma-stripe-e2e-audit-3f45` and are **not** li
 | Lint | Fail (pre-existing) | `eslint .`: 56 errors, 10 warnings. Edited files are clean. |
 | Production build | Pass | `next build` (Next.js 16.2.10, Turbopack). Font warning: `Nata Sans` has no fallback metrics. |
 
-Button verdicts: **WORKING** (handler persists or navigates), **CONDITIONAL** (works only in a stated state), **STUB** (control or copy pretends to do something it does not), **BROKEN** (handler runs and the outcome is wrong), **UNREACHABLE** (no control for a supported server path), **DEAD** (no handler). Nothing in the inventory was classified DEAD; the closest cases are STUB and BROKEN.
+Button verdicts: **WORKING** (handler persists or navigates), **CONDITIONAL** (works only in a stated state), **STUB** (control or copy pretends to do something it does not), **BROKEN** (handler runs and the outcome is wrong), **UNREACHABLE** (server path with no screen), **DEAD** (control or action with no caller). Unreachable and dead actions are listed under the inventory.
+
+### Required coverage index
+
+Every item Isaque named is in this file. A row is **FAIL** when the live behaviour does not match the product rule. Browser clicks are still **0%** (blockers under Real flow tests).
+
+| Domain | Where | Result |
+| --- | --- | --- |
+| Every route | Route and button inventory. 51 `page.tsx` files, 6 `route.ts` files (`auth/callback` plus four webhooks/agent routes), `manifest.ts`, `_not-found`. | Inventoried. Live click-through not run. |
+| Every primary button | Same inventory, plus shell, plus the controls added in this pass (**Template**, **Guardar quiz**, **Arquivar**, **Apagar**, **Associar a aluno**). | See verdicts. Header **Guardar** is STUB. **Apple** is STUB. |
+| Level types | Real flow tests → Level kinds. `practice`, `call`, `milestone`, `lesson`, `resource` × `mentor` / `quiz` / `check_in` / `none` × `video` / `text` / `call`. | **0/5 kinds.** 11/25 editor states pass. |
+| Evaluation path | Real flow tests → Evaluation by level type. | **0/5 kinds.** |
+| Admin ↔ student loops | Real flow tests, rows 1–21, then the kind matrix and the evaluation matrix. Studio is the admin surface. | Done, rolled back, `users_left = 0`. |
+| Deadline extend | Real flow tests → Prolongar prazo. | Deadline **PASS**. Extra video slot **FAIL**. Pending check-in stays pending **FAIL** (H1). |
+| Quizzes | Rows 5–7, Level kinds, Evaluation, H3, L3. Threshold math executed (59 hold, 60 pass, 70/80 hold, 80 pass). | Pass does not unlock. Key readable. Only `milestone` opens the quiz page. |
+| Feedback | Rows 13–14, check-in revision case, `level_feedbacks` session note. | Student can read a mentor note. Session-note writer has no screen. |
+| 1:1 check-ins | Rows 10–16 (pedagogical check-in → feedback → advance). Invite redeem is code-only (H2), not executed against Stripe. | Submit **PASS**. Self-approve denied **PASS**. Old approve can leave two active nodes **FAIL**. Redeem of an existing email **FAIL**. |
+| Advance gates | How to read the four gates, plus the kind matrix. | `none` and `quiz` student writes **FAIL**. `check_in` submit **PASS**, mentor clean advance **PASS**, skip-with-no-submission **FAIL**. `mentor` denial **PASS**, mentor advance **PASS**. |
 
 ---
 
@@ -227,6 +244,8 @@ The student has to be judged by the rule on that level, and pass or fail has to 
 | Call / session note | A `level_feedbacks` row is commentary. It is not a pass unless `pass_rule` says so | The note alone leaves the level `active` | Mentor writes it. Default for `call` is still the mentor gate. |
 
 `submitQuizAttempt` (`lib/actions/quiz.ts`) computes `Math.round(correct / total * 100)` and sets `unlocked` only when `pass_rule=quiz`, the node and path are `active`, and `score >= threshold`. That comparison was executed for the boundary values: 1/2 → 50, hold; 3/5 → 60, pass; 59 hold; 60 pass; 70 against a stored 80, hold; 80 pass; 100 on `pass_rule=mentor`, hold. A stored threshold of 0 passes a score of 0, which is what the editor allows.
+
+The mentor quiz editor says “Não bloqueia o percurso — tu validas a passagem de nível” (`node-quiz-editor.tsx`) on every node, including `pass_rule=quiz`, where a passing score is supposed to unlock the next level.
 
 The result headline does not use that threshold. `getQuizScoreTier` in `checkpoint-quiz-form.tsx` paints 60–85 as “Bom trabalho” and above 85 as “Excelente”. A 70 against `pass_score=80` is a fail and still says “Bom trabalho”. When the quiz is not the gate, a score under 60 still says “Precisas de 60% para avançar”, because the action always returns `pass_score: threshold`.
 
@@ -496,6 +515,12 @@ Not a product sign-off. Code-only, typecheck-clean, not exercised in a browser.
 - **Area:** Build.
 - **Evidence:** `next build` — “Failed to find font override values for font `Nata Sans`”. Build still exits 0.
 
+#### L9. Four actions have no screen
+
+- **Area:** Students, session, invites, agenda.
+- **Evidence:** Nothing imports `InviteStudentForm` (`inviteStudent`, **Convidar aluno**), `StudentProfileEditor` (`updateStudentProfile`, `setStudentOnboarding`, `setStudentCanBookSessions`), or `MentorAgendaAgent` (`confirmCheckInNudges` from the agenda UI; the inbox approve path still calls it for nudge proposals). `submitMentorshipMessage` and `createLevelFeedback` have no callers. `requestEmailChange` and `updateFinanceSetting` are the same class (L2, L4).
+- **Impact:** A mentor cannot invite a student from Studio, cannot turn off **Agendar sessão** for one student, and cannot file a session note. The call level can be advanced with no session feedback. Nudge confirm from the unused agenda panel never appears; approving a `checkin_nudge` proposal still runs `confirmCheckInNudges`.
+
 ---
 
 ## How gates work
@@ -540,12 +565,12 @@ Plans (`lib/stripe/plans.ts`): monthly `neuma_monthly` 2494¢, quarterly `neuma_
 
 Level player (`student-node-player.tsx`):
 
-| `pass_rule` | Student control | Advances? |
+| `pass_rule` | Student control | What actually happens |
 | --- | --- | --- |
-| `none` (default for lesson/resource) | **Marcar como visto** → `markNodeSeen` | Yes, after the audit-branch fix, if service role is set. |
-| `check_in` (default for practice) | **Fazer check-in em vídeo/texto** or **Confirmar que concluíste** → `/checkins/new?node=` | No. Mentor **Submeter Feedback** with **Avançar nível** does. |
-| `quiz` | **Abrir quiz** → `/path/:id/quiz` → **Terminar** → `submitQuizAttempt` | Yes when score ≥ threshold (default 60) and the node is the active node on an active path. After the fix, the key is not returned to the client. |
-| `mentor` (default for call/milestone) | No self-complete | Mentor **Ativar nível** or advance on the level review. |
+| `none` (default for lesson/resource) | **Marcar como visto** on lesson, resource, and practice. `call` and `milestone` have no button. | Live student update writes 0 rows (**FAIL**). The audit-branch helper would retry with the service role. It is not deployed. |
+| `check_in` (default for practice) | **Fazer check-in em vídeo/texto** or **Confirmar que concluíste** on lesson, resource, and practice. `call` and `milestone` have no button. | Insert stays `pending` (**PASS**). Mentor approve advances (**PASS** on a clean path). Mentor **Avançar** with no submission also advances (**FAIL**). There is no fail button (M6). |
+| `quiz` | **Abrir quiz** only when `kind=milestone`. Other kinds are redirected off `/path/:id/quiz`. | Score math matches the threshold. A passing score does not unlock on the live schema (**FAIL**). The student can read `correct_option_id` (**FAIL**, H3). The server action on this branch no longer returns the key; `0038` is not applied. |
+| `mentor` (default for call/milestone) | No self-complete | Student write 0 is the correct denial (**PASS**). Mentor **Avançar** completes the level even after a failing quiz (**FAIL** against the quiz rule). |
 
 Check-in insert is a real student write (`checkins_student_insert`, including `node_id is null` since `0020`). Video goes to R2 via presigned PUT. Failures throw.
 
@@ -612,8 +637,8 @@ All of these require a student session and `hasAccess`.
 | --- | --- | --- | --- |
 | `/home` | Greeting, todos, active level | Todo links (`/onboarding`, `/session`, `/tools`, `/path/:id`, feedback); pagination **Itens anteriores** / **Próximos itens**; active level card; paused card → `/path` | WORKING. Pagination disabled at the ends. |
 | `/path` | Map | **Explorar recursos** `/tools`; level rows | WORKING. Locked rows are not buttons. |
-| `/path/[nodeId]` | Level | **Marcar como visto**; check-in links; **Abrir quiz**; **Agendar sessão** / **Alterar agendamento**; **Entrar na call**; attachment / video; activity **Continuar**; **Próximo nível**; check-in/feedback toggles | WORKING after C1 fix for mark-seen. Check-in button disabled with a reason when the slot is blocked. Call disabled when `can_book_sessions` is false. Feedback toggle disabled when there is no feedback. Future node redirects to `/path`. |
-| `/path/[nodeId]/quiz` | Quiz | options; **Seguinte**; **Terminar** `submitQuizAttempt`; **Fechar** | WORKING. No questions: STUB (L3). |
+| `/path/[nodeId]` | Level | **Marcar como visto**; check-in links; **Abrir quiz**; **Agendar sessão** / **Alterar agendamento**; **Entrar na call**; attachment / video; activity **Continuar**; **Próximo nível**; check-in/feedback toggles | Layout follows **kind**, not the gate (Level kinds). **Marcar como visto** is BROKEN on the live schema (write 0, C1). **Abrir quiz** exists only for `milestone`. Check-in button disabled with a reason when the slot is blocked. Call disabled when `can_book_sessions` is false. That flag has no Studio control (L9). Feedback toggle disabled when there is no feedback. Future node redirects to `/path`. |
+| `/path/[nodeId]/quiz` | Quiz | options; **Seguinte**; **Terminar** `submitQuizAttempt`; **Fechar** | Milestone only; every other kind redirects to the level. Threshold math is correct. A passing score does not move the node (Evaluation). Headline ignores a custom threshold. No questions: STUB (L3). |
 | `/checkins` | History | row links; **Reenviar check-in** only if `needs_revision` | WORKING |
 | `/checkins/new` | Wizard | **Seguinte**; **Enviar check-in** `submitCheckIn`; video drop zone | WORKING. No path → `/session`. Paused path → `/path`. |
 | `/checkins/[id]` | Detail | **Reenviar check-in** (conditional); feedback **Continuar** | WORKING |
@@ -636,16 +661,16 @@ All require `role=mentor`.
 | `/studio/students` | List | search; row → ficha | WORKING. List is every student, not `mentor_id`-scoped (RLS `profiles_mentor_all`). |
 | `/studio/students/[id]` | Ficha | notes; **Avaliar**; **Abrir Onboardings**; onboarding block; **Aplicar template**; **Criar percurso**; path card; claim unassigned; **Remover** | WORKING. Notes and template-apply refresh are CONDITIONAL (M3, M4). |
 | `/studio/students/[id]/checkins` | Legacy redirect → ficha | none | WORKING |
-| `/studio/journeys` | Path list + tabs | **Criar Percurso**; row; **Editar** / **Vincular** / template / **Remover**; **Rascunho Teoria Musical**; tabs **Percursos** **Check-ins** **Onboardings** | WORKING |
+| `/studio/journeys` | Path list + tabs | **Criar Percurso**; row; **Editar** / **Vincular** / **Template** `savePathAsTemplate` / **Remover**; **Rascunho Teoria Musical**; tabs **Percursos** **Check-ins** **Onboardings** | WORKING. **Template** copies the path into the library. |
 | `/studio/journeys/[id]` | Read-only map | **Editar**; **Ver ficha**; **Adicionar níveis**; level rows; claim form | WORKING. Future levels not clickable. |
 | `/studio/journeys/[id]/edit` | Composer | **Ver percurso**; path dialog **Guardar** `upsertPath`; **+ Nível**; header **Guardar**; **Rascunho** / **Ativar** / **Pausar** / **Concluir**; **Eliminar**; **Subir** / **Descer**; **Ativar nível**; node save / delete | Header **Guardar** is STUB (H5). `setPathStatus`, `createNode`, `updateNode`, `deleteNode` do not check errors (M4) — CONDITIONAL. **Ativar nível** `activateNode` is WORKING for mentors. |
-| `/studio/journeys/[id]/levels/[nodeId]` | Review | **Feedback** / **Nível**; **Descartar e escrever do zero**; video picker; **Avançar nível**; **Prolongar prazo**; **Submeter Feedback** / **Enviar Feedback**; edit **Guardar alterações** | Advance WORKING (and sibling-lock fixed on the audit branch). Extend BROKEN for the queue (H1). `updateFeedback` WORKING. |
+| `/studio/journeys/[id]/levels/[nodeId]` | Review | **Feedback** / **Nível**; **Descartar e escrever do zero** `rejectFeedbackDraft`; video picker; **Avançar nível**; **Prolongar prazo**; **Submeter Feedback** / **Enviar Feedback**; edit **Guardar alterações**; in the node dialog **Guardar quiz** `saveQuizQuestions`, **Pergunta**, **Opção** | Advance writes for a mentor (**PASS** as a write) and ignores a failing quiz or a missing check-in (**FAIL** as an evaluation). Extend BROKEN for the queue (H1). No **Pedir revisão** (M6). **Guardar quiz** persists questions. Its copy says the quiz never blocks the path, which is false when `pass_rule=quiz`. |
 | `/studio/journeys/checkins` | Queue + history | rows → level review | WORKING |
-| `/studio/journeys/onboardings` | Inbox | rows; link actions; **Aceitar 1:1**; **Ver** | WORKING |
+| `/studio/journeys/onboardings` | Inbox | rows; **Associar a aluno**; **Aceitar 1:1**; **Arquivar** `archiveTallySubmission`; **Apagar** `deleteTallySubmission`; **Ver** | WORKING. Archive and delete are real writes. |
 | `/studio/checkins` | Redirect → journeys check-ins | none | WORKING |
 | `/studio/checkins/[id]` | Redirect → level review or list | none | WORKING |
 | `/studio/intake` | Redirect → onboardings | none | WORKING |
-| `/studio/intake/[id]` | Submission | **Marcar como tratado**; **Reabrir**; **Abrir ficha**; **Avaliar**; **Vincular**; social links; file link | WORKING. Processed/pending updates ignore errors (M4). |
+| `/studio/intake/[id]` | Submission | **Marcar como tratado**; **Reabrir**; **Abrir ficha**; **Avaliar**; **Associar a aluno**; **Aceitar 1:1**; **Arquivar**; **Apagar**; social links; file link | WORKING. Processed/pending updates ignore errors (M4). |
 | `/studio/inbox` | Redirect → `/studio/journeys` | none | WORKING |
 | `/studio/library` | Library hub | **+ Categoria**; **+ Tópico**; item dialog; category query links; **Restaurar**; **Apagar** | WORKING |
 | `/studio/library/templates/[id]` | Redirect → `?compose=` | none | WORKING |
@@ -682,6 +707,19 @@ All require `role=mentor`.
 | `POST /api/cal/webhook` | Optional HMAC | Admin upsert of bookings. | WORKING. Unsigned if secret empty (H6). |
 | `POST /api/agent/stream` | Session (proxy) | Proxies to the agent. | CONDITIONAL on the agent process. |
 | `GET /api/agent/events/[runId]` | Session | SSE/events for a run. | CONDITIONAL on the agent process. |
+
+### Actions with no screen
+
+These are real server functions. No `page.tsx` renders a control that calls them. Verdict: **UNREACHABLE**.
+
+| Action | Intended job | Verdict |
+| --- | --- | --- |
+| `inviteStudent` | **Convidar aluno** with a temporary password | UNREACHABLE. Signup is the only account path in the UI. |
+| `setStudentCanBookSessions` / `updateStudentProfile` / `setStudentOnboarding` | Ficha toggles in `StudentProfileEditor` | UNREACHABLE. `can_book_sessions` still gates **Agendar sessão**; nothing in Studio writes it. |
+| `createLevelFeedback` | Session / level note | UNREACHABLE. A direct insert does not advance the level (Evaluation). |
+| `submitMentorshipMessage` | Student 1:1 text on the active node, no `pass_rule` check | UNREACHABLE. `submitCheckIn` does check the rule. |
+| `requestEmailChange` | Settings email | UNREACHABLE (L4). |
+| `updateFinanceSetting` | Paywall date and MRR goal | UNREACHABLE (L2). |
 
 ---
 
