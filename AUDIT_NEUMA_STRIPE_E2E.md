@@ -106,9 +106,36 @@ One path, then a second path. Actors alternate.
 | 16 | Mentor finishes the path | Mentor sets call `completed` and path `completed`; student reads the path | `completed` | `completed` | **PASS** |
 | 17 | Second path, both `none` gates | Student write on A returns 0; helper activates B; student sees B and write on B returns 0; helper completes the path | Student blocked twice, path `completed` only after the helper | `writeA=0 sawB=active writeB=0 path=completed` | **FAIL** for the student button, **PASS** for the undeployed helper |
 | 18 | Isolation | Second student selects both path ids | 0 | `0` | **PASS** |
-| 19 | Prolongar prazo | Mentor sets the practice node `active` and `due_date = today+7`, and does not touch `check_ins` (what `extendLevelWeek` does) | Check-in leaves the pending queue | `node=active check_in=pending` | **FAIL** |
+| 19 | Prolongar prazo, pending check-in | Mentor sets the node `active` and a new `due_date`, and does not touch `check_ins` | Check-in leaves the pending queue | `node=active check_in=pending` | **FAIL** for the queue. The deadline itself is a separate result below. |
 | 20 | Paywall cutoff | Set `paywall_start_at` inside the transaction; student counts rows; owner reads the value | Student sees the cutoff the app is supposed to enforce | `student_rows=0 db=2020-01-01T00:00:00Z` during the test. After rollback the live value is `2026-09-01T00:00:00Z` | **FAIL** |
 | 21 | `0038` dry-run | `DROP POLICY` student quiz select, student counts questions, then rollback | 0 rows | `0`, and the policy is present again after rollback | **PASS** for the migration text. **Not applied.** |
+
+### Prolongar prazo de um nível
+
+Case: the student is not ready, so the mentor keeps them on the same level and moves the deadline. This is not “advance”.
+
+**UI.** On `/studio/journeys/:id/levels/:nodeId`, tab **Feedback**, the decision **Prolongar prazo** is always on the panel, including when there is no check-in (`mentor-level-review-view.tsx` renders `MentorFeedbackPanel` with a null check-in). Amount defaults to weeks, with **Dias** / **Semanas** (1–365 days or 1–52 weeks). **Enviar Feedback** calls `extendLevelWeek` (`mentor-feedback-panel.tsx`). The tab **Nível** has no extend button; it only previews the player.
+
+**Server.** `extendLevelWeek` (`lib/actions/journey-level.ts`) is mentor-only. It adds the chosen days to `nodes.due_date` (or to today when the date is null), sets that node `active`, locks every other non-completed sibling, sets the path `active`, then calls `tryIncrementWeekExtensions`. The due-date `update` does not check `{ error }`. The student never writes this column.
+
+**What the student reads.** `due_date` is on the node row, and students may `SELECT` their nodes. It is rendered as “Até …” on the level (`student-node-player.tsx`), the path map (`student-path-map.tsx`), `/home`, and `/session`.
+
+Second rolled-back session, same live database, mentor then student. Cleanup afterwards: `users_left = 0`.
+
+| Step | Who | Expected | Actual | Verdict |
+| --- | --- | --- | --- | --- |
+| Level exists with a deadline | Student reads node 1 | `active`, `due_date = 2026-09-20`, next node `locked` | `active 2026-09-20` | **PASS** |
+| Mentor extends 2 weeks (14 days), same action as **Prolongar prazo** | Mentor `UPDATE` returns a row: `due_date = 2026-09-20 + 14`, status stays `active`, next stays `locked` | 1 row written | `wrote=1` | **PASS** |
+| Student sees the new deadline and is still on this level | Student `SELECT` | `active`, `2026-10-04`, next `locked` | `active due=2026-10-04 next=locked` | **PASS** |
+| Student still cannot mark the level done | Student `UPDATE` status | 0 rows | `0` | **PASS** |
+| No deadline yet | Mentor sets `due_date` from today + 7 | `2026-10-05` (28 Sep + 7) | `2026-10-05` | **PASS** |
+| Extra check-in slot the copy promises | `tryIncrementWeekExtensions` updates `nodes.week_extensions` | Column exists and goes `0 → 1`, so `allowedCheckInsForNode` becomes 2 | Live `nodes` has **no** `week_extensions` column (`undefined_column`). The helper treats that error as a no-op (`week-extensions.ts`). Migration `0032_node_week_extensions.sql` is not in the applied migration list. | **FAIL** |
+
+**Admin → Student verdict for the deadline: PASS.** A mentor extend moves `due_date`, the student can read it, and the level does not advance.
+
+**Verdict for “not ready, so give them another check-in”: FAIL** on this database. The blocked-check-in copy says another video is allowed only if the mentor prolongs the level (`lib/checkins/allowance.ts`). That counter never increments here, so a student who already used the one video slot stays blocked after **Prolongar prazo**. A student who has not submitted yet is unaffected: they still have the original slot, and they do see the later date.
+
+If a check-in is already `pending`, prolonging also leaves it `pending` (row 19). The toast still says the feedback was sent.
 
 ### How to read the four gates
 
