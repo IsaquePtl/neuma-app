@@ -27,12 +27,15 @@ export async function updateSession(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Sem env no Vercel o createServerClient rebenta → MIDDLEWARE_INVOCATION_FAILED.
+  // Sem env o proxy não autentica. Abrir a app seria pior do que um 503.
   if (!url || !anonKey) {
     console.error(
       "[middleware] Faltam NEXT_PUBLIC_SUPABASE_URL ou NEXT_PUBLIC_SUPABASE_ANON_KEY",
     );
-    return NextResponse.next({ request });
+    return new NextResponse(
+      "Serviço indisponível: configuração Supabase em falta.",
+      { status: 503 },
+    );
   }
 
   let supabaseResponse = NextResponse.next({ request });

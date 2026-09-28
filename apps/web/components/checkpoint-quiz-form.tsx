@@ -11,6 +11,7 @@ import {
   type QuizOption,
 } from "@/lib/actions/quiz";
 import { Button } from "@/components/ui/button";
+import { quizScoreTier, type QuizHeadline } from "@/lib/nodes/evaluation";
 import { cn } from "@/lib/utils";
 
 type StudentQuestion = {
@@ -19,16 +20,8 @@ type StudentQuestion = {
   options: QuizOption[];
 };
 
-type QuizScoreTier = "low" | "mid" | "high";
-
-function getQuizScoreTier(score: number): QuizScoreTier {
-  if (score > 85) return "high";
-  if (score >= 60) return "mid";
-  return "low";
-}
-
 const quizScoreTheme: Record<
-  QuizScoreTier,
+  QuizHeadline,
   {
     headline: string;
     accent: string;
@@ -70,7 +63,7 @@ function QuizResults({
   result: QuizAttemptSummary;
   onClose: () => void;
 }) {
-  const tier = getQuizScoreTier(result.score);
+  const tier = quizScoreTier(result.score, result.pass_score);
   const theme = quizScoreTheme[tier];
   const progressPct =
     result.total > 0 ? Math.round((result.correct_count / result.total) * 100) : 0;

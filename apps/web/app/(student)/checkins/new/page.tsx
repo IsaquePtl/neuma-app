@@ -99,7 +99,9 @@ export default async function NewCheckinPage({
       pathTitle={pathRow.title}
       levelNumber={levelNumber}
       studentId={user.id}
-      checkInKind={checkInKind === "text" ? "text" : "video"}
+      checkInKind={
+        checkInKind === "text" || checkInKind === "call" ? checkInKind : "video"
+      }
       blockedMessage={blocked}
     />
   );

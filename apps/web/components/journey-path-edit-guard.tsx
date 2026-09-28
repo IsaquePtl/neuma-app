@@ -128,8 +128,8 @@ export function JourneyPathEditGuard({
     setDraftAcknowledged(true);
     toast.success(
       isEmptyDraftSnapshot(next) && !changed
-        ? "Percurso guardado"
-        : "Alterações guardadas",
+        ? "Rascunho mantido. As edições nos formulários já ficam gravadas."
+        : "O percurso já está gravado.",
     );
     if (isNewDraft) {
       router.replace(`/studio/journeys/${path.id}/edit`);
@@ -218,8 +218,8 @@ export function JourneyPathEditGuard({
 
   const description =
     isEmptyDraft && !hasChanges
-      ? "Este percurso ainda está vazio. Queres guardá-lo ou descartá-lo?"
-      : "Tens alterações neste percurso. Queres guardá-las antes de sair?";
+      ? "Este rascunho já existe. Queres mantê-lo ou descartá-lo?"
+      : "As edições nos formulários já ficam gravadas. Queres manter o percurso e sair?";
 
   const dirtyValue = useMemo(
     () => ({
@@ -263,7 +263,7 @@ export function JourneyPathEditGuard({
               {pending ? "A descartar…" : "Descartar"}
             </Button>
             <Button type="button" disabled={pending} onClick={onSave}>
-              Guardar
+              Manter
             </Button>
           </DialogFooter>
         </DialogContent>

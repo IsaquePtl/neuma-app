@@ -118,8 +118,15 @@ export async function submitCheckIn(formData: FormData) {
       throw new Error("Escolhe como te sentes neste nível.");
     }
   }
-  if (kind === "text" && !notes) {
-    throw new Error("As notas são obrigatórias para check-in de texto.");
+  if ((kind === "text" || kind === "call") && !notes) {
+    throw new Error(
+      kind === "call"
+        ? "As notas são obrigatórias para o check-in da chamada."
+        : "As notas são obrigatórias para check-in de texto.",
+    );
+  }
+  if (kind !== "video" && kind !== "text" && kind !== "call") {
+    throw new Error("Tipo de check-in inválido.");
   }
 
   await assertStudentCheckInNode(supabase, user.id, nodeId);

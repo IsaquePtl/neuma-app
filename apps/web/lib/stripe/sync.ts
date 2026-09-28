@@ -107,7 +107,9 @@ export async function profileIdFromCustomer(
   if (customer.deleted) return null;
 
   const fromMeta = customer.metadata?.neuma_profile_id;
-  if (fromMeta) {
+  // Deleted accounts leave a uuid in metadata. Do not upsert that id:
+  // the FK would throw and a replay would fail the whole webhook.
+  if (fromMeta && (await profileExists(admin, fromMeta))) {
     await admin.from("billing_customers").upsert(
       {
         profile_id: fromMeta,
@@ -138,6 +140,94 @@ export async function profileIdFromCustomer(
     }
   }
 
+  return null;
+}
+
+const PROFILE_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function profileExists(
+  admin: ReturnType<typeof createAdminClient>,
+  profileId: string,
+): Promise<boolean> {
+  if (!PROFILE_UUID.test(profileId)) return false;
+  const { data } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("id", profileId)
+    .maybeSingle();
+  return Boolean(data?.id);
+}
+
+/**
+ * Remember the Stripe customer against the profile so the next webhook
+ * does not depend on metadata being present again.
+ */
+async function rememberBillingCustomer(
+  admin: ReturnType<typeof createAdminClient>,
+  profileId: string,
+  customerId: string | null,
+) {
+  if (!customerId) return;
+  const { data: linked } = await admin
+    .from("billing_customers")
+    .select("profile_id")
+    .eq("stripe_customer_id", customerId)
+    .maybeSingle();
+  if (linked?.profile_id === profileId) return;
+
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("email")
+    .eq("id", profileId)
+    .maybeSingle();
+
+  await admin
+    .from("billing_customers")
+    .delete()
+    .eq("stripe_customer_id", customerId)
+    .neq("profile_id", profileId);
+
+  const { error } = await admin.from("billing_customers").upsert(
+    {
+      profile_id: profileId,
+      stripe_customer_id: customerId,
+      email: profile?.email ?? null,
+    },
+    { onConflict: "profile_id" },
+  );
+  if (error) throw error;
+
+  try {
+    const stripe = requireStripe();
+    await stripe.customers.update(customerId, {
+      metadata: { neuma_profile_id: profileId },
+    });
+  } catch (error) {
+    console.error("[stripe:link] customer metadata", error);
+  }
+}
+
+/**
+ * Checkout writes neuma_profile_id on the session and on the subscription.
+ * Customer lookup alone misses both, which left profile_id null.
+ */
+async function resolveProfileId(
+  admin: ReturnType<typeof createAdminClient>,
+  customerId: string | null,
+  candidates: Array<string | null | undefined>,
+): Promise<string | null> {
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (await profileExists(admin, candidate)) {
+      await rememberBillingCustomer(admin, candidate, customerId);
+      return candidate;
+    }
+  }
+  const fromCustomer = await profileIdFromCustomer(customerId);
+  if (fromCustomer && (await profileExists(admin, fromCustomer))) {
+    return fromCustomer;
+  }
   return null;
 }
 
@@ -240,20 +330,26 @@ export async function fetchSubscription(
  */
 export async function syncSubscription(
   input: string | Stripe.Subscription,
-  options: { eventAt?: Date | null } = {},
+  options: { eventAt?: Date | null; profileId?: string | null } = {},
 ): Promise<{ profileId: string | null; plan: BillingPlan | null }> {
   const subscription =
     typeof input === "string" ? await fetchSubscription(input) : input;
 
   const admin = createAdminClient();
   const customerId = idOf(subscription.customer);
-  const profileId = await profileIdFromCustomer(customerId);
 
   const { data: previous } = await admin
     .from("subscriptions")
-    .select("id, status, past_due_since, stripe_event_at")
+    .select("id, profile_id, status, past_due_since, stripe_event_at")
     .eq("stripe_subscription_id", subscription.id)
     .maybeSingle();
+
+  const resolved = await resolveProfileId(admin, customerId, [
+    options.profileId,
+    subscription.metadata?.neuma_profile_id,
+    previous?.profile_id,
+  ]);
+  const profileId = resolved ?? previous?.profile_id ?? null;
 
   const eventAt = options.eventAt ?? new Date();
   if (
@@ -397,9 +493,11 @@ export async function syncInvoice(
 
   const admin = createAdminClient();
   const customerId = idOf(invoice.customer);
-  const profileId = await profileIdFromCustomer(customerId);
-
   const stripeSubscriptionId = subscriptionIdFromInvoice(invoice);
+  let profileId = await resolveProfileId(admin, customerId, [
+    invoice.parent?.subscription_details?.metadata?.neuma_profile_id,
+    invoice.metadata?.neuma_profile_id,
+  ]);
   let subscriptionRowId: string | null = null;
   let plan: BillingPlan | null = null;
 
@@ -408,7 +506,7 @@ export async function syncInvoice(
     // Sincronizamos a sub primeiro para nao gravar o pagamento sem plano.
     let { data } = await admin
       .from("subscriptions")
-      .select("id, plan")
+      .select("id, plan, profile_id")
       .eq("stripe_subscription_id", stripeSubscriptionId)
       .maybeSingle();
 
@@ -416,13 +514,14 @@ export async function syncInvoice(
       await syncSubscription(stripeSubscriptionId);
       ({ data } = await admin
         .from("subscriptions")
-        .select("id, plan")
+        .select("id, plan, profile_id")
         .eq("stripe_subscription_id", stripeSubscriptionId)
         .maybeSingle());
     }
 
     subscriptionRowId = data?.id ?? null;
     plan = data?.plan ?? null;
+    if (!profileId && data?.profile_id) profileId = data.profile_id;
   }
 
   if (!plan) {
@@ -433,6 +532,15 @@ export async function syncInvoice(
       const priceObj = await stripe.prices.retrieve(priceId);
       plan = await planForPrice(priceObj);
     }
+  }
+
+  if (!profileId && invoice.id) {
+    const { data: existingPayment } = await admin
+      .from("payments")
+      .select("profile_id")
+      .eq("stripe_invoice_id", invoice.id)
+      .maybeSingle();
+    if (existingPayment?.profile_id) profileId = existingPayment.profile_id;
   }
 
   let profileSnapshot: { full_name: string | null; email: string | null } | null =

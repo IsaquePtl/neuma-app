@@ -46,7 +46,7 @@ export function CheckInForm({
   kind = "video",
 }: {
   nodeId?: string | null;
-  kind?: "video" | "text";
+  kind?: "video" | "text" | "call";
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState(1);
@@ -57,7 +57,7 @@ export function CheckInForm({
   const [difficultyNotes, setDifficultyNotes] = useState("");
   const [confidence, setConfidence] = useState<CheckInConfidence | "">("");
   const [dragOver, setDragOver] = useState(false);
-  const isText = kind === "text";
+  const isText = kind === "text" || kind === "call";
   const totalSteps = isText ? 2 : TOTAL_STEPS;
 
   async function uploadVideo(file: File) {
@@ -135,7 +135,7 @@ export function CheckInForm({
 
     const fd = new FormData();
     if (!isText) fd.set("video_url", videoUrl);
-    fd.set("kind", isText ? "text" : "video");
+    fd.set("kind", kind === "call" ? "call" : isText ? "text" : "video");
     fd.set("confidence", confidence);
     fd.set("difficulty_notes", difficultyNotes.trim());
     if (nodeId) fd.set("node_id", nodeId);

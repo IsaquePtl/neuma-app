@@ -48,8 +48,8 @@ export function NodeGateFields({
           <option value="quiz">{passRuleLabel.quiz} — nota ≥ limiar avança</option>
         </select>
         <p className="text-xs text-muted-foreground">
-          Padrão para {kind}: {passRuleLabel[defaultPassRule(kind)]}. O mentor
-          pode sempre usar «Avançar nível».
+          Padrão para {kind}: {passRuleLabel[defaultPassRule(kind)]}. Quiz só
+          avança com a nota mínima. Check-in só avança com um envio aprovado.
         </p>
       </div>
 
@@ -59,11 +59,16 @@ export function NodeGateFields({
           <select
             id={fid("check_in_kind")}
             name="check_in_kind"
-            defaultValue={checkInKind === "text" ? "text" : "video"}
+            defaultValue={
+              checkInKind === "text" || checkInKind === "call"
+                ? checkInKind
+                : "video"
+            }
             className={selectClass}
           >
             <option value="video">Vídeo (quando é para tocar)</option>
             <option value="text">Texto (escuta / sem tocar)</option>
+            <option value="call">Chamada</option>
           </select>
         </div>
       ) : (

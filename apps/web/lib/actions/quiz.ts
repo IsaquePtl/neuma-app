@@ -335,5 +335,9 @@ export async function submitQuizAttempt(
     revalidatePath(`/studio/journeys/${node.path_id}`);
   }
 
-  return { ...data, unlocked, pass_score: threshold };
+  return {
+    ...data,
+    unlocked,
+    pass_score: node && nodeUsesQuizGate(node.pass_rule) ? threshold : undefined,
+  };
 }

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
+import { assertMentorMayCompleteNode } from "@/lib/nodes/advance-gate";
 import { completeCurrentAndActivateNext } from "@/lib/nodes/complete-and-activate";
 import { tryIncrementWeekExtensions } from "@/lib/nodes/week-extensions";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -189,10 +190,11 @@ export async function submitFeedback(formData: FormData) {
       { onConflict: "check_in_id" },
     );
 
-  await supabase
+  const { error: statusError } = await supabase
     .from("check_ins")
     .update({ status: approved ? "approved" : "needs_revision" })
     .eq("id", checkInId);
+  if (statusError) throw new Error(statusError.message);
 
   // Revision request grants one more check-in slot for that level.
   if (!approved) {
@@ -233,6 +235,7 @@ export async function submitFeedback(formData: FormData) {
         .single();
 
       if (node) {
+        await assertMentorMayCompleteNode(supabase, node.id, "approve_check_in");
         await completeCurrentAndActivateNext(supabase, node.id, node.path_id);
       }
     }

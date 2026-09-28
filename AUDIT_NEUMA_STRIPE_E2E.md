@@ -1,5 +1,7 @@
 # Neuma Stripe — exhaustive E2E audit
 
+> Superseded for ship/no-ship by [RETEST_NEUMA_STRIPE_E2E.md](RETEST_NEUMA_STRIPE_E2E.md) on `cursor/neuma-stripe-e2e-fixes-c91c`. This file is the original fail report. Critical and High items below were fixed and re-tested there. Do not merge to `main`. Do not deploy production.
+
 Branch audited: `neuma-stripe` (base). Fixes, if any, live on `cursor/neuma-stripe-e2e-audit-3f45`.
 
 Date: 2026-09-28. Method: full route manifest from `next build`, code trace of every page, then real role round-trips against the live Neuma App database (project `gkxvlduobwvwarqfxyuh`) inside a single transaction that was rolled back. A follow-up read confirmed zero leftover audit users, the quiz SELECT policy still present, and `paywall_start_at` restored. No browser session was possible: this environment has no app `.env.local`, no Stripe keys, and no GoTrue passwords, and the test did not commit users or Checkout sessions.

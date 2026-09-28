@@ -105,7 +105,14 @@ async function persist(
   if (first.error) throw new Error(first.error.message);
   if (first.data) return;
 
-  const admin = createAdminClient();
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch {
+    throw new Error(
+      "Não foi possível gravar o nível: falta SUPABASE_SERVICE_ROLE_KEY no servidor.",
+    );
+  }
   const second = await query(admin);
   if (second.error || !second.data) {
     throw new Error(second.error?.message ?? "A alteração não foi gravada");

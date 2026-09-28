@@ -1,9 +1,13 @@
 import Image from "next/image";
 
 import { lookupOneToOneInvite } from "@/lib/actions/one-to-one";
+import { getSessionUser } from "@/lib/auth/session";
 import { formatEuros } from "@/lib/stripe/plans";
 import { Card } from "@/components/ui/card";
-import { OneToOneRedeemForm } from "@/components/one-to-one-redeem-form";
+import {
+  OneToOneContinueButton,
+  OneToOneRedeemForm,
+} from "@/components/one-to-one-redeem-form";
 
 const INTERVAL_LABEL: Record<string, string> = {
   month: "mês",
@@ -25,7 +29,14 @@ export default async function OneToOneRedeemPage({
 }) {
   const { token } = await params;
   const { cancelado } = await searchParams;
-  const invite = await lookupOneToOneInvite(token);
+  const [invite, sessionUser] = await Promise.all([
+    lookupOneToOneInvite(token),
+    getSessionUser(),
+  ]);
+  const sessionEmail = sessionUser?.email?.trim().toLowerCase() ?? "";
+  const inviteEmail = invite?.email?.trim().toLowerCase() ?? "";
+  const sessionMatches =
+    Boolean(sessionEmail) && sessionEmail === inviteEmail;
 
   const expired =
     invite?.status === "expired" ||
@@ -72,7 +83,11 @@ export default async function OneToOneRedeemPage({
                   Olá, {invite.full_name || invite.email}
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  Cria a tua conta para activar a mentoria individual —{" "}
+                  {sessionMatches
+                    ? "A tua conta já existe. Continua para activar a mentoria individual — "
+                    : sessionUser
+                      ? "Estás noutra conta. Este convite é para "
+                      : "Cria a tua conta para activar a mentoria individual — "}
                   {formatEuros(invite.amount_cents)}{" "}
                   {cadenceLabel(invite.interval, invite.interval_count)}.
                 </p>
@@ -88,11 +103,19 @@ export default async function OneToOneRedeemPage({
                 </p>
               ) : null}
 
-              <OneToOneRedeemForm
-                token={token}
-                email={invite.email}
-                fullName={invite.full_name}
-              />
+              {sessionMatches ? (
+                <OneToOneContinueButton token={token} />
+              ) : sessionUser ? (
+                <p className="text-center text-sm text-muted-foreground">
+                  Entra com {invite.email} para pagar este convite.
+                </p>
+              ) : (
+                <OneToOneRedeemForm
+                  token={token}
+                  email={invite.email}
+                  fullName={invite.full_name}
+                />
+              )}
             </>
           )}
         </Card>

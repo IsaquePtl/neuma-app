@@ -31,6 +31,71 @@ function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
+function checkoutIntegrationId(flow: string) {
+  const alphabet = "abcdefghijklmnopqrstuvwxyz";
+  let suffix = "";
+  for (let i = 0; i < 8; i += 1) {
+    suffix += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return `neuma_${flow}_${suffix}`;
+}
+
+async function openOneToOneCheckout(input: {
+  inviteId: string;
+  priceId: string;
+  email: string;
+  userId: string;
+  fullName: string;
+  token: string;
+}) {
+  const admin = createAdminClient();
+  const customerId = await ensureStripeCustomer({
+    profileId: input.userId,
+    email: input.email,
+    fullName: input.fullName,
+  });
+
+  const stripe = requireStripe();
+  const origin = appUrl("/");
+  const session = await stripe.checkout.sessions.create({
+    mode: "subscription",
+    customer: customerId,
+    client_reference_id: input.userId,
+    line_items: [{ price: input.priceId, quantity: 1 }],
+    success_url: `${origin.replace(/\/$/, "")}/subscrever/sucesso?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${origin.replace(/\/$/, "")}/1-1/${input.token}?cancelado=1`,
+    locale: "pt",
+    integration_identifier: checkoutIntegrationId("one_to_one"),
+    metadata: {
+      neuma_invite_id: input.inviteId,
+      neuma_profile_id: input.userId,
+      neuma_plan: "one_to_one",
+    },
+    subscription_data: {
+      metadata: {
+        neuma_profile_id: input.userId,
+        neuma_one_to_one: "1",
+        neuma_invite_id: input.inviteId,
+      },
+    },
+  });
+
+  if (!session.url) {
+    throw new Error("Não foi possível abrir o pagamento.");
+  }
+
+  const { error } = await admin
+    .from("one_to_one_invites")
+    .update({
+      stripe_checkout_session_id: session.id,
+      redeemed_profile_id: input.userId,
+    })
+    .eq("id", input.inviteId);
+  if (error) throw new Error(error.message);
+
+  return session.url;
+}
+
 export type CreateInviteResult =
   | { ok: true; inviteId: string; inviteUrl: string }
   | { ok: false; error: string };
@@ -301,51 +366,16 @@ export async function redeemOneToOneInvite(input: {
       onboarding_completed: true,
     });
 
-    // Iniciar sessao no browser: o cliente tem de fazer signIn. Devolvemos
-    // o checkout URL; a pagina faz signInWithPassword e depois redirecciona.
-    const customerId = await ensureStripeCustomer({
-      profileId: userId,
+    const checkoutUrl = await openOneToOneCheckout({
+      inviteId: invite.id,
+      priceId: invite.stripe_price_id,
       email: invite.email,
+      userId,
       fullName,
+      token: input.token,
     });
 
-    const stripe = requireStripe();
-    const origin = appUrl("/");
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      customer: customerId,
-      client_reference_id: userId,
-      line_items: [{ price: invite.stripe_price_id, quantity: 1 }],
-      success_url: `${origin.replace(/\/$/, "")}/subscrever/sucesso?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin.replace(/\/$/, "")}/1-1/${input.token}?cancelado=1`,
-      locale: "pt",
-      metadata: {
-        neuma_invite_id: invite.id,
-        neuma_profile_id: userId,
-        neuma_plan: "one_to_one",
-      },
-      subscription_data: {
-        metadata: {
-          neuma_profile_id: userId,
-          neuma_one_to_one: "1",
-          neuma_invite_id: invite.id,
-        },
-      },
-    });
-
-    if (!session.url) {
-      return { ok: false, error: "Não foi possível abrir o pagamento." };
-    }
-
-    await admin
-      .from("one_to_one_invites")
-      .update({
-        stripe_checkout_session_id: session.id,
-        redeemed_profile_id: userId,
-      })
-      .eq("id", invite.id);
-
-    return { ok: true, checkoutUrl: session.url };
+    return { ok: true, checkoutUrl };
   } catch (error) {
     console.error("[one-to-one:redeem]", error);
     return {
@@ -354,6 +384,98 @@ export async function redeemOneToOneInvite(input: {
         error instanceof Error
           ? error.message
           : "Não foi possível activar o convite.",
+    };
+  }
+}
+
+/**
+ * Conta que já existe: a pessoa entra e esta acção abre o Checkout
+ * para o perfil da sessão, sem criar um segundo utilizador.
+ */
+export async function startOneToOneCheckoutForSession(
+  token: string,
+): Promise<RedeemInviteResult> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.email) {
+      return {
+        ok: false,
+        error: "Entra na tua conta e abre o link do convite outra vez.",
+      };
+    }
+
+    const admin = createAdminClient();
+    const { data: invite } = await admin
+      .from("one_to_one_invites")
+      .select("*")
+      .eq("token_hash", hashToken(token))
+      .maybeSingle();
+
+    if (!invite) return { ok: false, error: "Convite inválido." };
+    if (invite.status === "revoked") {
+      return { ok: false, error: "Este convite foi revogado." };
+    }
+    if (invite.status === "paid") {
+      return { ok: false, error: "Este convite já foi utilizado." };
+    }
+    if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
+      return { ok: false, error: "Este convite expirou." };
+    }
+    if (!invite.stripe_price_id) {
+      return { ok: false, error: "Convite sem preço associado." };
+    }
+    if (user.email.trim().toLowerCase() !== invite.email.trim().toLowerCase()) {
+      return {
+        ok: false,
+        error: "Este convite é de outro email. Entra com a conta do convite.",
+      };
+    }
+
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("full_name, role")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (profile?.role === "mentor") {
+      return { ok: false, error: "Uma conta de mentor não pode activar este convite." };
+    }
+
+    const fullName = profile?.full_name || invite.full_name || invite.email;
+    const { error: profileError } = profile
+      ? await admin
+          .from("profiles")
+          .update({ is_one_to_one: true })
+          .eq("id", user.id)
+      : await admin.from("profiles").insert({
+          id: user.id,
+          email: invite.email,
+          full_name: fullName,
+          role: "student",
+          is_one_to_one: true,
+          billing_exempt: false,
+        });
+    if (profileError) return { ok: false, error: profileError.message };
+
+    const checkoutUrl = await openOneToOneCheckout({
+      inviteId: invite.id,
+      priceId: invite.stripe_price_id,
+      email: invite.email,
+      userId: user.id,
+      fullName,
+      token,
+    });
+    return { ok: true, checkoutUrl };
+  } catch (error) {
+    console.error("[one-to-one:session]", error);
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Não foi possível abrir o pagamento.",
     };
   }
 }

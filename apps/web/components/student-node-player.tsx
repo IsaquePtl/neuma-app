@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Video, FileText } from "lucide-react";
+import { Video, FileText, Phone } from "lucide-react";
 
 import type {
   StudentNode,
@@ -146,8 +146,19 @@ function CheckInActions({
     return null;
   }
 
-  const video = node.check_in_kind !== "text";
+  const kind = node.check_in_kind;
   const href = `/checkins/new?node=${node.id}`;
+  const label =
+    kind === "call"
+      ? "Registar a chamada"
+      : kind === "text"
+        ? practiceStyle
+          ? "Fazer check-in em texto"
+          : "Confirmar em texto"
+        : practiceStyle
+          ? "Fazer check-in em vídeo"
+          : "Confirmar que concluíste";
+  const Icon = kind === "call" ? Phone : kind === "text" ? FileText : Video;
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
@@ -157,24 +168,16 @@ function CheckInActions({
           nativeButton={false}
           className="h-14 w-full gap-2 text-base font-semibold"
         >
-          {video ? <Video className="size-4" /> : <FileText className="size-4" />}
-          {practiceStyle
-            ? video
-              ? "Fazer check-in em vídeo"
-              : "Fazer check-in em texto"
-            : "Confirmar que concluíste"}
+          <Icon className="size-4" />
+          {label}
         </Button>
       ) : (
         <Button
           disabled
           className="h-14 w-full gap-2 text-base font-semibold"
         >
-          {video ? <Video className="size-4" /> : <FileText className="size-4" />}
-          {practiceStyle
-            ? video
-              ? "Fazer check-in em vídeo"
-              : "Fazer check-in em texto"
-            : "Confirmar que concluíste"}
+          <Icon className="size-4" />
+          {label}
         </Button>
       )}
       {!canSubmitCheckIn && blockedMessage ? (
@@ -186,6 +189,42 @@ function CheckInActions({
   );
 }
 
+function GateControls({
+  node,
+  practiceStyle = false,
+  canSubmitCheckIn = true,
+  blockedMessage = null,
+  preview = false,
+}: {
+  node: StudentNode;
+  practiceStyle?: boolean;
+  canSubmitCheckIn?: boolean;
+  blockedMessage?: string | null;
+  preview?: boolean;
+}) {
+  const showQuiz =
+    node.kind === "milestone" || nodeUsesQuizGate(node.pass_rule);
+
+  return (
+    <>
+      {showQuiz ? (
+        <CheckpointQuiz
+          nodeId={node.id}
+          quizGate={nodeUsesQuizGate(node.pass_rule)}
+          passScore={node.pass_score}
+        />
+      ) : null}
+      <CheckInActions
+        node={node}
+        practiceStyle={practiceStyle}
+        canSubmitCheckIn={canSubmitCheckIn}
+        blockedMessage={blockedMessage}
+        preview={preview}
+      />
+    </>
+  );
+}
+
 function SessionLayout({
   node,
   levelNumber,
@@ -193,6 +232,8 @@ function SessionLayout({
   calUser,
   upcomingBooking,
   canBookSessions,
+  canSubmitCheckIn = true,
+  blockedMessage = null,
   preview = false,
 }: {
   node: StudentNode;
@@ -201,6 +242,8 @@ function SessionLayout({
   calUser: string;
   upcomingBooking: StudentUpcomingBooking | null;
   canBookSessions: boolean;
+  canSubmitCheckIn?: boolean;
+  blockedMessage?: string | null;
   preview?: boolean;
 }) {
   return (
@@ -226,6 +269,13 @@ function SessionLayout({
         mentorName={mentorName}
         calUser={calUser}
         canBookSessions={preview ? false : canBookSessions}
+      />
+
+      <GateControls
+        node={node}
+        canSubmitCheckIn={canSubmitCheckIn}
+        blockedMessage={blockedMessage}
+        preview={preview}
       />
     </div>
   );
@@ -266,7 +316,7 @@ function RecordingLayout({
         </div>
       ) : null}
 
-      <CheckInActions
+      <GateControls
         node={node}
         canSubmitCheckIn={canSubmitCheckIn}
         blockedMessage={blockedMessage}
@@ -316,7 +366,7 @@ function PracticeLayout({
         )
       ) : null}
 
-      <CheckInActions
+      <GateControls
         node={node}
         practiceStyle
         canSubmitCheckIn={canSubmitCheckIn}
@@ -330,9 +380,15 @@ function PracticeLayout({
 function CheckpointLayout({
   node,
   levelNumber,
+  canSubmitCheckIn = true,
+  blockedMessage = null,
+  preview = false,
 }: {
   node: StudentNode;
   levelNumber: number;
+  canSubmitCheckIn?: boolean;
+  blockedMessage?: string | null;
+  preview?: boolean;
 }) {
   return (
     <div className="min-w-0 w-full max-w-full space-y-6">
@@ -344,10 +400,11 @@ function CheckpointLayout({
         </div>
       ) : null}
 
-      <CheckpointQuiz
-        nodeId={node.id}
-        quizGate={nodeUsesQuizGate(node.pass_rule)}
-        passScore={node.pass_score}
+      <GateControls
+        node={node}
+        canSubmitCheckIn={canSubmitCheckIn}
+        blockedMessage={blockedMessage}
+        preview={preview}
       />
 
       {node.resource_url ? (
@@ -396,6 +453,8 @@ export function StudentNodePlayer({
         calUser={calUser}
         upcomingBooking={upcomingBooking}
         canBookSessions={canBookSessions}
+        canSubmitCheckIn={canSubmitCheckIn}
+        blockedMessage={checkInBlockedMessage}
         preview={preview}
       />
     );
@@ -415,7 +474,13 @@ export function StudentNodePlayer({
 
   if (node.kind === "milestone") {
     return (
-      <CheckpointLayout node={node} levelNumber={levelNumber} />
+      <CheckpointLayout
+        node={node}
+        levelNumber={levelNumber}
+        canSubmitCheckIn={canSubmitCheckIn}
+        blockedMessage={checkInBlockedMessage}
+        preview={preview}
+      />
     );
   }
 

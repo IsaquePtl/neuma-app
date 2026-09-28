@@ -83,7 +83,7 @@ type Draft = {
   body_next_steps: string | null;
 };
 
-type Decision = "advance" | "extend";
+type Decision = "advance" | "extend" | "revise";
 
 export type MentorFeedbackPanelProps = {
   checkInId: string | null;
@@ -296,6 +296,20 @@ function useMentorFeedbackForm({
             await advanceLevel(fd);
             markSubmitted();
           }
+        } else if (decision === "revise") {
+          if (!checkInId) {
+            toast.error("Não há check-in para pedir revisão.");
+            return;
+          }
+          const fd = new FormData();
+          fd.set("check_in_id", checkInId);
+          if (draft) fd.set("draft_id", draft.id);
+          if (returnTo) fd.set("return_to", returnTo);
+          fd.set("video_url", videoUrl.trim());
+          fd.set("notes", notes.trim());
+          fd.set("next_steps", nextSteps.trim());
+          await submitFeedback(fd);
+          markSubmitted();
         } else {
           if (!isExtendAmountValid) {
             toast.error("Indica uma duração válida (mínimo 1)");
@@ -588,7 +602,7 @@ export function MentorDecisionAndSubmit({ className }: { className?: string }) {
     <div className={cn("space-y-3", className)}>
       <div className="space-y-3">
         <p className="text-sm font-medium">Decisão</p>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 sm:grid-cols-3">
           <button
             type="button"
             onClick={() => form.setDecision("advance")}
@@ -604,6 +618,23 @@ export function MentorDecisionAndSubmit({ className }: { className?: string }) {
               Avançar nível
             </span>
           </button>
+          {form.checkInId ? (
+            <button
+              type="button"
+              onClick={() => form.setDecision("revise")}
+              className={cn(
+                "rounded-xl border px-4 py-3 text-left text-sm transition-colors",
+                form.decision === "revise"
+                  ? "border-[var(--neuma-orange)]/50 bg-[var(--neuma-orange)]/10"
+                  : "border-white/10 bg-black/20 hover:bg-white/5",
+              )}
+            >
+              <span className="flex items-center gap-2 font-medium">
+                <Pencil className="size-4 text-[var(--neuma-orange)]" />
+                Pedir revisão
+              </span>
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => form.setDecision("extend")}
@@ -620,6 +651,18 @@ export function MentorDecisionAndSubmit({ className }: { className?: string }) {
             </span>
           </button>
         </div>
+        {form.node.pass_rule === "check_in" && !form.checkInId ? (
+          <p className="text-xs text-muted-foreground">
+            Sem check-in enviado, este nível não avança. Prolongar o prazo
+            mantém o aluno aqui.
+          </p>
+        ) : null}
+        {form.node.pass_rule === "quiz" ? (
+          <p className="text-xs text-muted-foreground">
+            Uma nota abaixo do limiar não passa. Avançar só funciona depois
+            de uma tentativa suficiente.
+          </p>
+        ) : null}
 
         {form.decision === "extend" ? (
           <div className="space-y-1.5 rounded-xl border border-white/10 bg-black/20 p-4">
@@ -677,6 +720,9 @@ export function MentorDecisionAndSubmit({ className }: { className?: string }) {
             form.pendingSubmit ||
             form.uploading ||
             (form.decision === "advance" && form.node.status === "completed") ||
+            (form.decision === "advance" &&
+              form.node.pass_rule === "check_in" &&
+              !form.checkInId) ||
             (form.decision === "extend" && !form.isExtendAmountValid)
           }
           className="h-11 w-full gap-2 py-3 text-base"
@@ -686,6 +732,8 @@ export function MentorDecisionAndSubmit({ className }: { className?: string }) {
             <Loader2 className="size-4 animate-spin" />
           ) : form.decision === "advance" ? (
             <Check className="size-4" />
+          ) : form.decision === "revise" ? (
+            <Pencil className="size-4" />
           ) : (
             <Clock className="size-4" />
           )}
@@ -693,7 +741,9 @@ export function MentorDecisionAndSubmit({ className }: { className?: string }) {
             ? "A guardar…"
             : form.decision === "advance"
               ? "Submeter Feedback"
-              : "Enviar Feedback"}
+              : form.decision === "revise"
+                ? "Pedir revisão"
+                : "Enviar Feedback"}
         </Button>
       </div>
     </div>

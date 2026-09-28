@@ -3,6 +3,7 @@ import "server-only";
 import crypto from "node:crypto";
 
 import type { Json } from "@/lib/types/database.types";
+import { webhookMustBeSigned } from "@/lib/webhook-verification";
 
 type TallyField = {
   key?: string;
@@ -150,8 +151,11 @@ export function verifyTallySignature({
   signature: string | null;
   secrets: string[];
 }) {
-  // Sem secret configurado: aceita (dev). Com secrets: pelo menos um tem de bater.
-  if (secrets.length === 0) return true;
+  // Sem secret: só em dev local. Produção e sites públicos recusam.
+  if (secrets.length === 0) {
+    if (webhookMustBeSigned()) return false;
+    return true;
+  }
   if (!signature) return false;
 
   return secrets.some((secret) => {

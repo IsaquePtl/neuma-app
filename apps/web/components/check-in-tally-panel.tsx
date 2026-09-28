@@ -34,7 +34,7 @@ export function CheckInTallyPanel({
   studentId?: string;
   /** When set, hide the form and show this PT message instead. */
   blockedMessage?: string | null;
-  checkInKind?: "video" | "text";
+  checkInKind?: "video" | "text" | "call";
 }) {
   const hasLevel = Boolean(nodeId) && levelNumber != null;
   const isOrphan =
