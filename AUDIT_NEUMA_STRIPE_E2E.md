@@ -196,7 +196,7 @@ Not a product sign-off. Code-only, typecheck-clean, not exercised in a browser.
 
 - **Area:** Mentor level review.
 - **Evidence:** `components/mentor-feedback-panel.tsx` `handleSubmit` when `decision === "extend"` calls `extendLevelWeek` and, if there is text/video, `saveCheckInFeedbackOnly`. Neither updates `check_ins.status`. `saveCheckInFeedbackOnly` (`lib/actions/feedbacks.ts`) upserts feedback with `approved: false` and returns. The button then toasts success via `markSubmitted()`.
-- **Impact:** Check-in stays in **Por rever**. Mentor thinks it was handled. Student is not moved to `needs_revision`, so the “reenviar” path does not open.
+- **Impact:** Check-in stays in **Por rever**. Mentor thinks it was handled. The deadline itself does move and the student can read the new `due_date` (see Real flow tests, Prolongar prazo). A second video slot does not: live `nodes` has no `week_extensions` column, and `tryIncrementWeekExtensions` swallows that error.
 - **Fix:** Not applied. Product choice: mark `needs_revision`, or a distinct “extended” state that leaves the pending queue without asking for a new video. Do not guess in this audit.
 
 #### H2. Neuma 1:1 cannot be redeemed by an existing account
