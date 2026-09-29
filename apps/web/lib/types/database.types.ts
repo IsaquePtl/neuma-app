@@ -7,6 +7,7 @@ export type NodeStatus = "locked" | "active" | "completed";
 export type CheckInStatus = "pending" | "approved" | "needs_revision";
 export type PathStatus = "draft" | "active" | "completed" | "paused";
 export type NodeKind = "practice" | "call" | "milestone" | "lesson" | "resource";
+export type NodePassRule = "mentor" | "quiz" | "check_in" | "none";
 export type CheckInKind = "video" | "text" | "call";
 export type FormQuestionType =
   | "short_text"
@@ -229,6 +230,11 @@ export interface Database {
           resource_url: string | null;
           content_body: string | null;
           week_extensions: number;
+          pass_rule: NodePassRule;
+          pass_score: number | null;
+          check_in_kind: CheckInKind | null;
+          phase_key: string | null;
+          node_code: string | null;
           created_at: string;
         };
         Insert: {
@@ -244,6 +250,11 @@ export interface Database {
           content_body?: string | null;
           resource_url?: string | null;
           week_extensions?: number;
+          pass_rule?: NodePassRule;
+          pass_score?: number | null;
+          check_in_kind?: CheckInKind | null;
+          phase_key?: string | null;
+          node_code?: string | null;
           created_at?: string;
         };
         Update: {
@@ -259,6 +270,11 @@ export interface Database {
           resource_url?: string | null;
           content_body?: string | null;
           week_extensions?: number;
+          pass_rule?: NodePassRule;
+          pass_score?: number | null;
+          check_in_kind?: CheckInKind | null;
+          phase_key?: string | null;
+          node_code?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -1113,6 +1129,12 @@ export interface Database {
           duration_weeks: number | null;
           default_resource_url: string | null;
           library_asset_id: string | null;
+          pass_rule: NodePassRule;
+          pass_score: number | null;
+          check_in_kind: CheckInKind | null;
+          phase_key: string | null;
+          node_code: string | null;
+          quiz_questions: Json;
           created_at: string;
         };
         Insert: {
@@ -1126,6 +1148,12 @@ export interface Database {
           duration_weeks?: number | null;
           default_resource_url?: string | null;
           library_asset_id?: string | null;
+          pass_rule?: NodePassRule;
+          pass_score?: number | null;
+          check_in_kind?: CheckInKind | null;
+          phase_key?: string | null;
+          node_code?: string | null;
+          quiz_questions?: Json;
           created_at?: string;
         };
         Update: {
@@ -1139,6 +1167,12 @@ export interface Database {
           duration_weeks?: number | null;
           default_resource_url?: string | null;
           library_asset_id?: string | null;
+          pass_rule?: NodePassRule;
+          pass_score?: number | null;
+          check_in_kind?: CheckInKind | null;
+          phase_key?: string | null;
+          node_code?: string | null;
+          quiz_questions?: Json;
           created_at?: string;
         };
         Relationships: [
@@ -1897,6 +1931,7 @@ export interface Database {
       check_in_status: CheckInStatus;
       path_status: PathStatus;
       node_kind: NodeKind;
+      node_pass_rule: NodePassRule;
       check_in_kind: CheckInKind;
       form_question_type: FormQuestionType;
       feedback_draft_status: FeedbackDraftStatus;

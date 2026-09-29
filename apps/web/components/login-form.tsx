@@ -15,13 +15,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OAuthSignInButtons } from "@/components/oauth-sign-in-buttons";
 
-export function LoginForm({ error }: { error?: string }) {
+export function LoginForm({
+  error,
+  nextPath,
+}: {
+  error?: string;
+  nextPath?: string;
+}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const canSubmit = isValidEmail(email) && isValidPassword(password);
 
   return (
     <form action={login} className="space-y-5">
+      {nextPath ? <input type="hidden" name="next" value={nextPath} /> : null}
       <div className="space-y-2">
         <Label htmlFor="email" className="text-base">
           Email

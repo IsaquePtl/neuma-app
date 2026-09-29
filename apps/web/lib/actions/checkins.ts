@@ -10,6 +10,7 @@ import { buildCheckInKey, uploadToR2 } from "@/lib/storage/r2";
 import { appUrl, sendEmail } from "@/lib/email";
 import { generateCheckInDraft } from "@/lib/ai/draft-feedback";
 import { assertCanSubmitCheckIn } from "@/lib/checkins/allowance";
+import { nodeRequiresCheckIn } from "@/lib/nodes/pass-rule";
 import type { CheckInKind } from "@/lib/types/database.types";
 import {
   MAX_VIDEO_BYTES,
@@ -117,13 +118,31 @@ export async function submitCheckIn(formData: FormData) {
       throw new Error("Escolhe como te sentes neste nível.");
     }
   }
-  if (kind === "text" && !notes) {
-    throw new Error("As notas são obrigatórias para check-in de texto.");
+  if ((kind === "text" || kind === "call") && !notes) {
+    throw new Error(
+      kind === "call"
+        ? "As notas são obrigatórias para o check-in da chamada."
+        : "As notas são obrigatórias para check-in de texto.",
+    );
+  }
+  if (kind !== "video" && kind !== "text" && kind !== "call") {
+    throw new Error("Tipo de check-in inválido.");
   }
 
   await assertStudentCheckInNode(supabase, user.id, nodeId);
   if (nodeId) {
-    await assertCanSubmitCheckIn(supabase, nodeId, user.id);
+    const { data: node } = await supabase
+      .from("nodes")
+      .select("pass_rule")
+      .eq("id", nodeId)
+      .maybeSingle();
+    if (node && !nodeRequiresCheckIn(node.pass_rule)) {
+      throw new Error("Este nível não pede check-in.");
+    }
+    // Só vídeo conta o slot; texto = mentoria 1:1 (allowance.ts).
+    if (kind === "video") {
+      await assertCanSubmitCheckIn(supabase, nodeId, user.id);
+    }
   }
 
   const { data: inserted, error } = await supabase

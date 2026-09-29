@@ -21,6 +21,15 @@ export type BillingActionResult =
   | { ok: true; url: string }
   | { ok: false; error: string };
 
+function checkoutIntegrationId(flow: string) {
+  const alphabet = "abcdefghijklmnopqrstuvwxyz";
+  let suffix = "";
+  for (let i = 0; i < 8; i += 1) {
+    suffix += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return `neuma_${flow}_${suffix}`;
+}
+
 async function requireStudent() {
   const user = await getSessionUser();
   if (!user) throw new Error("Não autenticado");
@@ -74,6 +83,7 @@ export async function createCheckoutSession(
       cancel_url: `${origin}/subscrever?cancelado=1`,
       locale: "pt",
       allow_promotion_codes: true,
+      integration_identifier: checkoutIntegrationId("plan"),
       subscription_data: {
         metadata: {
           neuma_profile_id: profile.id,
@@ -138,7 +148,7 @@ export async function finalizeCheckoutSession(
       let lastError: unknown = null;
       for (let attempt = 0; attempt < 4; attempt++) {
         try {
-          await syncSubscription(subscriptionId);
+          await syncSubscription(subscriptionId, { profileId: profile.id });
           lastError = null;
           break;
         } catch (error) {

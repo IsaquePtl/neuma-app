@@ -6,6 +6,7 @@ import {
   getCheckInAllowance,
 } from "@/lib/checkins/allowance";
 import { loadStudentNodeActivity } from "@/lib/feedbacks/student";
+import { nodeUsesVideoCheckInSlot } from "@/lib/nodes/pass-rule";
 import {
   loadMyPathWithNodes,
   loadMentorCalUsername,
@@ -73,6 +74,8 @@ export default async function StudentNodePage({
     redirect("/path");
   }
 
+  const videoSlot = nodeUsesVideoCheckInSlot(node.pass_rule, node.check_in_kind);
+
   // Mobile: center in menubar-aware viewport (pt-8 = slight lower bias);
   // my-auto collapses when overflowing so scroll still reaches the top.
   // Desktop: top-aligned flow.
@@ -91,9 +94,11 @@ export default async function StudentNodePage({
           calUsername={mentor?.cal_username}
           upcomingBooking={node.kind === "call" ? upcomingBooking : null}
           canBookSessions={canBookSessions}
-          canSubmitCheckIn={allowance.allowed}
+          canSubmitCheckIn={!videoSlot || allowance.allowed}
           checkInBlockedMessage={
-            allowance.allowed ? null : checkInBlockedMessage(allowance)
+            videoSlot && !allowance.allowed
+              ? checkInBlockedMessage(allowance)
+              : null
           }
         />
         <StudentLevelActivity

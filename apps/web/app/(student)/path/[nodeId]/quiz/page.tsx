@@ -4,6 +4,7 @@ import { CheckpointQuizPanel } from "@/components/checkpoint-quiz-panel";
 import { getQuizForStudent } from "@/lib/actions/quiz";
 import { createClient } from "@/lib/supabase/server";
 import { loadMyPathWithNodes } from "@/lib/students/queries";
+import { nodeUsesQuizGate } from "@/lib/nodes/pass-rule";
 
 async function levelNumberForNode(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -38,7 +39,9 @@ export default async function CheckpointQuizPage({
 
   const node = nodes.find((n) => n.id === nodeId);
   if (!node) notFound();
-  if (node.kind !== "milestone") redirect(`/path/${nodeId}`);
+  if (node.kind !== "milestone" && !nodeUsesQuizGate(node.pass_rule)) {
+    redirect(`/path/${nodeId}`);
+  }
 
   const activeIndex = nodes.findIndex((n) => n.status === "active");
   const nodeIndex = nodes.findIndex((n) => n.id === nodeId);

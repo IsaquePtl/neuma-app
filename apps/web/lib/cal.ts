@@ -3,6 +3,7 @@ import "server-only";
 import crypto from "node:crypto";
 
 import type { Json } from "@/lib/types/database.types";
+import { webhookMustBeSigned } from "@/lib/webhook-verification";
 
 export type CalBookingStatus =
   | "accepted"
@@ -98,8 +99,11 @@ export function verifyCalSignature({
   secret: string;
 }) {
   if (!secret) {
-    // Dev sem secret: aceita (igual ao Tally). Em produção define CAL_WEBHOOK_SECRET.
-    console.warn("[cal:webhook] CAL_WEBHOOK_SECRET em falta — a aceitar sem verificar");
+    if (webhookMustBeSigned()) {
+      console.error("[cal:webhook] CAL_WEBHOOK_SECRET em falta — pedido recusado");
+      return false;
+    }
+    console.warn("[cal:webhook] CAL_WEBHOOK_SECRET em falta — a aceitar só em dev local");
     return true;
   }
   if (!signature) return false;

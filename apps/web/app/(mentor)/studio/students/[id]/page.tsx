@@ -12,6 +12,7 @@ import {
   loadStudentCounts,
   loadStudentOrThrow,
   loadStudentPath,
+  mapNode,
   mapPath,
   type StudentCheckIn,
   type StudentFormBlock,
@@ -96,18 +97,7 @@ export default async function StudentDetailPage({
       .map((d) => d.check_in_id),
   );
 
-  const mappedNodes: StudentNode[] = (nodes ?? []).map((n) => ({
-    id: n.id,
-    title: n.title,
-    description: n.description,
-    week_number: n.week_number,
-    kind: n.kind,
-    status: n.status,
-    due_date: n.due_date,
-    resource_url: n.resource_url,
-    content_body: n.content_body ?? null,
-    order_index: n.order_index,
-  }));
+  const mappedNodes: StudentNode[] = (nodes ?? []).map(mapNode);
 
   const mappedCheckIns: StudentCheckIn[] = (checkIns ?? []).map((c) => {
     const node = Array.isArray(c.node) ? c.node[0] : c.node;

@@ -6,6 +6,7 @@ import type {
   LibraryAssetUsage,
   MentorCalendarEventKind,
   NodeKind,
+  NodePassRule,
   NodeStatus,
   PathStatus,
   PathTemplateStatus,
@@ -22,12 +23,38 @@ export const nodeKindLabel: Record<NodeKind, string> = {
 
 /** Hints curtos para o editor do mentor. */
 export const nodeKindHint: Record<NodeKind, string> = {
-  practice: "Prática — texto, vídeo e ficheiros de qualquer tipo",
+  practice: "Prática — check-in (vídeo só se for para tocar; senão texto)",
   call: "Sessão — foco no Meet/Cal.com; texto e anexo só como apoio",
-  milestone: "Check-point — quiz de escolha múltipla + material de apoio",
-  lesson: "Aula — vídeo em destaque; texto e anexos abaixo",
+  milestone: "Check-point — quiz; avança sozinho só se a regra for Quiz",
+  lesson: "Aula — vídeo em destaque; o aluno marca como visto (sem check-in)",
   resource: "Aula (legado)",
 };
+
+export const passRuleLabel: Record<NodePassRule, string> = {
+  mentor: "Mentor",
+  quiz: "Quiz",
+  check_in: "Check-in",
+  none: "Visto",
+};
+
+/** Flat phase grouping (schema has no parent/block). Spec A–H + I opcional. */
+export function phaseKeyLabel(phaseKey: string | null | undefined): string {
+  if (!phaseKey?.trim()) return "";
+  const key = phaseKey.trim();
+  if (/^fase\s/i.test(key)) return key;
+  if (key === "I") return "Fase I (opcional)";
+  return `Fase ${key}`;
+}
+
+export function isPhaseBoundary(
+  nodes: Array<{ phase_key?: string | null }>,
+  index: number,
+): boolean {
+  const key = nodes[index]?.phase_key?.trim();
+  if (!key) return false;
+  if (index === 0) return true;
+  return (nodes[index - 1]?.phase_key?.trim() || "") !== key;
+}
 
 export const nodeStatusLabel: Record<NodeStatus, string> = {
   locked: "Bloqueado",
