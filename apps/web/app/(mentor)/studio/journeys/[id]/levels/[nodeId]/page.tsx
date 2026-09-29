@@ -8,10 +8,10 @@ export default async function MentorLevelReviewPage({
   searchParams,
 }: {
   params: Promise<{ id: string; nodeId: string }>;
-  searchParams: Promise<{ checkin?: string; tab?: string }>;
+  searchParams: Promise<{ checkin?: string; tab?: string; aviso?: string }>;
 }) {
   const { id: pathId, nodeId } = await params;
-  const { checkin, tab } = await searchParams;
+  const { checkin, tab, aviso } = await searchParams;
   const activeTab = tab === "nivel" ? "nivel" : "feedback";
 
   const data = await loadMentorLevelReviewData(pathId, nodeId, {
@@ -32,6 +32,7 @@ export default async function MentorLevelReviewPage({
       checkInDetail={data.checkInDetail}
       selectedCheckInId={data.selectedCheckInId}
       activeTab={activeTab}
+      emailFailed={aviso === "email"}
     />
   );
 }

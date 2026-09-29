@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import {
   initialPeriodMonths,
   PathScheduleFields,
-  PeriodMonthsInput,
 } from "@/components/path-schedule-fields";
 import { upsertPath } from "@/lib/actions/paths";
 import { Button } from "@/components/ui/button";
@@ -40,12 +39,15 @@ export function PathForm({
   studentId,
   path,
   triggerClassName,
+  defaultOpen = false,
 }: {
   studentId: string;
   path?: PathData;
   triggerClassName?: string;
+  /** Open immediately (e.g. after "Criar percurso"). */
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [pending, startTransition] = useTransition();
   const isEdit = Boolean(path);
 
@@ -57,6 +59,10 @@ export function PathForm({
       path?.end_date,
     ),
   );
+
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, [defaultOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -113,7 +119,8 @@ export function PathForm({
             {isEdit ? "Editar percurso" : "Novo percurso"}
           </DialogTitle>
           <DialogDescription>
-            Define o plano global. Depois adicionas os blocos semana a semana.
+            Define o plano global em meses. Os níveis preenchem as semanas
+            (segunda a sexta).
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
@@ -154,32 +161,6 @@ export function PathForm({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="path-duration">Duração</Label>
-              <PeriodMonthsInput
-                id="path-duration"
-                value={periodMonths}
-                disabled={pending}
-                onChange={setPeriodMonths}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="path-status">Estado</Label>
-              <select
-                id="path-status"
-                name="status"
-                defaultValue={path?.status ?? "draft"}
-                className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
-              >
-                <option value="draft">Rascunho</option>
-                <option value="active">Ativo</option>
-                <option value="paused">Em pausa</option>
-                <option value="completed">Concluído</option>
-              </select>
-            </div>
-          </div>
-
           <PathScheduleFields
             startDate={startDate}
             periodMonths={periodMonths}
@@ -187,6 +168,21 @@ export function PathForm({
             onPeriodMonthsChange={setPeriodMonths}
             disabled={pending}
           />
+
+          <div className="space-y-2">
+            <Label htmlFor="path-status">Estado</Label>
+            <select
+              id="path-status"
+              name="status"
+              defaultValue={path?.status ?? "draft"}
+              className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+            >
+              <option value="draft">Rascunho</option>
+              <option value="active">Ativo</option>
+              <option value="paused">Em pausa</option>
+              <option value="completed">Concluído</option>
+            </select>
+          </div>
 
           <DialogFooter>
             <Button type="submit" disabled={pending} className="w-full sm:w-auto">

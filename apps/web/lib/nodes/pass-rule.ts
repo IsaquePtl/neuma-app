@@ -12,6 +12,7 @@ export type NodeCheckInKind = CheckInKind | null;
 export function defaultPassRule(kind: NodeKind): NodePassRule {
   if (kind === "practice") return "check_in";
   if (kind === "lesson" || kind === "resource") return "none";
+  if (kind === "milestone") return "quiz";
   return "mentor";
 }
 

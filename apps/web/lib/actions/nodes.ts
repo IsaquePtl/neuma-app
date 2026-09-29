@@ -8,6 +8,11 @@ import {
   parsePassRule,
   parsePassScore,
 } from "@/lib/nodes/pass-rule";
+import {
+  segmentNodeTimeline,
+  weekFridayForPath,
+  weeksBetweenDates,
+} from "@/lib/path-period";
 import type { NodeKind, NodeStatus } from "@/lib/types/database.types";
 
 async function mentorClient() {
@@ -43,9 +48,78 @@ function revalidateJourneyPath(pathId: string) {
   revalidatePath("/studio/journeys");
 }
 
+function parseDurationWeeks(formData: FormData): number {
+  const raw = Number(formData.get("duration_weeks") ?? 1);
+  if (!Number.isFinite(raw) || raw < 1) return 1;
+  return Math.min(Math.floor(raw), 52);
+}
+
+/** Recompute week_number + due_date (Friday) from path start and each level's weeks. */
+async function resegmentPathLevels(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  pathId: string,
+) {
+  const { data: path } = await supabase
+    .from("paths")
+    .select("start_date, end_date")
+    .eq("id", pathId)
+    .single();
+
+  const { data: nodes } = await supabase
+    .from("nodes")
+    .select("id, order_index, duration_weeks")
+    .eq("path_id", pathId)
+    .order("order_index", { ascending: true });
+
+  if (!nodes?.length) return;
+
+  const startDate = path?.start_date;
+  const endDate = path?.end_date;
+  const totalWeeks =
+    startDate && endDate ? weeksBetweenDates(startDate, endDate) : null;
+
+  const durations = nodes.map((n) =>
+    n.duration_weeks != null && n.duration_weeks >= 1 ? n.duration_weeks : 1,
+  );
+
+  const segments =
+    totalWeeks != null
+      ? segmentNodeTimeline(nodes.length, totalWeeks, durations)
+      : (() => {
+          let week = 1;
+          return durations.map((duration_weeks) => {
+            const seg = { week_number: week, duration_weeks };
+            week += duration_weeks;
+            return seg;
+          });
+        })();
+
+  await Promise.all(
+    nodes.map((node, i) => {
+      const segment = segments[i];
+      const dueDate =
+        startDate != null
+          ? weekFridayForPath(
+              startDate,
+              segment.week_number + segment.duration_weeks - 1,
+            )
+          : null;
+      return supabase
+        .from("nodes")
+        .update({
+          week_number: segment.week_number,
+          duration_weeks: segment.duration_weeks,
+          due_date: dueDate,
+        })
+        .eq("id", node.id);
+    }),
+  );
+}
+
 export async function createNode(formData: FormData) {
   const supabase = await mentorClient();
   const pathId = formData.get("path_id") as string;
+  const durationWeeks = parseDurationWeeks(formData);
 
   const { data: last } = await supabase
     .from("nodes")
@@ -69,11 +143,8 @@ export async function createNode(formData: FormData) {
     path_id: pathId,
     title: (formData.get("title") as string)?.trim() || "Novo bloco",
     description: ((formData.get("description") as string) || "").trim() || null,
-    week_number: formData.get("week_number")
-      ? Number(formData.get("week_number"))
-      : null,
+    duration_weeks: durationWeeks,
     kind,
-    due_date: (formData.get("due_date") as string) || null,
     resource_url: ((formData.get("resource_url") as string) || "").trim() || null,
     content_body:
       ((formData.get("content_body") as string) || "").trim() || null,
@@ -90,6 +161,8 @@ export async function createNode(formData: FormData) {
     status,
   });
 
+  await resegmentPathLevels(supabase, pathId);
+
   const studentId = await studentIdOfPath(supabase, pathId);
   if (studentId) {
     revalidatePath(`/studio/students/${studentId}`);
@@ -104,23 +177,32 @@ export async function updateNode(formData: FormData) {
   const supabase = await mentorClient();
   const id = formData.get("id") as string;
   const pathId = formData.get("path_id") as string;
+  const durationWeeks = parseDurationWeeks(formData);
 
   const kind = ((formData.get("kind") as NodeKind) || "practice");
   const passRule = parsePassRule(
     (formData.get("pass_rule") as string) || "",
     kind,
   );
+  if (passRule === "quiz") {
+    const { count } = await supabase
+      .from("node_quiz_questions")
+      .select("id", { count: "exact", head: true })
+      .eq("node_id", id);
+    if (!count) {
+      throw new Error(
+        "Adiciona pelo menos uma pergunta antes de usar o gate Quiz.",
+      );
+    }
+  }
   await supabase
     .from("nodes")
     .update({
       title: (formData.get("title") as string)?.trim() || "Bloco",
       description: ((formData.get("description") as string) || "").trim() || null,
-      week_number: formData.get("week_number")
-        ? Number(formData.get("week_number"))
-        : null,
+      duration_weeks: durationWeeks,
       kind,
       status: ((formData.get("status") as NodeStatus) || "locked"),
-      due_date: (formData.get("due_date") as string) || null,
       resource_url: ((formData.get("resource_url") as string) || "").trim() || null,
       content_body:
         ((formData.get("content_body") as string) || "").trim() || null,
@@ -135,6 +217,8 @@ export async function updateNode(formData: FormData) {
       node_code: ((formData.get("node_code") as string) || "").trim() || null,
     })
     .eq("id", id);
+
+  await resegmentPathLevels(supabase, pathId);
 
   const studentId = await studentIdOfPath(supabase, pathId);
   if (studentId) {
@@ -151,6 +235,7 @@ export async function deleteNode(formData: FormData) {
   const id = formData.get("id") as string;
   const pathId = formData.get("path_id") as string;
   await supabase.from("nodes").delete().eq("id", id);
+  await resegmentPathLevels(supabase, pathId);
   const studentId = await studentIdOfPath(supabase, pathId);
   if (studentId) {
     revalidatePath(`/studio/students/${studentId}`);
@@ -185,6 +270,8 @@ export async function moveNode(formData: FormData) {
   await supabase.from("nodes").update({ order_index: -1 }).eq("id", a.id);
   await supabase.from("nodes").update({ order_index: a.order_index }).eq("id", b.id);
   await supabase.from("nodes").update({ order_index: b.order_index }).eq("id", a.id);
+
+  await resegmentPathLevels(supabase, pathId);
 
   const studentId = await studentIdOfPath(supabase, pathId);
   if (studentId) {

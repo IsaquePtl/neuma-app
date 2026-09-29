@@ -16,6 +16,7 @@ import {
   type StripeDiagnosticCheck,
 } from "@/lib/finance/dashboard";
 import { formatCents } from "@/lib/finance/money";
+import { createClient } from "@/lib/supabase/server";
 import { RANGE_OPTIONS, resolveFinanceRange } from "@/lib/finance/range";
 import { cn } from "@/lib/utils";
 
@@ -29,10 +30,11 @@ export default async function FinanceDashboardPage({
   const { range: rangeRaw } = await searchParams;
   const range = resolveFinanceRange(rangeRaw);
 
-  const [dashboard, settings, diagnostics] = await Promise.all([
+  const [dashboard, settings, diagnostics, accessSplit] = await Promise.all([
     loadFinanceDashboard(range.from, range.to, range.bucket),
     loadFinanceSettings(),
     diagnoseStripe(),
+    loadAccessSplit(),
   ]);
 
   const goalCents = settings.mrrGoalCents;
@@ -67,6 +69,24 @@ export default async function FinanceDashboardPage({
       </PageHero>
 
       <StripeDiagnosticsPanel checks={diagnostics.checks} ok={diagnostics.ok} />
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <FinanceKpiCard
+          label="A pagar"
+          value={String(accessSplit.paying)}
+          hint="Subscrição activa ou em teste"
+        />
+        <FinanceKpiCard
+          label="Cortesia 1:1"
+          value={String(accessSplit.courtesy)}
+          hint="is_one_to_one sem subscrição saudável"
+        />
+        <FinanceKpiCard
+          label="Convites por pagar"
+          value={String(accessSplit.unpaidInvites)}
+          hint="1:1 enviado e ainda não pago"
+        />
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2 desktop:grid-cols-3">
         <FinanceKpiCard
@@ -191,6 +211,35 @@ export default async function FinanceDashboardPage({
       </Card>
     </div>
   );
+}
+
+async function loadAccessSplit() {
+  const supabase = await createClient();
+  const [{ data: subs }, { data: courtesyProfiles }, { count: unpaidInvites }] =
+    await Promise.all([
+      supabase
+        .from("subscriptions")
+        .select("profile_id, status")
+        .in("status", ["active", "trialing"]),
+      supabase
+        .from("profiles")
+        .select("id")
+        .eq("role", "student")
+        .eq("is_one_to_one", true),
+      supabase
+        .from("one_to_one_invites")
+        .select("id", { count: "exact", head: true })
+        .in("status", ["pending", "sent"]),
+    ]);
+  const payingIds = new Set((subs ?? []).map((row) => row.profile_id));
+  const courtesy = (courtesyProfiles ?? []).filter(
+    (profile) => !payingIds.has(profile.id),
+  ).length;
+  return {
+    paying: payingIds.size,
+    courtesy,
+    unpaidInvites: unpaidInvites ?? 0,
+  };
 }
 
 function StripeDiagnosticsPanel({

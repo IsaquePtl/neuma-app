@@ -2,6 +2,7 @@ import Image from "next/image";
 
 import { LoginForm } from "@/components/login-form";
 import { Card } from "@/components/ui/card";
+import { isOneToOneInvitePath } from "@/lib/one-to-one/invite-path";
 
 export default async function LoginPage({
   searchParams,
@@ -9,7 +10,10 @@ export default async function LoginPage({
   searchParams: Promise<{ error?: string; ok?: string; next?: string }>;
 }) {
   const { error, ok, next } = await searchParams;
-  const safeNext = next && /^\/1-1\/[A-Za-z0-9_-]+$/.test(next) ? next : undefined;
+  const safeNext =
+    next && (/^\/1-1\/[A-Za-z0-9_-]+$/.test(next) || isOneToOneInvitePath(next))
+      ? next
+      : undefined;
 
   return (
     <div className="flex w-full flex-col items-center desktop:items-stretch">

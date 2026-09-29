@@ -1,17 +1,41 @@
+import { Suspense } from "react";
+import { ActionNeededList } from "@/components/action-needed-list";
+import { CalendarToolbar } from "@/components/calendar-toolbar";
 import { MentorCalendar } from "@/components/mentor-calendar";
 import { CreateCalendarEventPanel } from "@/components/create-calendar-event-form";
 import { UpcomingSessionsSection } from "@/components/mentor-dashboard/upcoming-sessions-section";
 import { Button } from "@/components/ui/button";
+import { ScreenLoader } from "@/components/screen-loader";
 import { createClient } from "@/lib/supabase/server";
 import {
   loadCalendarEvents,
   loadUpcomingSessions,
 } from "@/lib/calendar/events";
+import { loadActionNeeded } from "@/lib/mentor/action-needed";
+import type { CalendarEventKind } from "@/lib/calendar/events";
+
+const KIND_LABEL: Record<CalendarEventKind, string> = {
+  session: "Sessão",
+  due: "Prazo",
+  path_start: "Início",
+  path_end: "Fim",
+  reminder: "Lembrete",
+  meeting: "Reunião",
+  event: "Evento",
+  misc: "Diversos",
+};
 
 export default async function MentorCalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ y?: string; m?: string }>;
+  searchParams: Promise<{
+    y?: string;
+    m?: string;
+    view?: string;
+    kind?: string;
+    student?: string;
+    oto?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const now = new Date();
@@ -28,12 +52,13 @@ export default async function MentorCalendarPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [events, upcoming, { data: mentorProfile }, { data: students }, { data: paths }] =
+  const [events, upcoming, actionNeeded, { data: mentorProfile }, { data: students }, { data: paths }] =
     await Promise.all([
       loadCalendarEvents(safeYear, safeMonth, {
         studentReturnTo: "/studio/calendar",
       }),
       loadUpcomingSessions(7),
+      loadActionNeeded(),
       supabase
         .from("profiles")
         .select("cal_username")
@@ -41,7 +66,7 @@ export default async function MentorCalendarPage({
         .maybeSingle(),
       supabase
         .from("profiles")
-        .select("id, full_name, email")
+        .select("id, full_name, email, is_one_to_one")
         .eq("role", "student")
         .order("full_name"),
       supabase
@@ -60,6 +85,20 @@ export default async function MentorCalendarPage({
     id: s.id,
     label: s.full_name ?? s.email ?? s.id,
   }));
+  const oneToOneIds = new Set(
+    (students ?? []).filter((s) => s.is_one_to_one).map((s) => s.id),
+  );
+  const view = sp.view === "week" ? "week" : "month";
+  const kindFilter =
+    sp.kind && sp.kind in KIND_LABEL ? (sp.kind as CalendarEventKind) : "";
+  const filteredEvents = events.filter((event) => {
+    if (kindFilter && event.kind !== kindFilter) return false;
+    if (sp.student && event.studentId !== sp.student) return false;
+    if (sp.oto === "1" && (!event.studentId || !oneToOneIds.has(event.studentId))) {
+      return false;
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -88,12 +127,27 @@ export default async function MentorCalendarPage({
         ) : null}
       </header>
 
-      <MentorCalendar
-        initialYear={safeYear}
-        initialMonth={safeMonth}
-        events={events}
-        students={studentOptions}
-      />
+      <ActionNeededList items={actionNeeded} />
+
+      <Suspense fallback={<div className="h-14 rounded-2xl border border-white/10 bg-white/[0.03]" />}>
+        <CalendarToolbar
+          view={view}
+          kind={kindFilter}
+          studentId={sp.student ?? ""}
+          oneToOneOnly={sp.oto === "1"}
+          students={studentOptions}
+        />
+      </Suspense>
+
+      <Suspense fallback={<ScreenLoader className="min-h-[16rem]" />}>
+        <MentorCalendar
+          initialYear={safeYear}
+          initialMonth={safeMonth}
+          events={filteredEvents}
+          students={studentOptions}
+          view={view}
+        />
+      </Suspense>
 
       <CreateCalendarEventPanel
         students={studentOptions}

@@ -594,12 +594,14 @@ export function OnboardingForm({
 
   return (
     <div className="flex h-full min-h-0 flex-col text-white">
-      <Link
-        href={isLoggedIn ? backHref : SIGNUP_HREF}
-        className="absolute right-4 top-[max(0.75rem,env(safe-area-inset-top,0px))] z-20 text-base text-white/70 underline-offset-4 hover:text-white hover:underline"
-      >
-        {isLoggedIn ? backLabel : "Criar conta"}
-      </Link>
+      {isLoggedIn ? (
+        <Link
+          href={backHref}
+          className="absolute right-4 top-[max(0.75rem,env(safe-area-inset-top,0px))] z-20 text-base text-white/70 underline-offset-4 hover:text-white hover:underline"
+        >
+          {backLabel}
+        </Link>
+      ) : null}
 
       <div className={ONBOARDING_SCROLL}>
         <div

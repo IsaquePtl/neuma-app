@@ -5,9 +5,9 @@ import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 import {
-  addWeeksToDate,
   resolvePathSchedule,
   segmentNodeTimeline,
+  weekFridayForPath,
   weeksBetweenDates,
 } from "@/lib/path-period";
 import type {
@@ -474,9 +474,10 @@ export async function applyPathTemplate(formData: FormData) {
       const status: "active" | "locked" = i === 0 ? "active" : "locked";
       const segment = segments?.[i];
       const week_number = segment?.week_number ?? n.week_number;
+      const duration_weeks = segment?.duration_weeks ?? n.duration_weeks ?? 1;
       const due_date =
         schedule.startDate && segment
-          ? addWeeksToDate(
+          ? weekFridayForPath(
               schedule.startDate,
               segment.week_number + segment.duration_weeks - 1,
             )
@@ -487,6 +488,7 @@ export async function applyPathTemplate(formData: FormData) {
         description: n.description,
         kind: n.kind,
         week_number,
+        duration_weeks,
         due_date,
         order_index: i,
         status,

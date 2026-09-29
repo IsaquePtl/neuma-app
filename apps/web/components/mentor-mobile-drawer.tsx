@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Loader2, LogOut, Menu, X, type LucideIcon } from "lucide-react";
 
-import { logout } from "@/lib/actions/auth";
+import { LogoutForm } from "@/components/logout-form";
 import { cn } from "@/lib/utils";
 import { NeumaLogo } from "@/components/neuma-logo";
 import { UserAvatar } from "@/components/user-avatar";
@@ -195,7 +195,7 @@ export function MentorMobileDrawer({
                 pending={pending}
                 onNavigate={handleNavigate}
               />
-              <form action={logout}>
+              <LogoutForm>
                 <Button
                   type="submit"
                   variant="ghost"
@@ -204,7 +204,7 @@ export function MentorMobileDrawer({
                 >
                   <LogOut className="size-4" /> Sair
                 </Button>
-              </form>
+              </LogoutForm>
             </div>
           ) : null}
         </div>

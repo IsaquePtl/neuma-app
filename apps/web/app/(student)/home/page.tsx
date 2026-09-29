@@ -23,6 +23,7 @@ import {
   type StudentTodoItem,
 } from "@/components/student-todo-list";
 import { formatDate, nodeKindLabel } from "@/lib/labels";
+import { PathAwaitingCard } from "@/components/path-awaiting-card";
 import { studentHasOnboardingSubmission } from "@/lib/onboarding/submission";
 import {
   firstNameFromFullName,
@@ -52,6 +53,7 @@ function todoTagLabel(key: string) {
   if (key.startsWith("call:")) return "SESSÃO";
   if (key.startsWith("content:")) return "AULA";
   if (key.startsWith("checkin:")) return "PRÁTICA";
+  if (key.startsWith("quiz:")) return "QUIZ";
   if (key.startsWith("feedback:")) return "FEEDBACK";
   if (key === "session") return "MENTOR";
   if (key === "path") return "PERCURSO";
@@ -100,10 +102,9 @@ export default async function StudentHomePage() {
       ? activeNode
       : null;
   const activeCheckin =
-    activeNode &&
-    (activeNode.kind === "practice" || activeNode.kind === "milestone")
-      ? activeNode
-      : null;
+    activeNode && activeNode.pass_rule === "check_in" ? activeNode : null;
+  const activeQuiz =
+    activeNode && activeNode.pass_rule === "quiz" ? activeNode : null;
 
   const unviewedFeedback = path
     ? await loadStudentUnviewedFeedback(supabase, user!.id, nodes)
@@ -158,7 +159,8 @@ export default async function StudentHomePage() {
             </h1>
           </div>
 
-          <div className="neuma-enter-up neuma-enter-delay-1 min-w-0">
+          <div className="neuma-enter-up neuma-enter-delay-1 min-w-0 space-y-4">
+            {hasOnboarding ? <PathAwaitingCard /> : null}
             <StudentTodoList items={awaitingTodos} />
           </div>
         </div>
@@ -186,6 +188,16 @@ export default async function StudentHomePage() {
         title: `Agendar call da semana ${week}`,
         href: `/path/${activeCall.id}`,
         tag: todoTagLabel(`call:${activeCall.id}`),
+      });
+    }
+
+    if (activeQuiz) {
+      const week = weekNumberLabel(activeQuiz.week_number);
+      todos.push({
+        key: `quiz:${activeQuiz.id}`,
+        title: `Fazer o check-point da semana ${week}`,
+        href: `/path/${activeQuiz.id}/quiz`,
+        tag: todoTagLabel(`quiz:${activeQuiz.id}`),
       });
     }
 

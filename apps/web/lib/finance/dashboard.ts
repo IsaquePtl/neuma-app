@@ -1,5 +1,6 @@
 import "server-only";
 
+import { getCurrentProfile } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireStripe } from "@/lib/stripe/client";
@@ -111,14 +112,27 @@ export async function loadFinanceDashboard(
   bucket: Bucket,
 ): Promise<FinanceDashboardData> {
   try {
-    const supabase = await createClient();
+    const profile = await getCurrentProfile();
+    if (profile?.role !== "mentor") {
+      return EMPTY_FINANCE_DASHBOARD;
+    }
+
+    // Service role: evita falhas de JWT/auth.uid() no RPC SECURITY DEFINER
+    // (o guarda de mentor fica no app; a SQL aceita service_role).
+    const supabase = createAdminClient();
     const { data, error } = await supabase.rpc("finance_dashboard", {
       p_from: from.toISOString(),
       p_to: to.toISOString(),
       p_bucket: bucket,
       p_tz: "Europe/Lisbon",
     });
-    if (error) throw error;
+    if (error) {
+      throw new Error(
+        [error.message, error.code, error.details, error.hint]
+          .filter(Boolean)
+          .join(" · ") || "finance_dashboard RPC failed",
+      );
+    }
 
     const raw = (data ?? {}) as Record<string, unknown>;
     return {
@@ -128,7 +142,10 @@ export async function loadFinanceDashboard(
       by_plan: Array.isArray(raw.by_plan) ? raw.by_plan.map(toByPlan) : [],
     };
   } catch (error) {
-    console.error("[finance:dashboard]", error);
+    console.error(
+      "[finance:dashboard]",
+      error instanceof Error ? error.message : error,
+    );
     return EMPTY_FINANCE_DASHBOARD;
   }
 }

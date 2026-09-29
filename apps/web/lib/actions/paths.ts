@@ -6,9 +6,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { purgeAgentShellsForPathTitles } from "@/lib/actions/agent-library";
 import {
-  addWeeksToDate,
   resolvePathSchedule,
   segmentNodeTimeline,
+  weekFridayForPath,
   weeksBetweenDates,
 } from "@/lib/path-period";
 import type { PathStatus } from "@/lib/types/database.types";
@@ -36,19 +36,23 @@ async function segmentPathNodes(
 ) {
   const { data: nodes } = await supabase
     .from("nodes")
-    .select("id, order_index")
+    .select("id, order_index, duration_weeks")
     .eq("path_id", pathId)
     .order("order_index", { ascending: true });
 
   if (!nodes?.length) return;
 
   const totalWeeks = weeksBetweenDates(startDate, endDate);
-  const segments = segmentNodeTimeline(nodes.length, totalWeeks);
+  const segments = segmentNodeTimeline(
+    nodes.length,
+    totalWeeks,
+    nodes.map((n) => n.duration_weeks),
+  );
 
   await Promise.all(
     nodes.map((node, i) => {
       const segment = segments[i];
-      const dueDate = addWeeksToDate(
+      const dueDate = weekFridayForPath(
         startDate,
         segment.week_number + segment.duration_weeks - 1,
       );
@@ -56,6 +60,7 @@ async function segmentPathNodes(
         .from("nodes")
         .update({
           week_number: segment.week_number,
+          duration_weeks: segment.duration_weeks,
           due_date: dueDate,
         })
         .eq("id", node.id);
@@ -191,6 +196,22 @@ export async function setPathStatus(formData: FormData) {
   const status = (formData.get("status") as PathStatus) || "draft";
 
   await supabase.from("paths").update({ status }).eq("id", id);
+
+  // When activating, unlock the first nível if none is active yet (HITL publish).
+  if (status === "active") {
+    const { data: nodes } = await supabase
+      .from("nodes")
+      .select("id, status, order_index")
+      .eq("path_id", id)
+      .order("order_index", { ascending: true });
+    const hasActive = (nodes ?? []).some((n) => n.status === "active");
+    if (!hasActive && nodes?.[0]) {
+      await supabase
+        .from("nodes")
+        .update({ status: "active" })
+        .eq("id", nodes[0].id);
+    }
+  }
 
   revalidatePath(`/studio/students/${studentId}`);
   revalidatePath(`/studio/journeys/${id}`);

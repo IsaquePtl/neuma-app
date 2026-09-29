@@ -86,6 +86,7 @@ export interface Database {
           mentor_id: string | null;
           billing_exempt: boolean;
           is_one_to_one: boolean;
+          one_to_one_access_until: string | null;
           created_at: string;
         };
         Insert: {
@@ -107,6 +108,7 @@ export interface Database {
           mentor_id?: string | null;
           billing_exempt?: boolean;
           is_one_to_one?: boolean;
+          one_to_one_access_until?: string | null;
           created_at?: string;
         };
         Update: {
@@ -128,6 +130,7 @@ export interface Database {
           mentor_id?: string | null;
           billing_exempt?: boolean;
           is_one_to_one?: boolean;
+          one_to_one_access_until?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -225,6 +228,7 @@ export interface Database {
           order_index: number;
           status: NodeStatus;
           week_number: number | null;
+          duration_weeks: number | null;
           kind: NodeKind;
           due_date: string | null;
           resource_url: string | null;
@@ -245,6 +249,7 @@ export interface Database {
           order_index: number;
           status?: NodeStatus;
           week_number?: number | null;
+          duration_weeks?: number | null;
           kind?: NodeKind;
           due_date?: string | null;
           content_body?: string | null;
@@ -265,6 +270,7 @@ export interface Database {
           order_index?: number;
           status?: NodeStatus;
           week_number?: number | null;
+          duration_weeks?: number | null;
           kind?: NodeKind;
           due_date?: string | null;
           resource_url?: string | null;
@@ -1839,11 +1845,17 @@ export interface Database {
           id: string;
           email: string;
           full_name: string | null;
+          first_name: string | null;
+          last_name: string | null;
+          age: number | null;
+          gender: ProfileGender | null;
           token_hash: string;
           amount_cents: number;
           currency: string;
           interval: string;
           interval_count: number;
+          duration_months: number | null;
+          billing_mode: string;
           stripe_price_id: string | null;
           stripe_checkout_session_id: string | null;
           status: OneToOneInviteStatus;
@@ -1860,11 +1872,17 @@ export interface Database {
           id?: string;
           email: string;
           full_name?: string | null;
+          first_name?: string | null;
+          last_name?: string | null;
+          age?: number | null;
+          gender?: ProfileGender | null;
           token_hash: string;
           amount_cents: number;
           currency?: string;
           interval?: string;
           interval_count?: number;
+          duration_months?: number | null;
+          billing_mode?: string;
           stripe_price_id?: string | null;
           stripe_checkout_session_id?: string | null;
           status?: OneToOneInviteStatus;
@@ -1881,11 +1899,17 @@ export interface Database {
           id?: string;
           email?: string;
           full_name?: string | null;
+          first_name?: string | null;
+          last_name?: string | null;
+          age?: number | null;
+          gender?: ProfileGender | null;
           token_hash?: string;
           amount_cents?: number;
           currency?: string;
           interval?: string;
           interval_count?: number;
+          duration_months?: number | null;
+          billing_mode?: string;
           stripe_price_id?: string | null;
           stripe_checkout_session_id?: string | null;
           status?: OneToOneInviteStatus;

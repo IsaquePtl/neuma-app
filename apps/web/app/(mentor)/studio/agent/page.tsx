@@ -7,70 +7,31 @@ export default async function AgentPage() {
   await purgeOrphanedAgentShells();
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  const now = new Date();
-  const startOfToday = new Date(now);
-  startOfToday.setHours(0, 0, 0, 0);
-  const startOfWeek = new Date(startOfToday);
-  startOfWeek.setDate(startOfWeek.getDate() - ((startOfWeek.getDay() + 6) % 7));
-
-  const [
-    { count: students },
-    { count: pendingReviews },
-    { count: onboardings },
-    { count: proposals },
-    { count: checkinsToday },
-    { count: checkinsWeek },
-    health,
-  ] = await Promise.all([
+  const [{ data: studentRows }, health] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id", { count: "exact", head: true })
-      .eq("role", "student"),
-    supabase
-      .from("check_ins")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "pending"),
-    supabase
-      .from("tally_submissions")
-      .select("id", { count: "exact", head: true })
-      .eq("submission_kind", "onboarding")
-      .in("status", ["pending", "linked"]),
-    supabase
-      .from("agent_proposals")
-      .select("id", { count: "exact", head: true })
-      .eq("mentor_id", user!.id)
-      .eq("status", "pending"),
-    supabase
-      .from("check_ins")
-      .select("id", { count: "exact", head: true })
-      .gte("created_at", startOfToday.toISOString()),
-    supabase
-      .from("check_ins")
-      .select("id", { count: "exact", head: true })
-      .gte("created_at", startOfWeek.toISOString()),
+      .select("id, full_name, email")
+      .eq("role", "student")
+      .order("full_name", { ascending: true }),
     agentHealth(),
   ]);
+
+  const studentOptions = (studentRows ?? []).map((s) => ({
+    id: s.id,
+    full_name: s.full_name,
+    email: s.email,
+  }));
 
   return (
     <AgentsHub
       healthOk={Boolean(health?.ok)}
       healthLabel={
         health?.ok
-          ? (health.model ?? "modelo")
+          ? "multi-modelo"
           : String(health?.error ?? health?.status ?? "?")
       }
-      tracking={{
-        students: students ?? 0,
-        pendingReviews: pendingReviews ?? 0,
-        onboardings: onboardings ?? 0,
-        proposals: proposals ?? 0,
-        checkinsToday: checkinsToday ?? 0,
-        checkinsWeek: checkinsWeek ?? 0,
-      }}
+      students={studentOptions}
     />
   );
 }

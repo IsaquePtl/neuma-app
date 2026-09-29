@@ -4,8 +4,10 @@ import type Stripe from "stripe";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe/client";
+import { fulfillOneToOneCheckout } from "@/lib/stripe/one-to-one";
 import {
   attachChargeToPayment,
+  syncCheckoutPayment,
   syncInvoice,
   syncRefund,
   syncSubscription,
@@ -45,6 +47,7 @@ function revalidateFinance() {
   revalidatePath("/studio/finance");
   revalidatePath("/studio/finance/subscriptions");
   revalidatePath("/settings");
+  revalidatePath("/settings/subscription");
   revalidatePath("/home");
 }
 
@@ -146,6 +149,9 @@ export async function POST(request: NextRequest) {
               null,
           });
         }
+        if (session.mode === "payment") {
+          await syncCheckoutPayment(session);
+        }
         if (session.invoice) {
           const invoiceId =
             typeof session.invoice === "string"
@@ -153,7 +159,7 @@ export async function POST(request: NextRequest) {
               : session.invoice.id;
           if (invoiceId) await syncInvoice(invoiceId);
         }
-        await markInviteAsPaid(session);
+        await fulfillOneToOneCheckout(session);
         break;
       }
 
@@ -280,36 +286,3 @@ async function handleSetupCompleted(
   }
 }
 
-/** Fecha o convite 1:1 quando o pagamento e concluido. */
-async function markInviteAsPaid(session: Stripe.Checkout.Session) {
-  const inviteId = session.metadata?.neuma_invite_id;
-  if (!inviteId) return;
-  if (
-    session.payment_status !== "paid" &&
-    session.payment_status !== "no_payment_required"
-  ) {
-    return;
-  }
-
-  const admin = createAdminClient();
-  const { error } = await admin
-    .from("one_to_one_invites")
-    .update({
-      status: "paid",
-      stripe_checkout_session_id: session.id,
-      redeemed_at: new Date().toISOString(),
-      redeemed_profile_id:
-        session.metadata?.neuma_profile_id ?? session.client_reference_id ?? null,
-    })
-    .eq("id", inviteId);
-  if (error) throw new Error(error.message);
-
-  if (session.client_reference_id) {
-    await admin
-      .from("profiles")
-      .update({ is_one_to_one: true })
-      .eq("id", session.client_reference_id);
-  }
-
-  revalidatePath("/studio/finance/one-to-one");
-}

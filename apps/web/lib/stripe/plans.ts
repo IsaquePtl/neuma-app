@@ -36,6 +36,11 @@ export type PlanDefinition = {
   intervalCount: number;
   /** Meses cobertos por cada cobranca. Base da normalizacao do MRR. */
   months: number;
+  /**
+   * Badge de poupança na UI (arredondado para marketing).
+   * Não é o cálculo exacto face ao mensal.
+   */
+  displaySavingsPercent?: number;
   /** Destacado na UI como opcao recomendada. */
   highlight?: boolean;
 };
@@ -65,6 +70,7 @@ const DEFINITIONS: Record<FixedPlan, PlanDefinition> = {
     interval: "month",
     intervalCount: 3,
     months: 3,
+    displaySavingsPercent: 15,
     highlight: true,
   },
   annual: {
@@ -76,6 +82,7 @@ const DEFINITIONS: Record<FixedPlan, PlanDefinition> = {
     interval: "year",
     intervalCount: 1,
     months: 12,
+    displaySavingsPercent: 35,
   },
 };
 
@@ -125,12 +132,9 @@ export function monthlyEquivalentCents(plan: PlanDefinition): number {
   return Math.round(plan.amountCents / plan.months);
 }
 
-/** Poupanca percentual face ao mensal, para o badge nos cartoes. */
+/** Poupanca percentual para o badge nos cartoes (valores de marketing). */
 export function savingsPercent(plan: PlanDefinition): number {
-  const monthly = DEFINITIONS.monthly.amountCents;
-  const perMonth = plan.amountCents / plan.months;
-  if (perMonth >= monthly) return 0;
-  return Math.round((1 - perMonth / monthly) * 100);
+  return plan.displaySavingsPercent ?? 0;
 }
 
 export function formatEuros(

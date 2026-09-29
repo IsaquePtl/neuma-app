@@ -65,13 +65,18 @@ type PathDraftPayload = {
   goal?: string;
   description?: string;
   status?: string;
+  student_id?: string | null;
   brief_id?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  duration_label?: string | null;
   nodes?: Array<{
     title: string;
     description?: string;
     kind?: string;
     order_index?: number;
     week_number?: number;
+    duration_weeks?: number;
   }>;
 };
 
@@ -91,6 +96,19 @@ export async function approveProposal(proposalId: string) {
 
   if (proposal.kind === "path_draft") {
     const p = payload as PathDraftPayload;
+    const { data: existingDraft } = p.student_id
+      ? await supabase
+          .from("paths")
+          .select("id")
+          .eq("student_id", p.student_id)
+          .eq("status", "draft")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : { data: null };
+    if (existingDraft) {
+      targetId = existingDraft.id;
+    } else {
     const { data: path, error: pathErr } = await supabase
       .from("paths")
       .insert({
@@ -100,8 +118,11 @@ export async function approveProposal(proposalId: string) {
         goal: p.goal ?? null,
         description: p.description ?? null,
         status: "draft",
-        student_id: null,
+        student_id: p.student_id ?? null,
         created_by: mentorId,
+        start_date: p.start_date ?? null,
+        end_date: p.end_date ?? null,
+        duration_label: p.duration_label ?? null,
       })
       .select("id")
       .single();
@@ -120,6 +141,10 @@ export async function approveProposal(proposalId: string) {
             : "practice") as "lesson" | "practice" | "call" | "milestone",
           order_index: n.order_index ?? i + 1,
           week_number: n.week_number ?? null,
+          duration_weeks:
+            n.duration_weeks != null && n.duration_weeks >= 1
+              ? n.duration_weeks
+              : 1,
           status: "locked" as const,
         }))
         .sort((a, b) => a.order_index - b.order_index);
@@ -133,6 +158,7 @@ export async function approveProposal(proposalId: string) {
         .from("student_briefs")
         .update({ path_id: path.id, placeholder_name: p.placeholder_name ?? null })
         .eq("id", p.brief_id);
+    }
     }
   } else if (proposal.kind === "calendar_event") {
     const { data: ev, error: evErr } = await supabase

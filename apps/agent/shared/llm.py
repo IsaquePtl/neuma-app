@@ -1,48 +1,53 @@
-"""Gemini model selection — validates available models at startup (no invented IDs)."""
+"""Workload-routed LLM factory — Gemini for cheap/fast, Claude for deep reasoning."""
 
 from __future__ import annotations
 
 import os
+from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 
-import httpx
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
-# Also pick up apps/web/.env.local when running locally side-by-side
 load_dotenv(Path(__file__).resolve().parents[2] / "web" / ".env.local", override=False)
 
-PREFERRED_MODELS = [
-    "gemini-3.6-flash",
-    "gemini-3-flash-preview",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-1.5-flash",
-]
 
-# Listed by the API but rejected at call-time for new keys.
-DEPRECATED_MODELS = {
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-1.5-flash",
-    "gemini-1.5-pro",
+class Workload(str, Enum):
+    """Strict model routing per Neuma agent surface."""
+
+    SUPERVISOR = "supervisor"  # gemini-1.5-flash
+    ROUTER = "router"  # gemini-1.5-flash
+    JOURNEY = "journey"  # claude-sonnet-4-5 (era 3.5-sonnet-latest)
+    GUARD = "guard"  # claude-sonnet-4-5 (era 3.5-sonnet-latest)
+    BRIEFING = "briefing"  # claude-haiku-4-5 (era 3.5-haiku-latest)
+    SPECIALIST_FAST = "specialist_fast"  # gemini-1.5-flash (non-journey specialists)
+
+
+# (provider_prefix, model_id) — init_chat_model format
+# Google: 1.5/2.5 flash-lite → 404 em keys novas; equivalente barato: gemini-3.5-flash-lite
+# Anthropic: claude-3-5-*-latest → 404; equivalentes actuais da API:
+#   sonnet (journey/guard) → claude-sonnet-4-5-20250929
+#   haiku (briefing) → claude-haiku-4-5-20251001
+WORKLOAD_MODELS: dict[Workload, str] = {
+    Workload.SUPERVISOR: "google_genai:gemini-3.5-flash-lite",
+    Workload.ROUTER: "google_genai:gemini-3.5-flash-lite",
+    Workload.SPECIALIST_FAST: "google_genai:gemini-3.5-flash-lite",
+    Workload.JOURNEY: "anthropic:claude-sonnet-4-5-20250929",
+    Workload.GUARD: "anthropic:claude-sonnet-4-5-20250929",
+    Workload.BRIEFING: "anthropic:claude-haiku-4-5-20251001",
 }
 
 
 def apply_google_env() -> None:
-    """Mirror keys the way the course lab does (GOOGLE_API_KEY ↔ GEMINI_API_KEY)."""
+    """Mirror Google key variants for langchain-google-genai."""
     studio = os.getenv("GOOGLE_GENERATIVE_AI_API_KEY")
     google = os.getenv("GOOGLE_API_KEY")
     gemini = os.getenv("GEMINI_API_KEY")
-
     primary = (studio or google or gemini or "").strip()
     if not primary:
         return
-
     os.environ["GOOGLE_API_KEY"] = primary
     os.environ["GEMINI_API_KEY"] = primary
     if not studio:
@@ -58,79 +63,62 @@ def has_google_key() -> bool:
     )
 
 
-def _api_key() -> str:
+def has_anthropic_key() -> bool:
+    return bool(os.getenv("ANTHROPIC_API_KEY", "").strip())
+
+
+def has_google_key_or_any() -> bool:
+    return has_google_key() or has_anthropic_key()
+
+
+def workload_for_pattern(pattern: str) -> Workload:
+    """Map an HTTP/SSE pattern name to its primary LLM workload."""
+    if pattern == "journey":
+        return Workload.JOURNEY
+    if pattern == "router":
+        return Workload.ROUTER
+    if pattern == "briefing":
+        return Workload.BRIEFING
+    return Workload.SUPERVISOR
+
+
+def model_string(workload: Workload = Workload.SUPERVISOR) -> str:
+    """Return the provider:model string for a workload (env override optional)."""
     apply_google_env()
-    return (
-        os.getenv("GOOGLE_API_KEY")
-        or os.getenv("GEMINI_API_KEY")
-        or os.getenv("GOOGLE_GENERATIVE_AI_API_KEY")
-        or ""
-    ).strip()
+    # Optional per-workload override: NEUMA_AGENT_MODEL_JOURNEY=anthropic:claude-...
+    env_key = f"NEUMA_AGENT_MODEL_{workload.name}"
+    override = os.getenv(env_key, "").strip()
+    if override:
+        return override if ":" in override else f"google_genai:{override}"
+
+    return WORKLOAD_MODELS[workload]
 
 
-def list_google_models() -> list[str]:
-    """Query Google Generative Language API for real model IDs."""
-    key = _api_key()
-    if not key:
-        return []
-    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
-    try:
-        with httpx.Client(timeout=15.0) as client:
-            resp = client.get(url)
-            resp.raise_for_status()
-            data = resp.json()
-    except Exception:
-        return []
-
-    names: list[str] = []
-    for m in data.get("models", []):
-        name = m.get("name", "")
-        # "models/gemini-2.0-flash" → "gemini-2.0-flash"
-        short = name.split("/", 1)[-1] if name else ""
-        methods = m.get("supportedGenerationMethods") or []
-        if short and "generateContent" in methods:
-            names.append(short)
-    return names
+@lru_cache(maxsize=16)
+def _cached_llm(model: str, temperature: float):
+    return init_chat_model(model, temperature=temperature)
 
 
-@lru_cache(maxsize=1)
+def get_llm(
+    workload: Workload = Workload.SUPERVISOR,
+    temperature: float | None = None,
+):
+    """Return a chat model bound to the workload's provider/model."""
+    apply_google_env()
+    model = model_string(workload)
+    if temperature is None:
+        temperature = 0.1 if workload in (Workload.GUARD, Workload.ROUTER) else 0.2
+    if model.startswith("anthropic:") and not has_anthropic_key():
+        raise RuntimeError(
+            f"ANTHROPIC_API_KEY em falta para workload={workload.value} ({model})"
+        )
+    if model.startswith("google_genai:") and not has_google_key():
+        raise RuntimeError(
+            f"GOOGLE_GENERATIVE_AI_API_KEY em falta para workload={workload.value} ({model})"
+        )
+    return _cached_llm(model, temperature)
+
+
+# Back-compat for health / tracers that call resolve_model_id()
 def resolve_model_id() -> str:
-    """Pick first preferred model that actually exists, else env override short name."""
-    apply_google_env()
-    override = os.getenv("NEUMA_AGENT_MODEL", "").strip()
-    if override.startswith("google_genai:"):
-        override_short = override.split(":", 1)[1]
-    elif override:
-        override_short = override
-    else:
-        override_short = ""
-
-    available = set(list_google_models())
-    usable = {n for n in available if n not in DEPRECATED_MODELS} or available
-
-    if override_short and override_short not in DEPRECATED_MODELS:
-        if not usable or override_short in usable:
-            return override_short
-
-    for cand in PREFERRED_MODELS:
-        if cand in DEPRECATED_MODELS:
-            continue
-        if not usable or cand in usable:
-            return cand
-
-    if usable:
-        for name in sorted(usable):
-            if "flash" in name and "embed" not in name:
-                return name
-        return sorted(usable)[0]
-
-    return override_short or "gemini-3.6-flash"
-
-
-def model_string() -> str:
-    return f"google_genai:{resolve_model_id()}"
-
-
-def get_llm(temperature: float = 0.2):
-    apply_google_env()
-    return init_chat_model(model_string(), temperature=temperature)
+    return model_string(Workload.SUPERVISOR).split(":", 1)[-1]

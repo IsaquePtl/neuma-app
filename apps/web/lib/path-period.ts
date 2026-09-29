@@ -1,15 +1,71 @@
-/** Shared path schedule helpers (months, weeks, node segmentation). */
+/** Shared path schedule helpers (months, Mon–Fri weeks, node segmentation). */
 
-export function addMonthsToDate(isoDate: string, months: number): string {
-  const d = new Date(`${isoDate}T12:00:00`);
-  d.setMonth(d.getMonth() + months);
+function parseLocalDate(isoDate: string): Date {
+  return new Date(`${isoDate}T12:00:00`);
+}
+
+function toIsoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+export function addDaysToDate(isoDate: string, days: number): string {
+  const d = parseLocalDate(isoDate);
+  d.setDate(d.getDate() + days);
+  return toIsoDate(d);
+}
+
+export function addMonthsToDate(isoDate: string, months: number): string {
+  const d = parseLocalDate(isoDate);
+  d.setMonth(d.getMonth() + months);
+  return toIsoDate(d);
+}
+
 export function addWeeksToDate(isoDate: string, weeks: number): string {
-  const d = new Date(`${isoDate}T12:00:00`);
-  d.setDate(d.getDate() + weeks * 7);
-  return d.toISOString().slice(0, 10);
+  return addDaysToDate(isoDate, weeks * 7);
+}
+
+/** JS getDay(): 0=Sun … 1=Mon … 6=Sat */
+export function weekdayIndex(isoDate: string): number {
+  return parseLocalDate(isoDate).getDay();
+}
+
+export function isMonday(isoDate: string): boolean {
+  return weekdayIndex(isoDate) === 1;
+}
+
+/** Snap to Monday of the same ISO week (Mon–Sun). */
+export function mondayOfWeek(isoDate: string): string {
+  const d = parseLocalDate(isoDate);
+  const day = d.getDay();
+  const delta = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + delta);
+  return toIsoDate(d);
+}
+
+/** Next Monday on or after the given date. */
+export function normalizeToMonday(isoDate: string): string {
+  const d = parseLocalDate(isoDate);
+  const day = d.getDay();
+  if (day === 1) return isoDate;
+  const delta = day === 0 ? 1 : 8 - day;
+  d.setDate(d.getDate() + delta);
+  return toIsoDate(d);
+}
+
+export function fridayOfWeek(isoDate: string): string {
+  return addDaysToDate(mondayOfWeek(isoDate), 4);
+}
+
+/**
+ * End of a path: Friday of the week that contains (start + months).
+ * Start must be a Monday (caller should normalize).
+ */
+export function computePathEndDate(
+  startMonday: string,
+  months: number,
+): string | null {
+  if (!startMonday || !months || months <= 0) return null;
+  return fridayOfWeek(addMonthsToDate(startMonday, months));
 }
 
 export function parseMonthsFromDuration(
@@ -30,8 +86,8 @@ export function parseDurationMonths(
   const fromLabel = parseMonthsFromDuration(durationLabel);
   if (fromLabel) return fromLabel;
   if (startDate && endDate) {
-    const start = new Date(`${startDate}T12:00:00`);
-    const end = new Date(`${endDate}T12:00:00`);
+    const start = parseLocalDate(startDate);
+    const end = parseLocalDate(endDate);
     let months =
       (end.getFullYear() - start.getFullYear()) * 12 +
       (end.getMonth() - start.getMonth());
@@ -45,16 +101,21 @@ export function formatDurationLabel(months: number): string {
   return months === 1 ? "1 mês" : `${months} meses`;
 }
 
+export function formatWeeksLabel(weeks: number): string {
+  return weeks === 1 ? "1 semana" : `${weeks} semanas`;
+}
+
 export function computeEndDate(
   startDate: string | null | undefined,
   months: number | null | undefined,
 ): string | null {
   if (!startDate || !months || months <= 0) return null;
-  return addMonthsToDate(startDate, months);
+  const startMonday = normalizeToMonday(startDate);
+  return computePathEndDate(startMonday, months);
 }
 
 export function formatPathEndDate(iso: string): string {
-  const d = new Date(`${iso}T12:00:00`);
+  const d = parseLocalDate(iso);
   return d.toLocaleDateString("pt-PT", {
     day: "2-digit",
     month: "2-digit",
@@ -63,7 +124,7 @@ export function formatPathEndDate(iso: string): string {
 }
 
 export function formatShortDatePt(iso: string): string {
-  const d = new Date(`${iso}T12:00:00`);
+  const d = parseLocalDate(iso);
   return d.toLocaleDateString("pt-PT", {
     day: "numeric",
     month: "short",
@@ -71,13 +132,35 @@ export function formatShortDatePt(iso: string): string {
   });
 }
 
+/**
+ * Count Mon–Fri work weeks from path start Monday through end Friday (inclusive).
+ * Example: Mon→Fri same week = 1; Mon→next Fri = 2.
+ */
 export function weeksBetweenDates(startDate: string, endDate: string): number {
-  const start = new Date(`${startDate}T12:00:00`);
-  const end = new Date(`${endDate}T12:00:00`);
+  const startMon = mondayOfWeek(startDate);
+  const endFri = fridayOfWeek(endDate);
+  const start = parseLocalDate(startMon);
+  const end = parseLocalDate(endFri);
   const diffDays = Math.round(
     (end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000),
   );
-  return Math.max(1, Math.ceil(diffDays / 7));
+  if (diffDays < 0) return 1;
+  return Math.max(1, Math.floor(diffDays / 7) + 1);
+}
+
+export function weekMondayForPath(
+  pathStartMonday: string,
+  weekNumber: number,
+): string {
+  const week = Math.max(1, weekNumber);
+  return addWeeksToDate(normalizeToMonday(pathStartMonday), week - 1);
+}
+
+export function weekFridayForPath(
+  pathStartMonday: string,
+  weekNumber: number,
+): string {
+  return addDaysToDate(weekMondayForPath(pathStartMonday, weekNumber), 4);
 }
 
 export type NodeTimelineSegment = {
@@ -133,20 +216,30 @@ export function resolvePathSchedule(input: {
           )
         : null;
 
+  let startDate = input.startDate ?? null;
+  if (startDate) {
+    startDate = normalizeToMonday(startDate);
+  }
+
   let endDate = input.endDate ?? null;
   let durationLabel = input.durationLabel ?? null;
+  let totalWeeks: number | null = null;
 
-  if (input.startDate && periodMonths && periodMonths > 0) {
-    endDate = addMonthsToDate(input.startDate, periodMonths);
+  if (startDate && periodMonths && periodMonths > 0) {
+    endDate = computePathEndDate(startDate, periodMonths);
     durationLabel = formatDurationLabel(periodMonths);
+    if (endDate) totalWeeks = weeksBetweenDates(startDate, endDate);
   } else if (periodMonths && periodMonths > 0) {
     durationLabel = formatDurationLabel(periodMonths);
+  } else if (startDate && endDate) {
+    totalWeeks = weeksBetweenDates(startDate, endDate);
   }
 
   return {
-    startDate: input.startDate,
+    startDate,
     endDate,
     durationLabel,
     periodMonths: periodMonths && periodMonths > 0 ? periodMonths : null,
+    totalWeeks,
   };
 }

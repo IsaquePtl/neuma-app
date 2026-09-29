@@ -15,6 +15,7 @@ import {
 
 import { CategoryThemeIcon } from "@/components/category-theme-icon";
 import type { JourneyCheckIn } from "@/components/journey-path-composer";
+import { PathStatusMenu } from "@/components/path-status-menu";
 import { UserAvatar } from "@/components/user-avatar";
 import type { JourneyPathStudent } from "@/lib/journey-path/load-journey-path";
 import { mentorLevelReviewHref } from "@/lib/journey-path/level-review-url";
@@ -36,6 +37,16 @@ function kindIcon(kind: NodeKind) {
     default:
       return Dumbbell;
   }
+}
+
+/** Soft accent for kinds that should stand out at a glance. */
+function kindAccent(
+  kind: NodeKind,
+): "practice" | "milestone" | "call" | null {
+  if (kind === "practice") return "practice";
+  if (kind === "milestone") return "milestone";
+  if (kind === "call") return "call";
+  return null;
 }
 
 export function JourneyPathAdminView({
@@ -69,8 +80,8 @@ export function JourneyPathAdminView({
   return (
     <div className="space-y-8">
       <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0 space-y-1">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 space-y-2">
             <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
               <CategoryThemeIcon theme={null} name={path.title} size={18} />
               <Route className="size-3.5" /> Percurso
@@ -78,6 +89,15 @@ export function JourneyPathAdminView({
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
               {path.title}
             </h1>
+            <p className="text-sm text-muted-foreground">
+              {displayName}
+              {path.start_date ? ` · início ${formatDate(path.start_date)}` : ""}
+            </p>
+            <PathStatusMenu
+              pathId={pathId}
+              studentId={student?.id ?? ""}
+              status={path.status}
+            />
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {student ? (
@@ -171,6 +191,7 @@ export function JourneyPathAdminView({
                 : i > activeIndex);
             const isLast = i === nodes.length - 1;
             const Icon = kindIcon(node.kind);
+            const accent = kindAccent(node.kind);
             const levelNum = i + 1;
             const pendingCount = pendingByNode.get(node.id) ?? 0;
             const levelHref = mentorLevelReviewHref(pathId, node.id);
@@ -178,20 +199,36 @@ export function JourneyPathAdminView({
             const step = (
               <div
                 className={cn(
-                  "student-path-step min-w-0 flex-1",
+                  "student-path-step relative min-w-0 flex-1",
                   isActive && "student-path-step--active",
                   isPast && !isActive && "student-path-step--done",
                   isFuture && "student-path-step--locked",
                 )}
               >
+                {!isFuture &&
+                (accent === "practice" || accent === "milestone") ? (
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "absolute inset-y-0 left-0 w-[3px]",
+                      accent === "practice"
+                        ? "bg-[color-mix(in_srgb,var(--neuma-lime)_42%,var(--neuma-cream))]"
+                        : "bg-[color-mix(in_srgb,var(--neuma-coral)_40%,var(--neuma-cream))]",
+                    )}
+                  />
+                ) : null}
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 space-y-1">
                     <span
                       className={cn(
                         "inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em]",
-                        isActive
-                          ? "text-[#ffffe9]"
-                          : "text-muted-foreground",
+                        isFuture || !accent
+                          ? isActive
+                            ? "text-[#ffffe9]"
+                            : "text-muted-foreground"
+                          : accent === "practice"
+                            ? "text-[color-mix(in_srgb,var(--neuma-lime)_38%,var(--neuma-cream))]"
+                            : "text-[color-mix(in_srgb,var(--neuma-coral)_36%,var(--neuma-cream))]",
                       )}
                     >
                       <Icon className="size-3" />
@@ -288,17 +325,16 @@ export function JourneyPathAdminView({
                   </span>
                 </div>
 
-                {isFuture ? (
-                  step
-                ) : (
-                  <Link
-                    href={levelHref}
-                    prefetch
-                    className="min-w-0 flex-1 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
-                  >
-                    {step}
-                  </Link>
-                )}
+                <Link
+                  href={levelHref}
+                  prefetch
+                  className={cn(
+                    "min-w-0 flex-1 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50",
+                    isFuture && "hover:opacity-90",
+                  )}
+                >
+                  {step}
+                </Link>
               </li>
             );
           })}
