@@ -1,4 +1,5 @@
 import type { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -19,12 +20,11 @@ export async function completeCurrentAndActivateNext(
     .single();
   if (!node) throw new Error("Nível não encontrado");
 
-  await supabase
-    .from("nodes")
-    .update({ status: "completed" })
-    .eq("id", node.id);
+  const admin = createAdminClient();
 
-  const { data: next } = await supabase
+  await admin.from("nodes").update({ status: "completed" }).eq("id", node.id);
+
+  const { data: next } = await admin
     .from("nodes")
     .select("id")
     .eq("path_id", pathId)
@@ -34,19 +34,19 @@ export async function completeCurrentAndActivateNext(
     .maybeSingle();
 
   if (next) {
-    const { data: siblings } = await supabase
+    const { data: siblings } = await admin
       .from("nodes")
       .select("id, status")
       .eq("path_id", pathId);
     for (const s of siblings ?? []) {
       if (s.id === next.id) {
-        await supabase.from("nodes").update({ status: "active" }).eq("id", s.id);
+        await admin.from("nodes").update({ status: "active" }).eq("id", s.id);
       } else if (s.id !== node.id && s.status !== "completed") {
-        await supabase.from("nodes").update({ status: "locked" }).eq("id", s.id);
+        await admin.from("nodes").update({ status: "locked" }).eq("id", s.id);
       }
     }
-    await supabase.from("paths").update({ status: "active" }).eq("id", pathId);
+    await admin.from("paths").update({ status: "active" }).eq("id", pathId);
   } else {
-    await supabase.from("paths").update({ status: "completed" }).eq("id", pathId);
+    await admin.from("paths").update({ status: "completed" }).eq("id", pathId);
   }
 }

@@ -150,8 +150,7 @@ export function verifyTallySignature({
   signature: string | null;
   secrets: string[];
 }) {
-  // Sem secret configurado: aceita (dev). Com secrets: pelo menos um tem de bater.
-  if (secrets.length === 0) return true;
+  if (secrets.length === 0) return false;
   if (!signature) return false;
 
   return secrets.some((secret) => {

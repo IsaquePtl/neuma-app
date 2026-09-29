@@ -2,9 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { after } from "next/server";
-
 import { createClient } from "@/lib/supabase/server";
+import { completeCurrentAndActivateNext } from "@/lib/nodes/complete-and-activate";
 import { tryIncrementWeekExtensions } from "@/lib/nodes/week-extensions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildMentorFeedbackKey, uploadToR2 } from "@/lib/storage/r2";
@@ -227,64 +226,46 @@ export async function submitFeedback(formData: FormData) {
     if (checkIn?.node_id) {
       const { data: node } = await supabase
         .from("nodes")
-        .select("id, path_id, order_index")
+        .select("id, path_id")
         .eq("id", checkIn.node_id)
         .single();
 
       if (node) {
-        await supabase
-          .from("nodes")
-          .update({ status: "completed" })
-          .eq("id", node.id);
-
-        const { data: next } = await supabase
-          .from("nodes")
-          .select("id")
-          .eq("path_id", node.path_id)
-          .gt("order_index", node.order_index)
-          .order("order_index", { ascending: true })
-          .limit(1)
-          .maybeSingle();
-
-        if (next) {
-          await supabase
-            .from("nodes")
-            .update({ status: "active" })
-            .eq("id", next.id);
-        } else {
-          await supabase
-            .from("paths")
-            .update({ status: "completed" })
-            .eq("id", node.path_id);
-        }
+        await completeCurrentAndActivateNext(supabase, node.id, node.path_id);
       }
     }
   }
 
-  after(async () => {
-    try {
-      const admin = createAdminClient();
-      const { data: checkIn } = await admin
-        .from("check_ins")
-        .select("student_id, student:profiles!check_ins_student_id_fkey(email, full_name)")
-        .eq("id", checkInId)
-        .single();
-      const student = Array.isArray(checkIn?.student)
-        ? checkIn?.student[0]
-        : checkIn?.student;
-      if (student?.email) {
-        await sendEmail({
-          to: student.email,
-          subject: approved
-            ? "Tens feedback novo na Neuma"
-            : "O mentor pediu uma revisao do teu check-in",
-          html: `<p>Ola${student.full_name ? ` ${student.full_name}` : ""},</p><p>Ha novidades no teu check-in.</p><p><a href="${appUrl(`/checkins/${checkInId}`)}">Ver na Neuma</a></p>`,
-        });
-      }
-    } catch (e) {
-      console.error("[notify:feedback]", e);
+  let emailFailed = false;
+  try {
+    const admin = createAdminClient();
+    const { data: checkIn } = await admin
+      .from("check_ins")
+      .select("student_id, student:profiles!check_ins_student_id_fkey(email, full_name)")
+      .eq("id", checkInId)
+      .single();
+    const student = Array.isArray(checkIn?.student)
+      ? checkIn?.student[0]
+      : checkIn?.student;
+    if (student?.email) {
+      const sent = await sendEmail({
+        to: student.email,
+        subject: approved
+          ? "Tens feedback novo na Neuma"
+          : "O mentor pediu uma revisao do teu check-in",
+        html: `<p>Ola${student.full_name ? ` ${student.full_name}` : ""},</p><p>Ha novidades no teu check-in.</p><p><a href="${appUrl(`/checkins/${checkInId}`)}">Ver na Neuma</a></p>`,
+      });
+      if (!sent.ok) emailFailed = true;
     }
-  });
+  } catch (e) {
+    console.error("[notify:feedback]", e);
+    emailFailed = true;
+  }
+
+  const withEmailWarning = (url: string) => {
+    if (!emailFailed) return url;
+    return `${url}${url.includes("?") ? "&" : "?"}aviso=email`;
+  };
 
   revalidatePath("/studio/journeys");
   revalidatePath("/studio/journeys/checkins");
@@ -308,7 +289,7 @@ export async function submitFeedback(formData: FormData) {
     returnTo.startsWith("/studio/students/") ||
     returnTo.startsWith("/studio/journeys/")
   ) {
-    redirect(returnTo);
+    redirect(withEmailWarning(returnTo));
   }
 
   const { data: nextPending } = await supabase
@@ -322,8 +303,8 @@ export async function submitFeedback(formData: FormData) {
 
   if (nextPending?.id) {
     const nextUrl = await resolveCheckInLevelUrl(nextPending.id);
-    redirect(nextUrl ?? `/studio/checkins/${nextPending.id}`);
+    redirect(withEmailWarning(nextUrl ?? `/studio/checkins/${nextPending.id}`));
   }
 
-  redirect("/studio/journeys/checkins");
+  redirect(withEmailWarning("/studio/journeys/checkins"));
 }

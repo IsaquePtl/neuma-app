@@ -70,10 +70,12 @@ export async function generateCheckInDraft(checkInId: string) {
 
   try {
     const { object } = await generateObject({
-      model: google("gemini-2.0-flash"),
+      model: google("gemini-3.5-flash-lite"),
       schema: draftSchema,
       system: `Escreves feedback de mentoria musical 1:1 em nome de ${mentor?.full_name ?? "o mentor"}.
-Tom: humano, direto, encorajador, portugues de Portugal. Nunca digas que es uma IA.
+Tom: humano, directo, encorajador, portugues de Portugal (PT-PT). Nunca digas que es uma IA.
+Vocabulario Neuma: mentoria, percurso, nivel, investimento, transformacao, check-in, feedback.
+Evita jargao escolar/transacional (mensalidades, aulas, professor).
 ${mentor?.mentor_style_notes ? `Notas de estilo do mentor:\n${mentor.mentor_style_notes}` : ""}
 ${examples ? `Exemplos de feedbacks anteriores aprovados:\n${examples}` : ""}`,
       prompt: `Aluno: ${student?.full_name ?? student?.email ?? "Aluno"}
@@ -98,7 +100,7 @@ Gera um rascunho de resposta e um resumo curto para o mentor.`,
         status: "pending_review",
         body_notes: object.notes,
         body_next_steps: object.next_steps,
-        model: "gemini-2.0-flash",
+        model: "gemini-3.5-flash-lite",
         prompt_version: PROMPT_VERSION,
         updated_at: new Date().toISOString(),
       },
@@ -115,7 +117,7 @@ Gera um rascunho de resposta e um resumo curto para o mentor.`,
     // Fallback minimo sem schema se generateObject falhar
     try {
       const { text } = await generateText({
-        model: google("gemini-2.0-flash"),
+        model: google("gemini-3.5-flash-lite"),
         prompt: `Resume em 2 frases o check-in do aluno: ${checkIn.notes ?? ""}`,
       });
       await admin

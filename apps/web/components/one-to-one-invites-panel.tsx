@@ -9,7 +9,10 @@ import {
   createOneToOneInvite,
   resendOneToOneInvite,
   revokeOneToOneInvite,
+  type OneToOneBillingMode,
+  type OneToOneIntervalMonths,
 } from "@/lib/actions/one-to-one";
+import { parseAge, parseGender } from "@/lib/auth/signup-profile";
 import { formatDate } from "@/lib/labels";
 import { formatCents } from "@/lib/finance/money";
 import type { OneToOneInviteStatus } from "@/lib/types/database.types";
@@ -26,23 +29,27 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 export type OneToOneInviteRow = {
   id: string;
   email: string;
   full_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
   amount_cents: number;
   currency: string;
   interval: string;
   interval_count: number;
+  duration_months: number | null;
+  billing_mode: string;
   status: OneToOneInviteStatus;
-  notes: string | null;
   expires_at: string | null;
   redeemed_at: string | null;
   created_at: string;
 };
+
+type CadenceValue = "1" | "2" | "3" | "one_time";
 
 const inviteStatusLabel: Record<OneToOneInviteStatus, string> = {
   pending: "Pendente",
@@ -62,12 +69,37 @@ const inviteStatusClass: Record<OneToOneInviteStatus, string> = {
 
 const initialForm = {
   email: "",
-  fullName: "",
+  firstName: "",
+  lastName: "",
+  age: "",
+  gender: "",
   amountEuros: "",
-  interval: "month" as "month" | "year",
-  intervalCount: "1",
-  notes: "",
+  cadence: "1" as CadenceValue,
+  durationMonths: "3",
 };
+
+function cadenceFromInvite(invite: OneToOneInviteRow): string {
+  if (invite.billing_mode === "one_time") return "Valor total";
+  const count = invite.interval_count || 1;
+  if (count === 1) return "Mensal";
+  if (count === 2) return "A cada 2 meses";
+  if (count === 3) return "A cada 3 meses";
+  return `A cada ${count} meses`;
+}
+
+function parseCadence(value: CadenceValue): {
+  billingMode: OneToOneBillingMode;
+  intervalMonths: OneToOneIntervalMonths;
+} {
+  if (value === "one_time") {
+    return { billingMode: "one_time", intervalMonths: 1 };
+  }
+  const months = Number(value) as OneToOneIntervalMonths;
+  return {
+    billingMode: "recurring",
+    intervalMonths: ([1, 2, 3] as const).includes(months) ? months : 1,
+  };
+}
 
 export function OneToOneInvitesPanel({
   invites,
@@ -90,12 +122,25 @@ export function OneToOneInvitesPanel({
     const amountCents = Math.round(
       Number(form.amountEuros.replace(",", ".")) * 100,
     );
+    const durationMonths = Math.max(1, Math.floor(Number(form.durationMonths) || 1));
+    const { billingMode, intervalMonths } = parseCadence(form.cadence);
+
     if (!form.email.trim() || !form.email.includes("@")) {
       toast.error("Indica um email válido.");
       return;
     }
-    if (!form.fullName.trim()) {
-      toast.error("Indica o nome do convidado.");
+    if (!form.firstName.trim() || !form.lastName.trim()) {
+      toast.error("Indica primeiro e último nome.");
+      return;
+    }
+    const age = parseAge(form.age);
+    const gender = parseGender(form.gender);
+    if (age == null) {
+      toast.error("Indica uma idade válida (13–120).");
+      return;
+    }
+    if (!gender) {
+      toast.error("Indica o sexo.");
       return;
     }
     if (!Number.isFinite(amountCents) || amountCents < 100) {
@@ -106,11 +151,14 @@ export function OneToOneInvitesPanel({
     startTransition(async () => {
       const result = await createOneToOneInvite({
         email: form.email.trim(),
-        fullName: form.fullName.trim(),
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        age,
+        gender,
         amountCents,
-        interval: form.interval,
-        intervalCount: Math.max(1, Number(form.intervalCount) || 1),
-        notes: form.notes.trim() || undefined,
+        billingMode,
+        intervalMonths,
+        durationMonths,
       });
       if (!result.ok) {
         toast.error(result.error);
@@ -179,15 +227,64 @@ export function OneToOneInvitesPanel({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="invite-name">Nome</Label>
+              <Label htmlFor="invite-first-name">Primeiro nome</Label>
               <Input
-                id="invite-name"
-                value={form.fullName}
-                onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))}
-                placeholder="Nome completo"
+                id="invite-first-name"
+                value={form.firstName}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, firstName: e.target.value }))
+                }
+                placeholder="Ana"
                 disabled={pending}
                 required
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="invite-last-name">Último nome</Label>
+              <Input
+                id="invite-last-name"
+                value={form.lastName}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, lastName: e.target.value }))
+                }
+                placeholder="Silva"
+                disabled={pending}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="invite-age">Idade</Label>
+              <Input
+                id="invite-age"
+                type="number"
+                inputMode="numeric"
+                min={13}
+                max={120}
+                value={form.age}
+                onChange={(e) => setForm((f) => ({ ...f, age: e.target.value }))}
+                placeholder="ex. 24"
+                disabled={pending}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="invite-gender">Sexo</Label>
+              <select
+                id="invite-gender"
+                value={form.gender}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, gender: e.target.value }))
+                }
+                disabled={pending}
+                required
+                className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground"
+              >
+                <option value="" disabled>
+                  Selecionar
+                </option>
+                <option value="female">Feminino</option>
+                <option value="male">Masculino</option>
+              </select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="invite-amount">Valor (€)</Label>
@@ -203,49 +300,40 @@ export function OneToOneInvitesPanel({
                 required
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="invite-interval">Cadência</Label>
-                <select
-                  id="invite-interval"
-                  value={form.interval}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      interval: e.target.value as "month" | "year",
-                    }))
-                  }
-                  disabled={pending}
-                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground"
-                >
-                  <option value="month">Mês(es)</option>
-                  <option value="year">Ano(s)</option>
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="invite-interval-count">Cada</Label>
-                <Input
-                  id="invite-interval-count"
-                  type="number"
-                  min={1}
-                  value={form.intervalCount}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, intervalCount: e.target.value }))
-                  }
-                  disabled={pending}
-                />
-              </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="invite-cadence">Cadência</Label>
+              <select
+                id="invite-cadence"
+                value={form.cadence}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    cadence: e.target.value as CadenceValue,
+                  }))
+                }
+                disabled={pending}
+                className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground"
+              >
+                <option value="1">Mensal</option>
+                <option value="2">A cada 2 meses</option>
+                <option value="3">A cada 3 meses</option>
+                <option value="one_time">Valor total (pagamento único)</option>
+              </select>
             </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="invite-notes">Notas (opcional)</Label>
-            <Textarea
-              id="invite-notes"
-              value={form.notes}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              placeholder="Contexto interno sobre este convite…"
-              disabled={pending}
-            />
+            <div className="space-y-1.5">
+              <Label htmlFor="invite-duration">Duração (meses)</Label>
+              <Input
+                id="invite-duration"
+                type="number"
+                min={1}
+                value={form.durationMonths}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, durationMonths: e.target.value }))
+                }
+                disabled={pending}
+                required
+              />
+            </div>
           </div>
           <div className="flex justify-end">
             <Button type="submit" disabled={pending}>
@@ -285,10 +373,11 @@ export function OneToOneInvitesPanel({
         </Card>
       ) : (
         <Card className="overflow-hidden p-0">
-          <div className="hidden grid-cols-[minmax(0,1.4fr)_6.5rem_6rem_7rem_6rem_2.5rem] gap-3 border-b border-white/10 px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground desktop:grid">
+          <div className="hidden grid-cols-[minmax(0,1.4fr)_6.5rem_7.5rem_5rem_7rem_6rem_2.5rem] gap-3 border-b border-white/10 px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground desktop:grid">
             <span>Convidado</span>
             <span>Valor</span>
             <span>Cadência</span>
+            <span>Duração</span>
             <span>Estado</span>
             <span>Criado</span>
             <span />
@@ -297,22 +386,30 @@ export function OneToOneInvitesPanel({
             {invites.map((invite) => (
               <div
                 key={invite.id}
-                className="flex flex-col gap-2 px-4 py-3.5 desktop:grid desktop:grid-cols-[minmax(0,1.4fr)_6.5rem_6rem_7rem_6rem_2.5rem] desktop:items-center"
+                className="flex flex-col gap-2 px-4 py-3.5 desktop:grid desktop:grid-cols-[minmax(0,1.4fr)_6.5rem_7.5rem_5rem_7rem_6rem_2.5rem] desktop:items-center"
               >
                 <div className="min-w-0">
                   <p className="truncate font-medium">
-                    {invite.full_name ?? invite.email}
+                    {invite.full_name ||
+                      [invite.first_name, invite.last_name]
+                        .filter(Boolean)
+                        .join(" ") ||
+                      invite.email}
                   </p>
                   <p className="truncate text-xs text-muted-foreground">
                     {invite.email}
-                    {invite.notes ? ` · ${invite.notes}` : ""}
                   </p>
                 </div>
                 <p className="text-sm tabular-nums">
                   {formatCents(invite.amount_cents, invite.currency)}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {invite.interval_count}× {invite.interval}
+                  {cadenceFromInvite(invite)}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {invite.duration_months
+                    ? `${invite.duration_months} mês${invite.duration_months === 1 ? "" : "es"}`
+                    : "—"}
                 </p>
                 <div>
                   <Badge

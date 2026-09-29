@@ -49,6 +49,7 @@ export async function getOnboardingSubmissionStatus(): Promise<boolean> {
 
 function revalidateOnboardingPaths(studentId: string) {
   revalidatePath("/home");
+  revalidatePath("/path");
   revalidatePath("/onboarding");
   revalidatePath(`/studio/students/${studentId}`);
   revalidatePath("/studio/journeys/onboardings");

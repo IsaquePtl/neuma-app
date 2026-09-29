@@ -31,6 +31,7 @@ export function buildPathSnapshot(
             n.kind,
             n.status,
             n.week_number ?? "",
+            n.duration_weeks ?? "",
             n.due_date ?? "",
             (n.resource_url ?? "").trim(),
             (n.content_body ?? "").trim(),

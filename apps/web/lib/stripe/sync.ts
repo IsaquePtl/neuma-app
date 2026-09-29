@@ -473,6 +473,55 @@ export async function syncInvoice(
   if (error) throw error;
 }
 
+/** Pagamento avulso (Neuma 1:1 one-time) sem factura Stripe. */
+export async function syncCheckoutPayment(session: Stripe.Checkout.Session) {
+  if (session.mode !== "payment" || session.payment_status !== "paid") return;
+
+  const admin = createAdminClient();
+  const profileId =
+    session.client_reference_id ?? session.metadata?.neuma_profile_id ?? null;
+  const paymentIntentId =
+    typeof session.payment_intent === "string"
+      ? session.payment_intent
+      : session.payment_intent?.id ?? null;
+  const amount = session.amount_total ?? 0;
+  if (!paymentIntentId || amount <= 0) return;
+
+  let profileSnapshot: { full_name: string | null; email: string | null } | null =
+    null;
+  if (profileId) {
+    const { data } = await admin
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", profileId)
+      .maybeSingle();
+    profileSnapshot = data ?? null;
+  }
+
+  const { error } = await admin.from("payments").upsert(
+    {
+      profile_id: profileId,
+      student_name: profileSnapshot?.full_name ?? session.customer_details?.name ?? null,
+      student_email:
+        profileSnapshot?.email ?? session.customer_details?.email ?? session.customer_email ?? null,
+      stripe_invoice_id: `checkout:${session.id}`,
+      stripe_payment_intent_id: paymentIntentId,
+      stripe_customer_id:
+        typeof session.customer === "string"
+          ? session.customer
+          : session.customer?.id ?? null,
+      plan: "one_to_one",
+      amount_cents: amount,
+      currency: session.currency ?? "eur",
+      status: "paid",
+      description: "Neuma 1:1",
+      paid_at: new Date((session.created ?? Date.now() / 1000) * 1000).toISOString(),
+    },
+    { onConflict: "stripe_invoice_id" },
+  );
+  if (error) throw error;
+}
+
 /**
  * Grava um reembolso. Atribuido a data do REEMBOLSO, nao a do pagamento
  * original: senao, reembolsar hoje uma factura de Janeiro alterava a receita

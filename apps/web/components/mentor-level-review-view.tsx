@@ -23,6 +23,8 @@ import { studentProfileHref } from "@/lib/journey-path/routes";
 import {
   checkInKindLabel,
   formatDateTime,
+  nodeStatusLabel,
+  passRuleLabel,
 } from "@/lib/labels";
 import type { StudentNode } from "@/lib/students/queries";
 import { StudentNodePlayer } from "@/components/student-node-player";
@@ -453,6 +455,7 @@ export function MentorLevelReviewView({
   checkInDetail,
   selectedCheckInId,
   activeTab,
+  emailFailed = false,
 }: {
   pathId: string;
   pathTitle: string;
@@ -464,6 +467,7 @@ export function MentorLevelReviewView({
   checkInDetail: CheckInDetail | null;
   selectedCheckInId: string | null;
   activeTab: MentorLevelTab;
+  emailFailed?: boolean;
 }) {
   const returnTo = mentorLevelReviewHref(pathId, node.id, {
     checkin: selectedCheckInId ?? undefined,
@@ -483,6 +487,11 @@ export function MentorLevelReviewView({
 
   return (
     <div className="space-y-8">
+      {emailFailed ? (
+        <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm">
+          O feedback ficou gravado. O email ao aluno não saiu.
+        </p>
+      ) : null}
       <header>
         <p className="text-sm text-muted-foreground">
           <Link
@@ -504,6 +513,18 @@ export function MentorLevelReviewView({
           ) : (
             <> · {studentName}</>
           )}
+        </p>
+        <p className="mt-2 text-sm">
+          Gate {passRuleLabel[node.pass_rule]} · {nodeStatusLabel[node.status]}
+          {node.due_date ? ` · prazo ${node.due_date}` : ""}
+          {" · "}
+          {node.pass_rule === "check_in"
+            ? "fecha ao aprovar o check-in"
+            : node.pass_rule === "quiz"
+              ? "fecha quando o quiz passa"
+              : node.pass_rule === "none"
+                ? "fecha quando o aluno marca visto"
+                : "fecha quando avanças a sessão"}
         </p>
       </header>
 

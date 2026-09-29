@@ -8,7 +8,7 @@ export default async function FinanceOneToOnePage() {
   const { data: invites } = await supabase
     .from("one_to_one_invites")
     .select(
-      "id, email, full_name, amount_cents, currency, interval, interval_count, status, notes, expires_at, redeemed_at, created_at",
+      "id, email, full_name, first_name, last_name, amount_cents, currency, interval, interval_count, duration_months, billing_mode, status, expires_at, redeemed_at, created_at",
     )
     .order("created_at", { ascending: false });
 

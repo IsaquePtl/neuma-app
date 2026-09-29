@@ -25,8 +25,16 @@ import {
   type TemplateNodeData,
 } from "@/components/template-node-editor";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  computeEndDate,
+  formatPathEndDate,
+  formatWeeksLabel,
+  normalizeToMonday,
+  weeksBetweenDates,
+} from "@/lib/path-period";
 import {
   initialPeriodMonths,
   PeriodMonthsInput,
@@ -39,10 +47,6 @@ import type {
 import { cn } from "@/lib/utils";
 import { LIBRARY_PATH } from "@/lib/library-routes";
 import { isPhaseBoundary, nodeKindLabel, phaseKeyLabel } from "@/lib/labels";
-import {
-  computeEndDate,
-  formatPathEndDate,
-} from "@/lib/path-period";
 import type { NodeKind, PathTemplateStatus } from "@/lib/types/database.types";
 
 type Template = {
@@ -134,6 +138,11 @@ export function PathTemplateComposer({
     [startDate, periodMonths],
   );
 
+  const totalWeeks = useMemo(() => {
+    if (!startDate || !endDate) return null;
+    return weeksBetweenDates(normalizeToMonday(startDate), endDate);
+  }, [startDate, endDate]);
+
   function saveMeta(overrides?: {
     title?: string;
     start_date?: string;
@@ -191,7 +200,7 @@ export function PathTemplateComposer({
       <div className="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Link
-            href="/studio/journeys#templates"
+            href="/studio/journeys#drafts"
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="size-3.5" />
@@ -228,21 +237,7 @@ export function PathTemplateComposer({
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="path-start">Início do percurso (dia)</Label>
-            <Input
-              id="path-start"
-              type="date"
-              value={startDate}
-              disabled={metaPending}
-              onChange={(e) => {
-                const next = e.target.value;
-                setStartDate(next);
-                if (next) saveMeta({ start_date: next });
-              }}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="path-period">Período</Label>
+            <Label htmlFor="path-period">Duração</Label>
             <PeriodMonthsInput
               id="path-period"
               value={periodMonths}
@@ -253,20 +248,41 @@ export function PathTemplateComposer({
               }}
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="path-start">Início do percurso</Label>
+            <DatePicker
+              id="path-start"
+              value={startDate}
+              disabled={metaPending}
+              className="h-10"
+              onValueChange={(raw) => {
+                const next = raw ? normalizeToMonday(raw) : "";
+                setStartDate(next);
+                if (next) saveMeta({ start_date: next });
+              }}
+            />
+          </div>
         </div>
 
-        {startDate && endDate ? (
-          <p className="text-xs text-muted-foreground">
-            Fim previsto:{" "}
-            <span className="text-foreground/90">
-              {formatPathEndDate(endDate)}
-            </span>
-            {" · "}
-            {periodMonths} meses
-          </p>
+        {startDate && endDate && totalWeeks != null ? (
+          <div className="grid grid-cols-2 gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5">
+            <div className="space-y-0.5">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Semanas
+              </p>
+              <p className="text-sm font-medium">{formatWeeksLabel(totalWeeks)}</p>
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Fim do percurso
+              </p>
+              <p className="text-sm font-medium">{formatPathEndDate(endDate)}</p>
+            </div>
+          </div>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Define a data de início e o período para calcular o fim previsto.
+            Define duração e início (segunda-feira) para calcular as semanas e o
+            fim.
           </p>
         )}
       </div>

@@ -12,6 +12,7 @@ export type NodeCheckInKind = Extract<CheckInKind, "video" | "text"> | null;
 export function defaultPassRule(kind: NodeKind): NodePassRule {
   if (kind === "practice") return "check_in";
   if (kind === "lesson" || kind === "resource") return "none";
+  if (kind === "milestone") return "quiz";
   return "mentor";
 }
 

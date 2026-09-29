@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, Route, Sparkles } from "lucide-react";
+import { ClipboardList, Handshake, Route } from "lucide-react";
 
 import { NavCountBadge } from "@/components/nav-count-badge";
 import { useMentorBadgeCounts } from "@/lib/mentor-badges-client";
@@ -30,7 +30,7 @@ const TABS = [
   {
     href: "/studio/journeys/onboardings",
     label: "Onboardings",
-    icon: Sparkles,
+    icon: Handshake,
     badgeKey: "onboardings" as const,
     match: (p: string) => p.startsWith("/studio/journeys/onboardings"),
   },

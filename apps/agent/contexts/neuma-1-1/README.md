@@ -1,19 +1,22 @@
-# Contextos Neuma 1:1 (prompts de teste)
+# Contextos Neuma 1:1 (perfis pedagógicos)
 
-Prompts / contextos pedagógicos de teste para montar os **percursos reais** dos clientes de teste da Neuma 1:1.
+Prompts / contextos pedagógicos para montar percursos dos alunos de teste.
 
 ## Alunos
 
-| Ficheiro | Nome |
-|----------|------|
-| `eduardo.md` | Edu / Eduardo |
-| `marcio.md` | Márcio |
-| `bernardo.md` | Bernardo |
+| Ficheiro | Chave `load_student_context` | Nome |
+|----------|------------------------------|------|
+| `eduardo.md` | `eduardo` | Edu / Eduardo |
+| `marcio.md` | `marcio` | Márcio |
+| `bernardo.md` | `bernardo` | Bernardo |
 
-## Estado
+## Wiring (activo)
 
-**Apenas armazenado.** Ainda não há login, assignment de journey, nem paths criados na BD a partir destes ficheiros. Validação e entrega vêm depois.
+- Tool `load_student_context` (`contexts/loader.py`) — disponível no **journey pipeline** e no **journey_specialist** do supervisor.
+- Inject automático no system prompt do journey quando `placeholder_name` faz match ao nome/chave.
+- Catálogo listado no system prompt do supervisor.
 
-## Uso futuro
+## Uso
 
-Esta pasta pode crescer para outros contextos reutilizáveis (briefs, perfis, prompts de geração de percurso). Os ficheiros aqui são input para construção de paths — não são conteúdo live da app.
+O agent (ou o builder determinístico) cria o percurso `status=draft` no app.
+HITL: o aluno só vê depois do mentor activar em Journeys.

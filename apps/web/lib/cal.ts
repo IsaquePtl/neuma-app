@@ -97,11 +97,7 @@ export function verifyCalSignature({
   signature: string | null;
   secret: string;
 }) {
-  if (!secret) {
-    // Dev sem secret: aceita (igual ao Tally). Em produção define CAL_WEBHOOK_SECRET.
-    console.warn("[cal:webhook] CAL_WEBHOOK_SECRET em falta — a aceitar sem verificar");
-    return true;
-  }
+  if (!secret) return false;
   if (!signature) return false;
 
   const expected = crypto

@@ -5,12 +5,25 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 
 import { getAppOrigin } from "@/lib/auth/app-origin";
+import { parseAge, parseGender } from "@/lib/auth/signup-profile";
+import {
+  isValidPassword,
+  PASSWORD_MIN_LENGTH,
+} from "@/lib/auth/validation";
 import { appUrl, sendEmail } from "@/lib/email";
+import {
+  oneToOneInvitePath,
+  oneToOneInviteUrl,
+} from "@/lib/one-to-one/invite-path";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireStripe } from "@/lib/stripe/client";
 import { createOneToOnePrice } from "@/lib/stripe/one-to-one";
 import { ensureStripeCustomer } from "@/lib/stripe/sync";
+import type { ProfileGender } from "@/lib/types/database.types";
+
+export type OneToOneBillingMode = "recurring" | "one_time";
+export type OneToOneIntervalMonths = 1 | 2 | 3;
 
 async function requireMentor() {
   const supabase = await createClient();
@@ -37,28 +50,52 @@ export type CreateInviteResult =
 
 export async function createOneToOneInvite(input: {
   email: string;
-  fullName: string;
+  firstName: string;
+  lastName: string;
+  age: number;
+  gender: ProfileGender;
   amountCents: number;
-  interval: "month" | "year";
-  intervalCount: number;
-  notes?: string;
+  billingMode: OneToOneBillingMode;
+  /** Recurring only: every 1 / 2 / 3 months. */
+  intervalMonths?: OneToOneIntervalMonths;
+  /** Total program length in months (≥ 1). */
+  durationMonths: number;
   sourceSubmissionId?: string | null;
 }): Promise<CreateInviteResult> {
   try {
     const { mentorId, mentorName } = await requireMentor();
     const email = input.email.trim().toLowerCase();
-    const fullName = input.fullName.trim();
+    const firstName = input.firstName.trim();
+    const lastName = input.lastName.trim();
+    const fullName = `${firstName} ${lastName}`.trim();
+    const age = parseAge(input.age);
+    const gender = parseGender(input.gender);
+    const durationMonths = Math.max(1, Math.floor(input.durationMonths || 1));
+    const billingMode = input.billingMode === "one_time" ? "one_time" : "recurring";
+    const intervalMonths = ([1, 2, 3] as const).includes(
+      input.intervalMonths as OneToOneIntervalMonths,
+    )
+      ? (input.intervalMonths as OneToOneIntervalMonths)
+      : 1;
 
     if (!email.includes("@")) return { ok: false, error: "Email inválido." };
-    if (!fullName) return { ok: false, error: "Indica o nome." };
+    if (!firstName || !lastName) {
+      return { ok: false, error: "Indica primeiro e último nome." };
+    }
+    if (age == null) {
+      return { ok: false, error: "Indica uma idade válida (13–120)." };
+    }
+    if (!gender) {
+      return { ok: false, error: "Indica o sexo." };
+    }
     if (!Number.isFinite(input.amountCents) || input.amountCents < 100) {
       return { ok: false, error: "Valor mínimo: 1,00 €." };
     }
 
     const priceId = await createOneToOnePrice({
       amountCents: input.amountCents,
-      interval: input.interval,
-      intervalCount: Math.max(1, input.intervalCount || 1),
+      billingMode,
+      intervalMonths: billingMode === "recurring" ? intervalMonths : undefined,
       nickname: `Neuma 1:1 — ${fullName}`,
     });
 
@@ -73,14 +110,20 @@ export async function createOneToOneInvite(input: {
       .insert({
         email,
         full_name: fullName,
+        first_name: firstName,
+        last_name: lastName,
+        age,
+        gender,
         token_hash: tokenHash,
         amount_cents: input.amountCents,
         currency: "eur",
-        interval: input.interval,
-        interval_count: Math.max(1, input.intervalCount || 1),
+        interval: "month",
+        interval_count: billingMode === "recurring" ? intervalMonths : 1,
+        duration_months: durationMonths,
+        billing_mode: billingMode,
         stripe_price_id: priceId,
         status: "sent",
-        notes: input.notes?.trim() || null,
+        notes: null,
         source_submission_id: input.sourceSubmissionId || null,
         created_by: mentorId,
         expires_at: expiresAt.toISOString(),
@@ -96,13 +139,13 @@ export async function createOneToOneInvite(input: {
     const host = h.get("x-forwarded-host") ?? h.get("host");
     const proto = h.get("x-forwarded-proto") ?? "https";
     const origin = getAppOrigin(host ? `${proto}://${host}` : null);
-    const inviteUrl = `${origin}/1-1/${token}`;
+    const inviteUrl = oneToOneInviteUrl(origin, token);
 
     await sendEmail({
       to: email,
       subject: "O teu convite Neuma 1:1",
       html: `
-        <p>Olá ${fullName},</p>
+        <p>Olá ${firstName},</p>
         <p>${mentorName ?? "A Neuma"} aceitou-te no programa <strong>Neuma 1:1</strong>.</p>
         <p>Cria a tua conta e activa o acesso aqui:</p>
         <p><a href="${inviteUrl}">${inviteUrl}</a></p>
@@ -148,10 +191,6 @@ export type ResendInviteResult =
   | { ok: true; inviteUrl: string }
   | { ok: false; error: string };
 
-/**
- * Gera um novo token para um convite ja existente (pending/sent/expired) e
- * reenvia o email. Nao cria preco novo na Stripe — reutiliza o existente.
- */
 export async function resendOneToOneInvite(
   inviteId: string,
 ): Promise<ResendInviteResult> {
@@ -192,13 +231,13 @@ export async function resendOneToOneInvite(
     const host = h.get("x-forwarded-host") ?? h.get("host");
     const proto = h.get("x-forwarded-proto") ?? "https";
     const origin = getAppOrigin(host ? `${proto}://${host}` : null);
-    const inviteUrl = `${origin}/1-1/${token}`;
+    const inviteUrl = oneToOneInviteUrl(origin, token);
 
     await sendEmail({
       to: invite.email,
       subject: "O teu convite Neuma 1:1",
       html: `
-        <p>Olá ${invite.full_name ?? ""},</p>
+        <p>Olá ${invite.first_name ?? invite.full_name ?? ""},</p>
         <p>${mentorName ?? "A Neuma"} convida-te para o programa <strong>Neuma 1:1</strong>.</p>
         <p>Cria a tua conta e activa o acesso aqui:</p>
         <p><a href="${inviteUrl}">${inviteUrl}</a></p>
@@ -219,20 +258,17 @@ export async function resendOneToOneInvite(
   }
 }
 
-export type RedeemInviteResult =
-  | { ok: true; checkoutUrl: string }
+export type RedeemAccountResult =
+  | { ok: true }
   | { ok: false; error: string };
 
 /**
- * Completa o signup do 1:1 e abre o Checkout com o preco a medida.
- * O email vem do convite e nao e editavel.
+ * Passo 2 do wizard 1:1 — cria a conta com password (email vem do convite).
  */
-export async function redeemOneToOneInvite(input: {
+export async function redeemOneToOneAccount(input: {
   token: string;
   password: string;
-  firstName: string;
-  lastName: string;
-}): Promise<RedeemInviteResult> {
+}): Promise<RedeemAccountResult> {
   try {
     const tokenHash = hashToken(input.token);
     const admin = createAdminClient();
@@ -256,31 +292,42 @@ export async function redeemOneToOneInvite(input: {
         .eq("id", invite.id);
       return { ok: false, error: "Este convite expirou." };
     }
-    if (!invite.stripe_price_id) {
-      return { ok: false, error: "Convite sem preço associado." };
-    }
-    if (!input.password || input.password.length < 5) {
-      return { ok: false, error: "A password precisa de pelo menos 5 caracteres." };
+    if (!isValidPassword(input.password)) {
+      return {
+        ok: false,
+        error: `A password precisa de pelo menos ${PASSWORD_MIN_LENGTH} caracteres.`,
+      };
     }
 
+    const firstName = (invite.first_name || "").trim();
+    const lastName = (invite.last_name || "").trim();
     const fullName =
-      `${input.firstName.trim()} ${input.lastName.trim()}`.trim() ||
+      `${firstName} ${lastName}`.trim() ||
       invite.full_name ||
       invite.email;
+
+    if (invite.redeemed_profile_id) {
+      // Conta já criada neste convite — o cliente só precisa de entrar.
+      return { ok: true };
+    }
 
     const { data: created, error: createErr } =
       await admin.auth.admin.createUser({
         email: invite.email,
         password: input.password,
         email_confirm: true,
-        user_metadata: { full_name: fullName },
+        user_metadata: {
+          full_name: fullName,
+          first_name: firstName || undefined,
+          last_name: lastName || undefined,
+          age: invite.age ?? undefined,
+          gender: invite.gender ?? undefined,
+        },
       });
 
     let userId = created?.user?.id;
     if (createErr) {
       if (/already/i.test(createErr.message)) {
-        // Conta ja existe: tentar login com a password dada nao e seguro aqui.
-        // Em vez disso, pedimos que faca login e volte ao link.
         return {
           ok: false,
           error:
@@ -296,41 +343,134 @@ export async function redeemOneToOneInvite(input: {
       email: invite.email,
       full_name: fullName,
       role: "student",
-      is_one_to_one: true,
+      age: invite.age,
+      gender: invite.gender,
+      is_one_to_one: false,
       billing_exempt: false,
       onboarding_completed: true,
     });
 
-    // Iniciar sessao no browser: o cliente tem de fazer signIn. Devolvemos
-    // o checkout URL; a pagina faz signInWithPassword e depois redirecciona.
+    await admin
+      .from("one_to_one_invites")
+      .update({ redeemed_profile_id: userId })
+      .eq("id", invite.id);
+
+    return { ok: true };
+  } catch (error) {
+    console.error("[one-to-one:account]", error);
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Não foi possível criar a conta.",
+    };
+  }
+}
+
+export type RedeemCheckoutResult =
+  | { ok: true; checkoutUrl: string }
+  | { ok: false; error: string };
+
+/**
+ * Passo 3 — abre Stripe Checkout (subscription ou one-time) para o convite.
+ * Requer sessão autenticada do aluno do convite.
+ */
+export async function startOneToOneCheckout(input: {
+  token: string;
+}): Promise<RedeemCheckoutResult> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { ok: false, error: "Não autenticado." };
+
+    const tokenHash = hashToken(input.token);
+    const admin = createAdminClient();
+    const { data: invite } = await admin
+      .from("one_to_one_invites")
+      .select("*")
+      .eq("token_hash", tokenHash)
+      .maybeSingle();
+
+    if (!invite) return { ok: false, error: "Convite inválido." };
+    if (invite.status === "paid") {
+      return { ok: false, error: "Este convite já foi utilizado." };
+    }
+    if (invite.status === "revoked") {
+      return { ok: false, error: "Este convite foi revogado." };
+    }
+    if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
+      await admin
+        .from("one_to_one_invites")
+        .update({ status: "expired" })
+        .eq("id", invite.id);
+      return { ok: false, error: "Este convite expirou." };
+    }
+    const sessionEmail = (user.email ?? "").trim().toLowerCase();
+    const inviteEmail = (invite.email ?? "").trim().toLowerCase();
+    if (!sessionEmail || sessionEmail !== inviteEmail) {
+      return { ok: false, error: "Este convite pertence a outro email." };
+    }
+    if (!invite.stripe_price_id) {
+      return { ok: false, error: "Convite sem preço associado." };
+    }
+    if (
+      invite.redeemed_profile_id &&
+      invite.redeemed_profile_id !== user.id
+    ) {
+      return { ok: false, error: "Este convite pertence a outra conta." };
+    }
+
     const customerId = await ensureStripeCustomer({
-      profileId: userId,
+      profileId: user.id,
       email: invite.email,
-      fullName,
+      fullName: invite.full_name,
     });
 
     const stripe = requireStripe();
     const origin = appUrl("/");
+    const billingMode =
+      invite.billing_mode === "one_time" ? "one_time" : "recurring";
+    const durationMonths = Math.max(1, invite.duration_months ?? 1);
+
     const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
+      mode: billingMode === "one_time" ? "payment" : "subscription",
       customer: customerId,
-      client_reference_id: userId,
+      client_reference_id: user.id,
       line_items: [{ price: invite.stripe_price_id, quantity: 1 }],
-      success_url: `${origin.replace(/\/$/, "")}/subscrever/sucesso?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin.replace(/\/$/, "")}/1-1/${input.token}?cancelado=1`,
+      success_url: `${origin.replace(/\/$/, "")}/subscrever/sucesso?session_id={CHECKOUT_SESSION_ID}&one_to_one=1`,
+      cancel_url: `${origin.replace(/\/$/, "")}${oneToOneInvitePath(input.token)}?cancelado=1`,
       locale: "pt",
       metadata: {
         neuma_invite_id: invite.id,
-        neuma_profile_id: userId,
+        neuma_profile_id: user.id,
         neuma_plan: "one_to_one",
+        neuma_billing_mode: billingMode,
+        neuma_duration_months: String(durationMonths),
       },
-      subscription_data: {
-        metadata: {
-          neuma_profile_id: userId,
-          neuma_one_to_one: "1",
-          neuma_invite_id: invite.id,
-        },
-      },
+      ...(billingMode === "recurring"
+        ? {
+            subscription_data: {
+              metadata: {
+                neuma_profile_id: user.id,
+                neuma_one_to_one: "1",
+                neuma_invite_id: invite.id,
+                neuma_duration_months: String(durationMonths),
+              },
+            },
+          }
+        : {
+            payment_intent_data: {
+              metadata: {
+                neuma_profile_id: user.id,
+                neuma_one_to_one: "1",
+                neuma_invite_id: invite.id,
+                neuma_duration_months: String(durationMonths),
+              },
+            },
+          }),
     });
 
     if (!session.url) {
@@ -341,21 +481,40 @@ export async function redeemOneToOneInvite(input: {
       .from("one_to_one_invites")
       .update({
         stripe_checkout_session_id: session.id,
-        redeemed_profile_id: userId,
+        redeemed_profile_id: user.id,
       })
       .eq("id", invite.id);
 
     return { ok: true, checkoutUrl: session.url };
   } catch (error) {
-    console.error("[one-to-one:redeem]", error);
+    console.error("[one-to-one:checkout]", error);
     return {
       ok: false,
       error:
         error instanceof Error
           ? error.message
-          : "Não foi possível activar o convite.",
+          : "Não foi possível iniciar o pagamento.",
     };
   }
+}
+
+/** @deprecated Use redeemOneToOneAccount + startOneToOneCheckout */
+export async function redeemOneToOneInvite(input: {
+  token: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+}): Promise<{ ok: true; checkoutUrl: string } | { ok: false; error: string }> {
+  const account = await redeemOneToOneAccount({
+    token: input.token,
+    password: input.password,
+  });
+  if (!account.ok) return account;
+  // Caller must sign in then call startOneToOneCheckout
+  return {
+    ok: false,
+    error: "Fluxo actualizado — usa o wizard do convite.",
+  };
 }
 
 export async function lookupOneToOneInvite(token: string) {
@@ -363,7 +522,7 @@ export async function lookupOneToOneInvite(token: string) {
   const { data } = await admin
     .from("one_to_one_invites")
     .select(
-      "id, email, full_name, amount_cents, currency, interval, interval_count, status, expires_at",
+      "id, email, full_name, first_name, last_name, amount_cents, currency, interval, interval_count, duration_months, billing_mode, status, expires_at",
     )
     .eq("token_hash", hashToken(token))
     .maybeSingle();

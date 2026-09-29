@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { completeCurrentAndActivateNext } from "@/lib/nodes/complete-and-activate";
 import {
@@ -98,7 +99,7 @@ async function revalidateNodePaths(
 export async function listQuizQuestions(
   nodeId: string,
 ): Promise<QuizQuestion[]> {
-  const { supabase } = await requireUser();
+  const { supabase } = await requireMentor();
   const { data, error } = await supabase
     .from("node_quiz_questions")
     .select("id, node_id, order_index, prompt, options, correct_option_id")
@@ -215,12 +216,31 @@ export async function listMyQuizAttempts(
 export async function getQuizForStudent(nodeId: string): Promise<{
   questions: Omit<QuizQuestion, "correct_option_id">[];
 }> {
-  const questions = await listQuizQuestions(nodeId);
+  const { supabase, user } = await requireUser();
+  const { data: node } = await supabase
+    .from("nodes")
+    .select("id, path:paths!inner(student_id)")
+    .eq("id", nodeId)
+    .maybeSingle();
+  const path = Array.isArray(node?.path) ? node?.path[0] : node?.path;
+  if (!node || path?.student_id !== user.id) {
+    throw new Error("Sem permissao");
+  }
+
+  const { data, error } = await supabase
+    .from("node_quiz_questions")
+    .select("id, node_id, order_index, prompt, options")
+    .eq("node_id", nodeId)
+    .order("order_index", { ascending: true });
+  if (error) throw new Error(error.message);
   return {
-    questions: questions.map(({ correct_option_id: _correct, ...rest }) => {
-      void _correct;
-      return rest;
-    }),
+    questions: (data ?? []).map((row) => ({
+      id: row.id,
+      node_id: row.node_id,
+      order_index: row.order_index,
+      prompt: row.prompt,
+      options: parseOptions(row.options),
+    })),
   };
 }
 
@@ -229,7 +249,20 @@ export async function submitQuizAttempt(
   answers: Record<string, string>,
 ): Promise<QuizAttemptSummary> {
   const { supabase, user } = await requireUser();
-  const questions = await listQuizQuestions(nodeId);
+  const { data: answerRows, error: answerError } = await createAdminClient()
+    .from("node_quiz_questions")
+    .select("id, node_id, order_index, prompt, options, correct_option_id")
+    .eq("node_id", nodeId)
+    .order("order_index", { ascending: true });
+  if (answerError) throw new Error(answerError.message);
+  const questions = (answerRows ?? []).map((row) => ({
+    id: row.id,
+    node_id: row.node_id,
+    order_index: row.order_index,
+    prompt: row.prompt,
+    options: parseOptions(row.options),
+    correct_option_id: row.correct_option_id,
+  }));
   if (questions.length === 0) {
     throw new Error("Este check-point ainda nao tem perguntas");
   }

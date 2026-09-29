@@ -5,9 +5,12 @@ import { Check } from "lucide-react";
 
 import { createCheckoutSession } from "@/lib/actions/billing";
 import {
+  setSignupFinishingCookie,
+  writeSignupWizardStep,
+} from "@/lib/auth/signup-wizard";
+import {
   formatEuros,
   getPlans,
-  monthlyEquivalentCents,
   savingsPercent,
   type FixedPlan,
 } from "@/lib/stripe/plans";
@@ -18,12 +21,16 @@ const PLANS = getPlans();
 
 export function PlanPicker({
   title = "Escolhe o teu plano",
-  subtitle = "Sem período experimental. Pagas e entras.",
-  cancelled = false,
+  subtitle,
+  cancelReturnPath,
+  notice,
 }: {
   title?: string;
   subtitle?: string;
-  cancelled?: boolean;
+  /** Where Stripe "back" should land (never a cancelado screen). */
+  cancelReturnPath?: string;
+  /** Optional status for lapsed/canceled subscriptions only. */
+  notice?: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<FixedPlan>("quarterly");
@@ -32,7 +39,15 @@ export function PlanPicker({
   function onContinue() {
     setError(null);
     startTransition(async () => {
-      const result = await createCheckoutSession(selected);
+      // Keep signup resume intact if the mentor backs out of Stripe.
+      if (cancelReturnPath === "/login/signup") {
+        setSignupFinishingCookie();
+        writeSignupWizardStep("plan");
+      }
+      const result = await createCheckoutSession(
+        selected,
+        cancelReturnPath ? { cancelPath: cancelReturnPath } : undefined,
+      );
       if (!result.ok) {
         setError(result.error);
         return;
@@ -47,15 +62,17 @@ export function PlanPicker({
         <h1 className="font-heading text-2xl font-bold tracking-tight sm:text-3xl">
           {title}
         </h1>
-        <p className="mt-1.5 text-sm text-muted-foreground">{subtitle}</p>
+        {subtitle ? (
+          <p className="mt-1.5 text-sm text-muted-foreground">{subtitle}</p>
+        ) : null}
       </div>
 
-      {cancelled ? (
+      {notice ? (
         <p
-          className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-muted-foreground"
+          className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-muted-foreground"
           role="status"
         >
-          Cancelaste o pagamento. Escolhe um plano quando estiveres pronto.
+          {notice}
         </p>
       ) : null}
 
@@ -63,7 +80,6 @@ export function PlanPicker({
         {PLANS.map((plan) => {
           const isSelected = selected === plan.plan;
           const save = savingsPercent(plan);
-          const perMonth = monthlyEquivalentCents(plan);
 
           return (
             <button
@@ -99,9 +115,6 @@ export function PlanPicker({
                   </div>
                   <p className="mt-0.5 text-sm text-muted-foreground">
                     {plan.cadence}
-                    {plan.months > 1
-                      ? ` · ${formatEuros(perMonth)}/mês`
-                      : null}
                   </p>
                 </div>
 

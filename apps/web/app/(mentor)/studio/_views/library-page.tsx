@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { archiveLibraryAsset } from "@/lib/actions/library";
@@ -17,6 +18,54 @@ import { isReadyLibraryAsset } from "@/lib/library-ready";
 import { LIBRARY_PATH } from "@/lib/library-routes";
 import type { LibraryAssetUsage } from "@/lib/types/database.types";
 
+function EmptyLessons({
+  lessons,
+}: {
+  lessons: {
+    id: string;
+    title: string;
+    path_id: string;
+    content_body: string | null;
+    resource_url: string | null;
+    path:
+      | { id: string; title: string; status: string }
+      | { id: string; title: string; status: string }[]
+      | null;
+  }[];
+}) {
+  const empty = lessons.filter((lesson) => {
+    const path = Array.isArray(lesson.path) ? lesson.path[0] : lesson.path;
+    if (!path || path.status !== "active") return false;
+    const hasText = Boolean(lesson.content_body?.trim());
+    const hasVideo = Boolean(lesson.resource_url?.trim());
+    return !hasText && !hasVideo;
+  });
+  if (empty.length === 0) return null;
+  return (
+    <section className="space-y-2">
+      <h2 className="text-sm font-semibold">Em uso e vazio</h2>
+      <ul className="divide-y divide-white/10 rounded-2xl border border-white/10">
+        {empty.map((lesson) => {
+          const path = Array.isArray(lesson.path) ? lesson.path[0] : lesson.path;
+          return (
+            <li key={lesson.id}>
+              <Link
+                href={`/studio/journeys/${lesson.path_id}/levels/${lesson.id}`}
+                className="flex flex-col gap-0.5 px-4 py-3 hover:bg-white/[0.04]"
+              >
+                <span className="text-sm font-medium">{lesson.title}</span>
+                <span className="text-xs text-muted-foreground">
+                  {path?.title} · aula sem texto nem vídeo
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 export default async function LibraryPage({
   searchParams,
 }: {
@@ -29,6 +78,7 @@ export default async function LibraryPage({
     { data: assets },
     { data: categories },
     { data: topics },
+    { data: emptyLessons },
   ] = await Promise.all([
     supabase
       .from("library_assets")
@@ -45,6 +95,11 @@ export default async function LibraryPage({
       .from("library_topics")
       .select("id, category_id, name, slug, sort_index, created_by_agent, rationale")
       .order("sort_index", { ascending: true }),
+    supabase
+      .from("nodes")
+      .select("id, title, path_id, content_body, resource_url, path:paths!inner(id, title, status)")
+      .in("kind", ["lesson", "resource"])
+      .limit(80),
   ]);
 
   const cats = categories ?? [];
@@ -141,6 +196,7 @@ export default async function LibraryPage({
     <div className="space-y-10">
       <div className="space-y-3">
         <PageHero eyebrow="Studio" title="Biblioteca" />
+        <EmptyLessons lessons={emptyLessons ?? []} />
 
         <section id="biblioteca" className="scroll-mt-24 space-y-4 pt-1">
           <div className="flex flex-col gap-3 min-[950px]:flex-row min-[950px]:items-center min-[950px]:justify-between min-[950px]:gap-4">

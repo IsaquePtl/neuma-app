@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 
+import { OneToOneCourtesyCard } from "@/components/one-to-one-courtesy-card";
 import { StudentPanorama } from "@/components/student-panorama";
 import { StudentShell } from "@/components/student-shell";
 import { ClaimUnassignedToStudent } from "@/components/claim-unassigned-to-student";
@@ -30,6 +31,11 @@ export default async function StudentDetailPage({
   const path = rawPath ? mapPath(rawPath) : null;
   const counts = await loadStudentCounts(id, path?.id ?? null);
   const supabase = await createClient();
+  const { data: accessFlags } = await supabase
+    .from("profiles")
+    .select("is_one_to_one, one_to_one_access_until, billing_exempt")
+    .eq("id", id)
+    .maybeSingle();
 
   const [{ data: nodes }, { data: checkIns }, { data: drafts }, { data: tallyRows }, { data: readyTemplatesRaw }, { data: libraryAssets }, { data: libraryCategories }, { data: libraryTopics }, { data: unassignedPaths }] =
     await Promise.all([
@@ -155,6 +161,10 @@ export default async function StudentDetailPage({
     };
   });
 
+  const nextDue = mappedNodes.find(
+    (node) => node.status === "active" && node.due_date,
+  );
+
   const pickerAssets = (libraryAssets ?? []).map((a) => ({
     id: a.id,
     title: a.title,
@@ -178,6 +188,22 @@ export default async function StudentDetailPage({
           paths={unassignedPaths ?? []}
         />
       ) : null}
+      <p className="text-sm text-muted-foreground">
+        {accessFlags?.is_one_to_one
+          ? `Acesso 1:1${accessFlags.one_to_one_access_until ? ` até ${accessFlags.one_to_one_access_until.slice(0, 10)}` : ""}`
+          : accessFlags?.billing_exempt
+            ? "Acesso isento"
+            : "Sem cortesia 1:1"}
+        {counts.pendingCheckIns > 0
+          ? ` · ${counts.pendingCheckIns} check-in${counts.pendingCheckIns === 1 ? "" : "s"} pendente${counts.pendingCheckIns === 1 ? "" : "s"}`
+          : ""}
+        {nextDue?.due_date ? ` · próximo prazo ${nextDue.due_date}` : ""}
+      </p>
+      <OneToOneCourtesyCard
+        profileId={id}
+        isOneToOne={accessFlags?.is_one_to_one ?? false}
+        accessUntil={accessFlags?.one_to_one_access_until ?? null}
+      />
       <StudentPanorama
         student={student}
         path={path}

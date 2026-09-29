@@ -131,20 +131,14 @@ export function OnboardingNeumaEmbed({
     <div className="soundworks-stage absolute inset-0 z-10 flex touch-manipulation flex-col overflow-hidden overscroll-none">
       {formVisible ? (
         <>
-          <Link
-            href={isLoggedIn ? backHref : SIGNUP_HREF}
-            className={cn(
-              "absolute right-4 top-[max(0.75rem,env(safe-area-inset-top,0px))] z-20 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline",
-              isLoggedIn
-                ? "opacity-100"
-                : cn(
-                    "transition-opacity duration-700 ease-out",
-                    ready && phase === "form" ? "opacity-100" : "opacity-0",
-                  ),
-            )}
-          >
-            {isLoggedIn ? backLabel : "Criar conta"}
-          </Link>
+          {isLoggedIn ? (
+            <Link
+              href={backHref}
+              className="absolute right-4 top-[max(0.75rem,env(safe-area-inset-top,0px))] z-20 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline opacity-100"
+            >
+              {backLabel}
+            </Link>
+          ) : null}
 
           <div
             className={cn(

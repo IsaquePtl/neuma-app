@@ -41,6 +41,7 @@ export type StudentNode = {
   title: string;
   description: string | null;
   week_number: number | null;
+  duration_weeks: number | null;
   kind: NodeKind;
   status: NodeStatus;
   due_date: string | null;
@@ -278,6 +279,7 @@ export function mapNode(n: {
   title: string;
   description: string | null;
   week_number: number | null;
+  duration_weeks?: number | null;
   kind: NodeKind;
   status: NodeStatus;
   due_date: string | null;
@@ -295,13 +297,14 @@ export function mapNode(n: {
     title: n.title,
     description: n.description,
     week_number: n.week_number,
+    duration_weeks: n.duration_weeks ?? null,
     kind: n.kind,
     status: n.status,
     due_date: n.due_date,
     resource_url: n.resource_url,
     content_body: n.content_body ?? null,
     order_index: n.order_index,
-    pass_rule: n.pass_rule ?? (n.kind === "practice" ? "check_in" : n.kind === "lesson" || n.kind === "resource" ? "none" : "mentor"),
+    pass_rule: n.pass_rule ?? (n.kind === "practice" ? "check_in" : n.kind === "lesson" || n.kind === "resource" ? "none" : n.kind === "milestone" ? "quiz" : "mentor"),
     pass_score: n.pass_score ?? null,
     check_in_kind: n.check_in_kind ?? null,
     phase_key: n.phase_key ?? null,
@@ -321,7 +324,7 @@ export async function loadMyPathWithNodes(studentId: string): Promise<{
   const { data: nodes } = await supabase
     .from("nodes")
     .select(
-      "id, title, description, week_number, kind, status, due_date, resource_url, content_body, order_index, pass_rule, pass_score, check_in_kind, phase_key, node_code",
+      "id, title, description, week_number, duration_weeks, kind, status, due_date, resource_url, content_body, order_index, pass_rule, pass_score, check_in_kind, phase_key, node_code",
     )
     .eq("path_id", pathRow.id)
     .order("order_index", { ascending: true });

@@ -1,14 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 import { getAppOrigin } from "@/lib/auth/app-origin";
 import { getSessionUser } from "@/lib/auth/session";
+import { SIGNUP_FINISHING_COOKIE } from "@/lib/auth/signup-wizard";
 import { createClient } from "@/lib/supabase/server";
 import { requireStripe } from "@/lib/stripe/client";
 import { isFixedPlan, type FixedPlan } from "@/lib/stripe/plans";
 import { resolvePriceId } from "@/lib/stripe/prices";
+import { fulfillOneToOneCheckout } from "@/lib/stripe/one-to-one";
 import {
   ensureStripeCustomer,
   fetchSubscription,
@@ -49,6 +51,7 @@ async function requestOrigin() {
 /** Cria uma Checkout Session de subscricao e devolve o URL da Stripe. */
 export async function createCheckoutSession(
   plan: string,
+  options?: { cancelPath?: string },
 ): Promise<BillingActionResult> {
   try {
     if (!isFixedPlan(plan)) {
@@ -65,13 +68,27 @@ export async function createCheckoutSession(
     });
 
     const origin = getAppOrigin(await requestOrigin());
+    const cookieStore = await cookies();
+    const signupFinishing =
+      cookieStore.get(SIGNUP_FINISHING_COOKIE)?.value === "1";
+
+    // Voltar atrás na Stripe = escolher plano de novo. Nunca ?cancelado=1
+    // (esse estado é só para subscrição cancelada / atraso prolongado).
+    const cancelPath =
+      options?.cancelPath?.startsWith("/") &&
+      !options.cancelPath.startsWith("//")
+        ? options.cancelPath
+        : signupFinishing
+          ? "/login/signup"
+          : "/subscrever";
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
       client_reference_id: profile.id,
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${origin}/subscrever/sucesso?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/subscrever?cancelado=1`,
+      cancel_url: `${origin}${cancelPath}`,
       locale: "pt",
       allow_promotion_codes: true,
       subscription_data: {
@@ -161,8 +178,20 @@ export async function finalizeCheckoutSession(
       }
     }
 
+    if (
+      session.metadata?.neuma_invite_id ||
+      session.metadata?.neuma_plan === "one_to_one"
+    ) {
+      try {
+        await fulfillOneToOneCheckout(session);
+      } catch (error) {
+        console.error("[billing:finalize:one-to-one]", error);
+      }
+    }
+
     revalidatePath("/home");
     revalidatePath("/settings");
+    revalidatePath("/settings/subscription");
     revalidatePath("/subscrever");
     return { ok: true };
   } catch (error) {
@@ -206,6 +235,7 @@ export async function cancelMySubscription(): Promise<
     });
 
     revalidatePath("/settings");
+    revalidatePath("/settings/subscription");
     return { ok: true };
   } catch (error) {
     console.error("[billing:cancel]", error);
@@ -248,6 +278,7 @@ export async function reactivateMySubscription(): Promise<
     });
 
     revalidatePath("/settings");
+    revalidatePath("/settings/subscription");
     return { ok: true };
   } catch (error) {
     console.error("[billing:reactivate]", error);
@@ -280,6 +311,12 @@ export async function changeMyPlan(
     if (!sub?.stripe_item_id) {
       return { ok: false, error: "Não tens uma subscrição activa." };
     }
+    if (sub.plan === "one_to_one") {
+      return {
+        ok: false,
+        error: "O Neuma 1:1 não muda para um plano de subscrição.",
+      };
+    }
     if (sub.plan === plan) {
       return { ok: false, error: "Já estás neste plano." };
     }
@@ -305,6 +342,7 @@ export async function changeMyPlan(
     });
 
     revalidatePath("/settings");
+    revalidatePath("/settings/subscription");
     return { ok: true };
   } catch (error) {
     console.error("[billing:change]", error);
@@ -340,8 +378,8 @@ export async function createCardUpdateSession(): Promise<BillingActionResult> {
       mode: "setup",
       customer: sub.stripe_customer_id,
       currency: "eur",
-      success_url: `${origin}/settings?cartao=1`,
-      cancel_url: `${origin}/settings`,
+      success_url: `${origin}/settings/subscription?cartao=1`,
+      cancel_url: `${origin}/settings/subscription`,
       locale: "pt",
       metadata: {
         neuma_profile_id: profile.id,

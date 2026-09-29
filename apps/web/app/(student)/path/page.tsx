@@ -4,7 +4,9 @@ import { ArrowRight, Target, Route } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { loadMyPathWithNodes } from "@/lib/students/queries";
 import { loadStudentUnviewedFeedback } from "@/lib/feedbacks/student";
+import { studentHasOnboardingSubmission } from "@/lib/onboarding/submission";
 import { PathAwaitingCard } from "@/components/path-awaiting-card";
+import { PathOnboardingCard } from "@/components/path-onboarding-card";
 import { PathPausedCard } from "@/components/path-paused-card";
 import { StudentPathMap } from "@/components/student-path-map";
 import { CategoryThemeIcon } from "@/components/category-theme-icon";
@@ -33,23 +35,34 @@ export default async function StudentPathPage() {
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   if (!path) {
+    const hasOnboarding = await studentHasOnboardingSubmission({
+      studentId: user!.id,
+      email: user?.email,
+    });
+
     return (
       <div className="neuma-mobile-viewport flex flex-col items-center justify-center overflow-hidden overscroll-none pb-5 desktop:min-h-0 desktop:flex-1 desktop:justify-center desktop:overflow-visible desktop:pb-4">
         <div className="flex w-full flex-col gap-4 sm:gap-5">
-          <PathAwaitingCard />
-          <Button
-            render={<Link href="/tools" />}
-            nativeButton={false}
-            size="lg"
-            variant="ghost"
-            className="h-14 w-full justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.06] px-5 text-base font-semibold text-white hover:bg-white/[0.1] hover:text-white"
-          >
-            <span className="inline-flex items-center gap-2.5">
-              <MusicStaffIcon className="size-5" />
-              Explorar recursos
-            </span>
-            <ArrowRight className="size-4 opacity-80" />
-          </Button>
+          {hasOnboarding ? (
+            <>
+              <PathAwaitingCard />
+              <Button
+                render={<Link href="/tools" />}
+                nativeButton={false}
+                size="lg"
+                variant="ghost"
+                className="h-14 w-full justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.06] px-5 text-base font-semibold text-white hover:bg-white/[0.1] hover:text-white"
+              >
+                <span className="inline-flex items-center gap-2.5">
+                  <MusicStaffIcon className="size-5" />
+                  Explorar recursos
+                </span>
+                <ArrowRight className="size-4 opacity-80" />
+              </Button>
+            </>
+          ) : (
+            <PathOnboardingCard />
+          )}
         </div>
       </div>
     );

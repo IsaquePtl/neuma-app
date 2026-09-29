@@ -1,5 +1,6 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
@@ -25,9 +26,8 @@ export type CreateSignupResult =
   | { ok: false; error: string };
 
 /**
- * Cria a conta email/password e garante sessão (cookies).
- * Fase inicial: sem confirmação de email — se o projecto exigir confirm,
- * confirmamos via admin e fazemos sign-in para o passo de perfil na mesma página.
+ * Cria a conta no passo 1 (identidade + email).
+ * Sem password no form → gera temporária; o user define-a no passo 3 (após Stripe).
  */
 export async function createSignupAccount(
   formData: FormData,
@@ -35,9 +35,13 @@ export async function createSignupAccount(
   const firstName = String(formData.get("first_name") ?? "").trim();
   const lastName = String(formData.get("last_name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
+  const passwordRaw = String(formData.get("password") ?? "");
   const age = parseAge(formData.get("age"));
   const gender = parseGender(formData.get("gender"));
+  const needsPassword = !passwordRaw;
+  const password = needsPassword
+    ? randomBytes(32).toString("base64url")
+    : passwordRaw;
 
   if (!firstName || !lastName) {
     return { ok: false, error: "Indica o primeiro e último nome." };
@@ -51,7 +55,7 @@ export async function createSignupAccount(
   if (!isValidEmail(email)) {
     return { ok: false, error: "Indica um email válido." };
   }
-  if (!isValidPassword(password)) {
+  if (!needsPassword && !isValidPassword(password)) {
     return {
       ok: false,
       error: `A password precisa de pelo menos ${PASSWORD_MIN_LENGTH} caracteres.`,
@@ -67,6 +71,7 @@ export async function createSignupAccount(
     full_name: fullName,
     age,
     gender,
+    ...(needsPassword ? { neuma_needs_password: true } : {}),
   };
 
   const supabase = await createClient();
@@ -169,6 +174,47 @@ export async function createSignupAccount(
       })
       .eq("id", userId);
     await ensureDefaultMentorForStudent(userId);
+  }
+
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/** Passo 3 do signup — define a password definitiva (após Stripe). */
+export async function setSignupPassword(input: {
+  password: string;
+  confirm: string;
+}): Promise<CreateSignupResult> {
+  const password = input.password;
+  const confirm = input.confirm;
+
+  if (!isValidPassword(password)) {
+    return {
+      ok: false,
+      error: `A password precisa de pelo menos ${PASSWORD_MIN_LENGTH} caracteres.`,
+    };
+  }
+  if (password !== confirm) {
+    return { ok: false, error: "As passwords não coincidem." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Sessão expirada. Entra novamente." };
+  }
+
+  const { error } = await supabase.auth.updateUser({
+    password,
+    data: { neuma_needs_password: null },
+  });
+  if (error) {
+    return {
+      ok: false,
+      error: error.message || "Não foi possível guardar a password.",
+    };
   }
 
   revalidatePath("/", "layout");

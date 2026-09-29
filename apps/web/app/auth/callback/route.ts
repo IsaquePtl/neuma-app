@@ -30,6 +30,7 @@ function redirectWithCookies(
       path: "/",
       maxAge: 1800,
       sameSite: "lax",
+      httpOnly: true,
     });
   }
   return response;
@@ -38,7 +39,7 @@ function redirectWithCookies(
 /**
  * Troca o code OAuth/magic-link por sessão.
  * - intent=login: só contas já existentes (perfil em `profiles`); conta nova → signup
- * - intent=signup: cria/entra e volta a /login/signup (passo foto/bio)
+ * - intent=signup: cria/entra e volta a /login/signup (plano ou perfil)
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);

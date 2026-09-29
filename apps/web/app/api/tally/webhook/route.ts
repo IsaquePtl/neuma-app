@@ -267,7 +267,7 @@ export async function POST(request: Request) {
       after(async () => {
         await notifyMentor({
           subject: `Check-in Tally por ligar: ${parsed.respondentName ?? parsed.respondentEmail ?? "aluno"}`,
-          html: `<p>Chegou um check-in do Tally mas nao foi possivel liga-lo automaticamente.</p><p><a href="${appUrl("/studio/inbox")}">Abrir inbox na Neuma</a></p>`,
+          html: `<p>Chegou um check-in do Tally mas nao foi possivel liga-lo automaticamente.</p><p><a href="${appUrl("/studio/journeys")}">Abrir inbox na Neuma</a></p>`,
         });
       });
 
@@ -305,7 +305,7 @@ export async function POST(request: Request) {
         : `Nova submissao Tally: ${parsed.respondentName ?? parsed.respondentEmail ?? "resposta nova"}`;
     await notifyMentor({
       subject: title,
-      html: `<p>Chegou uma nova submissao do Tally.</p><p><a href="${appUrl("/studio/inbox#forms")}">Abrir inbox na Neuma</a></p>`,
+      html: `<p>Chegou uma nova submissao do Tally.</p><p><a href="${appUrl("/studio/journeys")}">Abrir inbox na Neuma</a></p>`,
     });
   });
 

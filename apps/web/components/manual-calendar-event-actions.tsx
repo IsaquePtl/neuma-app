@@ -9,6 +9,7 @@ import {
   updateMentorCalendarEvent,
 } from "@/lib/actions/calendar-events";
 import { Button } from "@/components/ui/button";
+import { DateTimePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -112,9 +113,8 @@ export function ManualCalendarEventActions({
           </option>
         ))}
       </select>
-      <Input
+      <DateTimePicker
         name="starts_at"
-        type="datetime-local"
         defaultValue={event.startsAtLocal}
         required
       />

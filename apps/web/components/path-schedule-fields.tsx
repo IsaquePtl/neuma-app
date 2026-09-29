@@ -1,13 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  addMonthsToDate,
+  computeEndDate,
   formatPathEndDate,
+  formatWeeksLabel,
+  normalizeToMonday,
   parseDurationMonths,
+  weeksBetweenDates,
 } from "@/lib/path-period";
 
 export function PeriodMonthsInput({
@@ -62,6 +66,7 @@ export function PathScheduleFields({
   disabled,
   startId = "path-start",
   periodId = "path-period",
+  showPeriodInput = true,
 }: {
   startDate: string;
   periodMonths: number;
@@ -70,52 +75,103 @@ export function PathScheduleFields({
   disabled?: boolean;
   startId?: string;
   periodId?: string;
+  /** When false, only start date is edited here (duration lives elsewhere). */
+  showPeriodInput?: boolean;
 }) {
-  const endDate = useMemo(() => {
-    if (!startDate || periodMonths < 1) return null;
-    return addMonthsToDate(startDate, periodMonths);
+  const [snapHint, setSnapHint] = useState(false);
+
+  const schedule = useMemo(() => {
+    if (!startDate || periodMonths < 1) {
+      return { endDate: null as string | null, weeks: null as number | null };
+    }
+    const startMonday = normalizeToMonday(startDate);
+    const endDate = computeEndDate(startMonday, periodMonths);
+    if (!endDate) return { endDate: null, weeks: null };
+    return {
+      endDate,
+      weeks: weeksBetweenDates(startMonday, endDate),
+    };
   }, [startDate, periodMonths]);
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3">
+      <div
+        className={
+          showPeriodInput ? "grid grid-cols-2 gap-3" : "grid grid-cols-1 gap-3"
+        }
+      >
+        {showPeriodInput ? (
+          <div className="space-y-2">
+            <Label htmlFor={periodId}>Duração</Label>
+            <PeriodMonthsInput
+              id={periodId}
+              name="period_months"
+              value={periodMonths}
+              disabled={disabled}
+              onChange={onPeriodMonthsChange}
+            />
+          </div>
+        ) : null}
         <div className="space-y-2">
-          <Label htmlFor={startId}>Início do percurso (dia)</Label>
-          <Input
+          <Label htmlFor={startId}>Início do percurso</Label>
+          <DatePicker
             id={startId}
             name="start_date"
-            type="date"
             value={startDate}
             disabled={disabled}
-            onChange={(e) => onStartDateChange(e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor={periodId}>Período</Label>
-          <PeriodMonthsInput
-            id={periodId}
-            name="period_months"
-            value={periodMonths}
-            disabled={disabled}
-            onChange={onPeriodMonthsChange}
+            className="h-10"
+            onValueChange={(raw) => {
+              if (!raw) {
+                setSnapHint(false);
+                onStartDateChange("");
+                return;
+              }
+              const monday = normalizeToMonday(raw);
+              setSnapHint(monday !== raw);
+              onStartDateChange(monday);
+            }}
           />
         </div>
       </div>
 
-      {endDate ? (
+      {snapHint ? (
         <p className="text-xs text-muted-foreground">
-          Fim previsto:{" "}
-          <span className="text-foreground/90">{formatPathEndDate(endDate)}</span>
-          {" · "}
-          {periodMonths} meses
+          Ajustámos para segunda-feira — os percursos começam sempre nesse dia.
         </p>
+      ) : null}
+
+      {schedule.endDate && schedule.weeks != null ? (
+        <div className="grid grid-cols-2 gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5">
+          <div className="space-y-0.5">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Semanas
+            </p>
+            <p className="text-sm font-medium text-foreground">
+              {formatWeeksLabel(schedule.weeks)}
+            </p>
+          </div>
+          <div className="space-y-0.5">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Fim do percurso
+            </p>
+            <p className="text-sm font-medium text-foreground">
+              {formatPathEndDate(schedule.endDate)}
+            </p>
+          </div>
+        </div>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Define a data de início para calcular o fim do percurso.
+          Define duração e data de início (segunda-feira) para calcular as
+          semanas e o fim.
         </p>
       )}
 
-      {endDate ? <input type="hidden" name="end_date" value={endDate} /> : null}
+      {!showPeriodInput ? (
+        <input type="hidden" name="period_months" value={periodMonths} />
+      ) : null}
+      {schedule.endDate ? (
+        <input type="hidden" name="end_date" value={schedule.endDate} />
+      ) : null}
     </>
   );
 }

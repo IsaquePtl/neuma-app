@@ -125,6 +125,7 @@ export function Metronome() {
   const beatsRef = useRef(beats);
   const accentEnabledRef = useRef(accentEnabled);
   const tapTimesRef = useRef<number[]>([]);
+  const runningRef = useRef(false);
 
   useEffect(() => {
     bpmRef.current = bpm;
@@ -237,6 +238,8 @@ export function Metronome() {
   }
 
   async function start() {
+    if (runningRef.current) return;
+    runningRef.current = true;
     unlockMediaPlayback();
     silentAudioRef.current = keepSilentMediaElementAlive();
 
@@ -246,9 +249,12 @@ export function Metronome() {
     try {
       await ensureSamples(ctx);
     } catch {
+      runningRef.current = false;
       return;
     }
 
+    if (!runningRef.current) return;
+    if (timerRef.current) window.clearInterval(timerRef.current);
     beatCounterRef.current = 0;
     nextNoteTimeRef.current = ctx.currentTime + 0.05;
     timerRef.current = window.setInterval(scheduler, 25);
@@ -256,6 +262,7 @@ export function Metronome() {
   }
 
   function stop() {
+    runningRef.current = false;
     if (timerRef.current) window.clearInterval(timerRef.current);
     timerRef.current = null;
     beatTimeoutsRef.current.forEach((id) => window.clearTimeout(id));
@@ -391,14 +398,12 @@ export function Metronome() {
       <div className="flex w-full items-center justify-center gap-3">
         <Select
           value={timeSignature.label}
-          disabled={!accentEnabled}
           onValueChange={(v) => {
             const next = TIME_SIGNATURES.find((ts) => ts.label === v);
             if (next) setBeats(next.beats);
           }}
         >
           <SelectTrigger
-            disabled={!accentEnabled}
             className="size-16 justify-center rounded-full p-0 text-base *:data-[slot=select-value]:justify-center *:data-[slot=select-value]:text-center [&_svg]:hidden"
           >
             <SelectValue>{timeSignature.label}</SelectValue>

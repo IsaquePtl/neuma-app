@@ -15,7 +15,7 @@ export function SignupPageClient({
 }: {
   error?: string;
   oauthFromLogin?: boolean;
-  /** Só com billing ligado o signup avança para o passo de plano. */
+  /** Só com billing ligado o signup inclui o passo Stripe (plano). */
   billingEnabled?: boolean;
 }) {
   const [step, setStep] = useState<SignupWizardStep>("identity");

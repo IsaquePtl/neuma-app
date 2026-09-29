@@ -127,17 +127,6 @@ export async function cancelCalBookingFromEmbed(payload: EmbedCancelPayload) {
 
   if (error) throw new Error(error.message);
 
-  // Fallback: só UID (row sem student_id)
-  if (!updated?.length) {
-    const retry = await admin
-      .from("cal_bookings")
-      .update({ ...cancelPatch, student_id: user.id })
-      .eq("cal_booking_uid", uid)
-      .select("id");
-    if (retry.error) throw new Error(retry.error.message);
-    updated = retry.data;
-  }
-
   if (!updated?.length) {
     throw new Error("Marcação não encontrada para cancelar");
   }

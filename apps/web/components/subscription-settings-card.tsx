@@ -3,10 +3,10 @@
 import { useState, useTransition } from "react";
 import {
   CreditCard,
-  RefreshCw,
   Ban,
   RotateCcw,
   ArrowRightLeft,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,7 +27,7 @@ import { billingPlanLabel, subscriptionStatusLabel } from "@/lib/labels";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type PaymentRow = {
+export type PaymentRow = {
   id: string;
   amount_cents: number;
   currency: string;
@@ -39,10 +39,10 @@ type PaymentRow = {
 
 export function SubscriptionSettingsCard({
   subscription,
-  payments,
+  hideTitle = false,
 }: {
   subscription: SubscriptionSummary | null;
-  payments: PaymentRow[];
+  hideTitle?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -55,9 +55,11 @@ export function SubscriptionSettingsCard({
   if (!subscription) {
     return (
       <section className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-        <h2 className="font-heading text-lg font-semibold tracking-tight">
-          Subscrição
-        </h2>
+        {hideTitle ? null : (
+          <h2 className="font-heading text-lg font-semibold tracking-tight">
+            Subscrição
+          </h2>
+        )}
         <p className="text-sm text-muted-foreground">
           Ainda não tens um plano activo.
         </p>
@@ -102,10 +104,17 @@ export function SubscriptionSettingsCard({
     <section className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="font-heading text-lg font-semibold tracking-tight">
-            Subscrição
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+          {hideTitle ? null : (
+            <h2 className="font-heading text-lg font-semibold tracking-tight">
+              Subscrição
+            </h2>
+          )}
+          <p
+            className={cn(
+              "text-sm text-muted-foreground",
+              hideTitle ? null : "mt-1",
+            )}
+          >
             {planLabel}
             {subscription.unitAmount != null
               ? ` · ${formatEuros(subscription.unitAmount)}`
@@ -154,13 +163,12 @@ export function SubscriptionSettingsCard({
         </p>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-2.5 desktop:flex-row desktop:flex-wrap">
         <Button
           type="button"
           variant="secondary"
-          size="sm"
           disabled={pending}
-          className="gap-1.5"
+          className="h-11 w-full gap-2 rounded-xl text-sm font-medium desktop:h-10 desktop:w-auto desktop:px-4"
           onClick={() =>
             run(async () => {
               const r = await createCardUpdateSession();
@@ -172,20 +180,19 @@ export function SubscriptionSettingsCard({
             }, "A abrir actualização do cartão…")
           }
         >
-          <CreditCard className="size-3.5" />
+          <CreditCard className="size-4" />
           Actualizar cartão
         </Button>
 
-        {!subscription.cancelAtPeriodEnd ? (
+        {!subscription.cancelAtPeriodEnd && subscription.plan !== "one_to_one" ? (
           <Button
             type="button"
             variant="secondary"
-            size="sm"
             disabled={pending}
-            className="gap-1.5"
+            className="h-11 w-full gap-2 rounded-xl text-sm font-medium desktop:h-10 desktop:w-auto desktop:px-4"
             onClick={() => setChangingPlan((v) => !v)}
           >
-            <ArrowRightLeft className="size-3.5" />
+            <ArrowRightLeft className="size-4" />
             Mudar plano
           </Button>
         ) : null}
@@ -194,26 +201,24 @@ export function SubscriptionSettingsCard({
           <Button
             type="button"
             variant="secondary"
-            size="sm"
             disabled={pending}
-            className="gap-1.5"
+            className="h-11 w-full gap-2 rounded-xl text-sm font-medium desktop:h-10 desktop:w-auto desktop:px-4"
             onClick={() =>
               run(reactivateMySubscription, "Subscrição reactivada.")
             }
           >
-            <RotateCcw className="size-3.5" />
+            <RotateCcw className="size-4" />
             Reactivar
           </Button>
         ) : (
           <Button
             type="button"
             variant="ghost"
-            size="sm"
             disabled={pending}
-            className="gap-1.5 text-destructive hover:text-destructive"
+            className="h-11 w-full gap-2 rounded-xl text-sm font-medium text-destructive hover:text-destructive desktop:h-10 desktop:w-auto desktop:px-4"
             onClick={() => setConfirmCancel(true)}
           >
-            <Ban className="size-3.5" />
+            <Ban className="size-4" />
             Cancelar
           </Button>
         )}
@@ -329,25 +334,49 @@ export function SubscriptionSettingsCard({
           </Button>
         </div>
       ) : null}
+    </section>
+  );
+}
 
-      {payments.length > 0 ? (
-        <div className="space-y-2 border-t border-white/10 pt-4">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <RefreshCw className="size-3.5 text-muted-foreground" />
-            Histórico de pagamentos
-          </div>
-          <ul className="space-y-1.5">
-            {payments.map((p) => (
-              <li
-                key={p.id}
-                className="flex items-center justify-between gap-3 text-sm"
-              >
-                <span className="text-muted-foreground">
+export function PaymentHistoryCard({ payments }: { payments: PaymentRow[] }) {
+  return (
+    <section className="flex min-h-[16rem] flex-col rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:min-h-[20rem]">
+      <h2 className="font-heading text-lg font-semibold tracking-tight">
+        Histórico de pagamentos
+      </h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Recibos e cobranças da tua subscrição.
+      </p>
+
+      {payments.length === 0 ? (
+        <p className="mt-8 text-sm text-muted-foreground">
+          Ainda não há pagamentos registados.
+        </p>
+      ) : (
+        <ul className="mt-5 flex-1 divide-y divide-white/10">
+          {payments.map((p) => (
+            <li
+              key={p.id}
+              className="flex items-center justify-between gap-3 py-3.5 first:pt-0 last:pb-0"
+            >
+              <div className="min-w-0 space-y-0.5">
+                <p className="text-sm font-medium">
                   {p.paid_at
-                    ? new Date(p.paid_at).toLocaleDateString("pt-PT")
+                    ? new Date(p.paid_at).toLocaleDateString("pt-PT", {
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      })
                     : "—"}
-                </span>
-                <span className="font-medium">
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {p.status === "succeeded" || p.status === "paid"
+                    ? "Pago"
+                    : (p.status ?? "Pagamento")}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                <span className="text-sm font-semibold tabular-nums">
                   {formatEuros(p.amount_cents)}
                 </span>
                 {p.hosted_invoice_url ? (
@@ -355,18 +384,17 @@ export function SubscriptionSettingsCard({
                     href={p.hosted_invoice_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-xs text-[var(--neuma-coral)] hover:underline"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--neuma-coral)]/35 bg-[var(--neuma-coral)]/10 px-3 text-sm font-medium text-[var(--neuma-coral)] transition-colors hover:border-[var(--neuma-coral)]/50 hover:bg-[var(--neuma-coral)]/15"
                   >
                     Recibo
+                    <ExternalLink className="size-3.5 opacity-80" />
                   </a>
-                ) : (
-                  <span className="w-12" />
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

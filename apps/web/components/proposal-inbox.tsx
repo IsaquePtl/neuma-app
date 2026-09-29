@@ -27,8 +27,8 @@ export function ProposalInbox({ proposals }: { proposals: Proposal[] }) {
   if (proposals.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        Sem propostas pendentes. O Agent cria-as quando monta percursos, eventos
-        ou lacunas de biblioteca.
+        Sem propostas pendentes. Percursos em rascunho já ficam em Journeys;
+        aqui aparecem outras propostas (calendário, lembretes, etc.).
       </p>
     );
   }

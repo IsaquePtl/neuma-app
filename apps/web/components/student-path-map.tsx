@@ -34,6 +34,15 @@ function kindIcon(kind: NodeKind) {
   }
 }
 
+function kindAccent(
+  kind: NodeKind,
+): "practice" | "milestone" | "call" | null {
+  if (kind === "practice") return "practice";
+  if (kind === "milestone") return "milestone";
+  if (kind === "call") return "call";
+  return null;
+}
+
 export function StudentPathMap({
   nodes,
   unviewedByNodeId = new Map<string, number>(),
@@ -83,6 +92,7 @@ export function StudentPathMap({
         const unviewedCount = unviewedByNodeId.get(node.id) ?? 0;
         const isLast = i === nodes.length - 1;
         const Icon = kindIcon(node.kind);
+        const accent = kindAccent(node.kind);
         const levelNum = i + 1;
 
         const marker = (
@@ -116,21 +126,37 @@ export function StudentPathMap({
         const body = (
           <div
             className={cn(
-              "student-path-step min-w-0 flex-1",
+              "student-path-step relative min-w-0 flex-1",
               isActive && "student-path-step--active",
               isPast && !isActive && "student-path-step--done",
               isFuture && "student-path-step--locked",
             )}
           >
+            {!isFuture &&
+            (accent === "practice" || accent === "milestone") ? (
+              <span
+                aria-hidden
+                className={cn(
+                  "absolute inset-y-0 left-0 w-[3px]",
+                  accent === "practice"
+                    ? "bg-[color-mix(in_srgb,var(--neuma-lime)_42%,var(--neuma-cream))]"
+                    : "bg-[color-mix(in_srgb,var(--neuma-coral)_40%,var(--neuma-cream))]",
+                )}
+              />
+            ) : null}
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span
                     className={cn(
                       "inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em]",
-                      isActive
-                        ? "text-[#ffffe9]"
-                        : "text-muted-foreground",
+                      isFuture || !accent
+                        ? isActive
+                          ? "text-[#ffffe9]"
+                          : "text-muted-foreground"
+                        : accent === "practice"
+                          ? "text-[color-mix(in_srgb,var(--neuma-lime)_38%,var(--neuma-cream))]"
+                          : "text-[color-mix(in_srgb,var(--neuma-coral)_36%,var(--neuma-cream))]",
                     )}
                   >
                     <Icon className="size-3" />

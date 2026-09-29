@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, Fragment } from "react";
+import { useMemo, useState, useTransition, Fragment } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -12,16 +12,20 @@ import {
 } from "lucide-react";
 
 import { NodeDialog, NodeEditorForm } from "@/components/node-dialog";
-import { PathForm } from "@/components/path-form";
 import type {
   PickerAsset,
   PickerCategory,
   PickerTopic,
 } from "@/components/library-asset-picker";
 import {
-  PathStatusBadge,
-} from "@/components/status-badges";
+  initialPeriodMonths,
+  PeriodMonthsInput,
+} from "@/components/path-schedule-fields";
+import { PathStatusMenu } from "@/components/path-status-menu";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -35,9 +39,16 @@ import {
   deleteNode,
   moveNode,
 } from "@/lib/actions/nodes";
-import { deletePath, setPathStatus } from "@/lib/actions/paths";
+import { deletePath, upsertPath } from "@/lib/actions/paths";
 import { useJourneyEditDirty } from "@/lib/journey-path/edit-dirty-context";
 import { formatDate, isPhaseBoundary, nodeKindLabel, phaseKeyLabel } from "@/lib/labels";
+import {
+  computeEndDate,
+  formatPathEndDate,
+  formatWeeksLabel,
+  normalizeToMonday,
+  weeksBetweenDates,
+} from "@/lib/path-period";
 import type { StudentNode, StudentPath } from "@/lib/students/queries";
 import type { NodeKind } from "@/lib/types/database.types";
 import { cn } from "@/lib/utils";
@@ -62,10 +73,18 @@ function kindIcon(kind: NodeKind) {
   }
 }
 
-function stepClass(status: StudentNode["status"]) {
-  if (status === "active") return "student-path-step--active";
-  if (status === "completed") return "student-path-step--done";
-  return "student-path-step--locked";
+function kindAccent(
+  kind: NodeKind,
+): "practice" | "milestone" | "call" | null {
+  if (kind === "practice") return "practice";
+  if (kind === "milestone") return "milestone";
+  if (kind === "call") return "call";
+  return null;
+}
+
+/** Edit mode keeps every level fully readable, including locked and completed. */
+function stepClass() {
+  return "student-path-step--active";
 }
 
 export function JourneyPathComposer({
@@ -76,6 +95,7 @@ export function JourneyPathComposer({
   libraryCategories = [],
   libraryTopics = [],
   libraryAssets = [],
+  autoFocusTitle = false,
 }: {
   studentId: string;
   studentName: string;
@@ -84,6 +104,7 @@ export function JourneyPathComposer({
   libraryCategories?: PickerCategory[];
   libraryTopics?: PickerTopic[];
   libraryAssets?: PickerAsset[];
+  autoFocusTitle?: boolean;
 }) {
   const router = useRouter();
   const { isDirty, save: savePathChanges, pending: savePending } =
@@ -92,6 +113,85 @@ export function JourneyPathComposer({
   const [expanded, setExpanded] = useState<string | null>(activeId);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePending, startDeleteTransition] = useTransition();
+  const [metaPending, startMetaTransition] = useTransition();
+  const [title, setTitle] = useState(path.title);
+  const [description, setDescription] = useState(path.description ?? "");
+  const [goal, setGoal] = useState(path.goal ?? "");
+  const [startDate, setStartDate] = useState(path.start_date ?? "");
+  const [periodMonths, setPeriodMonths] = useState(() =>
+    initialPeriodMonths(
+      path.duration_label,
+      path.start_date,
+      path.end_date,
+    ),
+  );
+  const [snapHint, setSnapHint] = useState(false);
+
+  const schedule = useMemo(() => {
+    if (!startDate || periodMonths < 1) return null;
+    const startMonday = normalizeToMonday(startDate);
+    const endDate = computeEndDate(startMonday, periodMonths);
+    if (!endDate) return null;
+    return {
+      endDate,
+      weeks: weeksBetweenDates(startMonday, endDate),
+    };
+  }, [startDate, periodMonths]);
+
+  function saveMeta(overrides?: {
+    title?: string;
+    description?: string;
+    goal?: string;
+    start_date?: string;
+    period_months?: number;
+  }) {
+    const nextTitle = (overrides?.title ?? title).trim();
+    if (!nextTitle) {
+      setTitle(path.title);
+      return;
+    }
+    const nextDescription = (overrides?.description ?? description).trim();
+    const nextGoal = (overrides?.goal ?? goal).trim();
+    const nextStart = overrides?.start_date ?? startDate;
+    const nextPeriod = overrides?.period_months ?? periodMonths;
+    const savedPeriod = initialPeriodMonths(
+      path.duration_label,
+      path.start_date,
+      path.end_date,
+    );
+    if (
+      nextTitle === path.title &&
+      nextDescription === (path.description ?? "").trim() &&
+      nextGoal === (path.goal ?? "").trim() &&
+      nextStart === (path.start_date ?? "") &&
+      nextPeriod === savedPeriod
+    ) {
+      return;
+    }
+
+    const fd = new FormData();
+    fd.set("id", path.id);
+    fd.set("student_id", studentId);
+    fd.set("title", nextTitle);
+    fd.set("description", nextDescription);
+    fd.set("goal", nextGoal);
+    fd.set("status", path.status);
+    if (nextStart) fd.set("start_date", nextStart);
+    if (nextPeriod > 0) fd.set("period_months", String(nextPeriod));
+
+    const refreshNodes =
+      overrides?.start_date !== undefined ||
+      overrides?.period_months !== undefined;
+
+    startMetaTransition(async () => {
+      try {
+        await upsertPath(fd);
+        if (refreshNodes) router.refresh();
+      } catch {
+        toast.error("Não foi possível guardar o percurso");
+      }
+    });
+  }
 
   function confirmDelete() {
     startDeleteTransition(async () => {
@@ -113,12 +213,20 @@ export function JourneyPathComposer({
     <div className="min-w-0 space-y-8">
       <div className="min-w-0 space-y-4">
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 flex-1 space-y-1">
+          <div className="min-w-0 flex-1 space-y-3">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <h2 className="min-w-0 max-w-full break-words text-xl font-bold tracking-tight sm:text-2xl">
-                {path.title}
-              </h2>
-              <PathStatusBadge status={path.status} />
+              <Input
+                value={title}
+                autoFocus={autoFocusTitle}
+                disabled={metaPending}
+                aria-label="Título do percurso"
+                onChange={(event) => setTitle(event.target.value)}
+                onBlur={() => saveMeta({ title })}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }}
+                className="h-auto min-w-0 flex-1 border-0 bg-transparent px-0 text-xl font-bold tracking-tight shadow-none focus-visible:ring-0 sm:text-2xl dark:bg-transparent"
+              />
               {isDirty ? (
                 <Button
                   type="button"
@@ -131,16 +239,95 @@ export function JourneyPathComposer({
                 </Button>
               ) : null}
             </div>
-            {path.goal ? (
-              <p className="text-sm text-muted-foreground break-words">
-                {path.goal}
+            <p className="break-words text-sm text-muted-foreground">
+              {studentName}
+            </p>
+            <div className="flex min-w-0 flex-wrap items-end gap-3">
+              <PathStatusMenu
+                pathId={path.id}
+                studentId={studentId}
+                status={path.status}
+              />
+              <div className="space-y-1">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  Duração
+                </p>
+                <div className="w-40">
+                  <PeriodMonthsInput
+                    id="path-period"
+                    value={periodMonths}
+                    disabled={metaPending}
+                    onChange={(next) => {
+                      setPeriodMonths(next);
+                      saveMeta({ period_months: next });
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  Início
+                </p>
+                <DatePicker
+                  id="path-start"
+                  value={startDate}
+                  disabled={metaPending}
+                  className="h-10 w-44"
+                  onValueChange={(raw) => {
+                    if (!raw) {
+                      setSnapHint(false);
+                      setStartDate("");
+                      saveMeta({ start_date: "" });
+                      return;
+                    }
+                    const monday = normalizeToMonday(raw);
+                    setSnapHint(monday !== raw);
+                    setStartDate(monday);
+                    saveMeta({ start_date: monday });
+                  }}
+                />
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                className="mb-0.5"
+                onClick={() => setDeleteOpen(true)}
+              >
+                Eliminar
+              </Button>
+            </div>
+            {snapHint ? (
+              <p className="text-xs text-muted-foreground">
+                Ajustámos para segunda-feira — os percursos começam sempre nesse dia.
               </p>
             ) : null}
-            <p className="text-xs text-muted-foreground break-words">
-              {studentName}
-              {path.start_date ? ` · início ${formatDate(path.start_date)}` : ""}
-              {path.end_date ? ` · fim ${formatDate(path.end_date)}` : ""}
-            </p>
+            {schedule ? (
+              <p className="text-xs text-muted-foreground">
+                {formatWeeksLabel(schedule.weeks)} · fim{" "}
+                {formatPathEndDate(schedule.endDate)}
+              </p>
+            ) : null}
+            <Textarea
+              value={description}
+              disabled={metaPending}
+              rows={2}
+              placeholder="Descrição"
+              aria-label="Descrição"
+              onChange={(event) => setDescription(event.target.value)}
+              onBlur={() => saveMeta({ description })}
+              className="min-h-0 resize-none border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:ring-0 dark:bg-transparent"
+            />
+            <Textarea
+              value={goal}
+              disabled={metaPending}
+              rows={2}
+              placeholder="Objetivo"
+              aria-label="Objetivo"
+              onChange={(event) => setGoal(event.target.value)}
+              onBlur={() => saveMeta({ goal })}
+              className="min-h-0 resize-none border-0 bg-transparent px-0 py-0 text-sm text-muted-foreground shadow-none focus-visible:ring-0 dark:bg-transparent"
+            />
           </div>
           <div className="flex w-full min-w-0 flex-wrap gap-2 sm:w-auto sm:justify-end">
             <Button
@@ -152,11 +339,6 @@ export function JourneyPathComposer({
             >
               Ver percurso
             </Button>
-            <PathForm
-              studentId={studentId}
-              path={path}
-              triggerClassName="min-w-0 flex-1 gap-2 sm:flex-none"
-            />
             <NodeDialog
               pathId={path.id}
               categories={libraryCategories}
@@ -164,40 +346,6 @@ export function JourneyPathComposer({
               assets={libraryAssets}
             />
           </div>
-        </div>
-
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          {(
-            [
-              ["draft", "Rascunho"],
-              ["active", "Ativar"],
-              ["paused", "Pausar"],
-              ["completed", "Concluir"],
-            ] as const
-          ).map(([status, label]) => (
-            <form key={status} action={setPathStatus}>
-              <input type="hidden" name="id" value={path.id} />
-              <input type="hidden" name="student_id" value={studentId} />
-              <input type="hidden" name="status" value={status} />
-              <Button
-                type="submit"
-                size="sm"
-                variant={path.status === status ? "default" : "outline"}
-                disabled={path.status === status}
-              >
-                {label}
-              </Button>
-            </form>
-          ))}
-          <Button
-            type="button"
-            size="sm"
-            variant="destructive"
-            className="sm:ml-auto"
-            onClick={() => setDeleteOpen(true)}
-          >
-            Eliminar
-          </Button>
         </div>
       </div>
 
@@ -267,9 +415,7 @@ export function JourneyPathComposer({
                       "student-path-marker relative z-10 grid size-12 shrink-0 place-items-center rounded-full text-sm font-semibold tabular-nums sm:size-14 sm:text-base",
                       node.status === "active"
                         ? "neuma-gradient text-white shadow-[0_0_28px_-4px_color-mix(in_oklch,var(--neuma-coral)_45%,transparent)]"
-                        : node.status === "completed"
-                          ? "border-2 border-white/20 bg-white/10 text-foreground"
-                          : "border-2 border-dashed border-white/20 bg-white/[0.03] text-muted-foreground",
+                        : "border-2 border-white/20 bg-white/10 text-foreground",
                     )}
                   >
                     {levelNum}
@@ -278,18 +424,46 @@ export function JourneyPathComposer({
 
                 <div
                   className={cn(
-                    "student-path-step min-w-0 flex-1 overflow-hidden",
-                    stepClass(node.status),
+                    "student-path-step relative min-w-0 flex-1 overflow-hidden",
+                    stepClass(),
                   )}
                 >
+                  {kindAccent(node.kind) === "practice" ||
+                  kindAccent(node.kind) === "milestone" ? (
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "absolute inset-y-0 left-0 w-[3px]",
+                        kindAccent(node.kind) === "practice"
+                          ? "bg-[color-mix(in_srgb,var(--neuma-lime)_42%,var(--neuma-cream))]"
+                          : "bg-[color-mix(in_srgb,var(--neuma-coral)_40%,var(--neuma-cream))]",
+                      )}
+                    />
+                  ) : null}
                   <div className="flex w-full min-w-0 items-start justify-between gap-2">
                     <div className="min-w-0 flex-1 space-y-1">
-                      <p className="inline-flex max-w-full flex-wrap items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--neuma-coral)]">
+                      <p
+                        className={cn(
+                          "inline-flex max-w-full flex-wrap items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em]",
+                          kindAccent(node.kind) === "practice" &&
+                            "text-[color-mix(in_srgb,var(--neuma-lime)_38%,var(--neuma-cream))]",
+                          kindAccent(node.kind) === "milestone" &&
+                            "text-[color-mix(in_srgb,var(--neuma-coral)_36%,var(--neuma-cream))]",
+                          kindAccent(node.kind) === "call" &&
+                            "text-[color-mix(in_srgb,var(--neuma-coral)_36%,var(--neuma-cream))]",
+                          !kindAccent(node.kind) && "text-[var(--neuma-coral)]",
+                        )}
+                      >
                         <Icon className="size-3 shrink-0" />
                         <span className="min-w-0 break-words">
                           {nodeKindLabel[node.kind]}
+                          {node.duration_weeks
+                            ? ` · ${node.duration_weeks === 1 ? "1 semana" : `${node.duration_weeks} semanas`}`
+                            : node.week_number
+                              ? ` · Sem. ${node.week_number}`
+                              : ""}
                           {node.due_date
-                            ? ` · limite ${formatDate(node.due_date)}`
+                            ? ` · até ${formatDate(node.due_date)}`
                             : null}
                         </span>
                       </p>

@@ -36,6 +36,7 @@ export type NodeEditorData = {
   title: string;
   description: string | null;
   week_number: number | null;
+  duration_weeks?: number | null;
   kind: NodeKind;
   status: NodeStatus;
   due_date: string | null;
@@ -298,29 +299,44 @@ export function NodeEditorForm({
         </p>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className={cn("space-y-2", inline && "space-y-1.5")}>
-          <Label htmlFor={fieldId("week")}>Semana nº</Label>
+      <div className={cn("space-y-2", inline && "space-y-1.5")}>
+        <Label htmlFor={fieldId("weeks")}>Duração do nível</Label>
+        <div className="flex h-10 overflow-hidden rounded-lg border border-input bg-transparent">
           <Input
-            id={fieldId("week")}
-            name="week_number"
+            id={fieldId("weeks")}
+            name="duration_weeks"
             type="number"
             min={1}
-            defaultValue={node?.week_number ?? ""}
-            className={inputClass}
+            max={52}
+            step={1}
+            defaultValue={
+              node?.duration_weeks && node.duration_weeks >= 1
+                ? node.duration_weeks
+                : 1
+            }
+            required
+            className={cn(
+              "h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0",
+              inputClass,
+            )}
           />
+          <span className="flex items-center border-l border-input px-3 text-sm text-muted-foreground">
+            semanas
+          </span>
         </div>
-        <div className={cn("space-y-2", inline && "space-y-1.5")}>
-          <Label htmlFor={fieldId("due")}>Data limite</Label>
-          <Input
-            id={fieldId("due")}
-            name="due_date"
-            type="date"
-            defaultValue={node?.due_date ?? ""}
-            className={inputClass}
-          />
-        </div>
+        <p className="text-xs text-muted-foreground">
+          Mínimo 1 semana (segunda a sexta). A semana de início e a data limite
+          calculam-se automaticamente no percurso.
+        </p>
       </div>
+
+      {isEdit && (node?.week_number || node?.due_date) ? (
+        <p className="text-xs text-muted-foreground">
+          {node.week_number ? `Começa na semana ${node.week_number}` : null}
+          {node.week_number && node.due_date ? " · " : null}
+          {node.due_date ? `limite ${node.due_date}` : null}
+        </p>
+      ) : null}
 
       {isEdit ? (
         <div className={cn("space-y-2", inline && "space-y-1.5")}>

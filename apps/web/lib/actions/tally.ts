@@ -71,6 +71,7 @@ export async function markTallySubmissionProcessed(formData: FormData) {
   if (submission?.student_id) {
     revalidatePath(`/studio/students/${submission.student_id}`);
     revalidatePath("/home");
+    revalidatePath("/path");
   }
 }
 
@@ -288,7 +289,7 @@ export async function linkTallySubmissionToStudent(
       await supabase.from("agent_proposals").insert({
         kind: "student_brief",
         status: "pending",
-        title: "Brief de onboarding Tally",
+        title: "Brief de onboarding Forms",
         summary: "Rever respostas do onboarding e completar notas do mentor",
         mentor_id: mentorId,
         payload: {
@@ -306,6 +307,7 @@ export async function linkTallySubmissionToStudent(
   revalidateSubmission(id, studentId);
   revalidatePath("/studio/agent/inbox");
   revalidatePath("/home");
+  revalidatePath("/path");
   revalidatePath("/onboarding");
 
   return {

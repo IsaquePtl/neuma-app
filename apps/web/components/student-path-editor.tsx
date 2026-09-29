@@ -25,10 +25,10 @@ import type {
 import {
   NodeKindBadge,
   NodeStatusBadge,
-  PathStatusBadge,
 } from "@/components/status-badges";
+import { PathStatusMenu } from "@/components/path-status-menu";
 import { activateNode, deleteNode, moveNode } from "@/lib/actions/nodes";
-import { deletePath, setPathStatus } from "@/lib/actions/paths";
+import { deletePath } from "@/lib/actions/paths";
 import { formatDate, isPhaseBoundary, phaseKeyLabel } from "@/lib/labels";
 import type { StudentNode, StudentPath } from "@/lib/students/queries";
 import { Button } from "@/components/ui/button";
@@ -106,7 +106,7 @@ export function StudentPathEditor({
             <p className="text-xs text-muted-foreground">
               Sem templates prontos.{" "}
               <Link
-                href="/studio/journeys#templates"
+                href="/studio/journeys#drafts"
                 className="underline underline-offset-2 hover:text-foreground"
               >
                 Criar em Percursos
@@ -117,22 +117,50 @@ export function StudentPathEditor({
       ) : (
         <>
           <Card className="neuma-accent-top space-y-4 p-5">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0 space-y-1">
-                <h3 className="text-xl font-semibold">{path.title}</h3>
-                {path.description ? (
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                    {path.description}
-                  </p>
-                ) : null}
-                {path.goal ? (
-                  <p className="flex items-start gap-2 text-sm text-muted-foreground">
-                    <Target className="mt-0.5 size-4 shrink-0" />
-                    {path.goal}
-                  </p>
-                ) : null}
+            <div className="min-w-0 space-y-2">
+              <h3 className="text-xl font-semibold">{path.title}</h3>
+              {path.start_date ? (
+                <p className="text-sm text-muted-foreground">
+                  início {formatDate(path.start_date)}
+                </p>
+              ) : null}
+              <div className="flex flex-wrap items-center gap-2">
+                <PathStatusMenu
+                  pathId={path.id}
+                  studentId={studentId}
+                  status={path.status}
+                />
+                <form
+                  action={deletePath}
+                  onSubmit={(e) => {
+                    if (
+                      !confirm(
+                        "Eliminar este percurso e todos os blocos? Esta ação não tem volta.",
+                      )
+                    ) {
+                      e.preventDefault();
+                    }
+                  }}
+                >
+                  <input type="hidden" name="id" value={path.id} />
+                  <input type="hidden" name="student_id" value={studentId} />
+                  <Button type="submit" size="sm" variant="destructive">
+                    <Trash2 className="size-3.5" />
+                    Eliminar
+                  </Button>
+                </form>
               </div>
-              <PathStatusBadge status={path.status} />
+              {path.description ? (
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                  {path.description}
+                </p>
+              ) : null}
+              {path.goal ? (
+                <p className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <Target className="mt-0.5 size-4 shrink-0" />
+                  {path.goal}
+                </p>
+              ) : null}
             </div>
 
             <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
@@ -142,56 +170,9 @@ export function StudentPathEditor({
                   {path.duration_label}
                 </span>
               ) : null}
-              {path.start_date ? (
-                <span>Inicio {formatDate(path.start_date)}</span>
-              ) : null}
               {path.end_date ? (
                 <span>Fim {formatDate(path.end_date)}</span>
               ) : null}
-            </div>
-
-            <div className="flex flex-wrap gap-2 border-t border-white/5 pt-3">
-              {(
-                [
-                  ["draft", "Rascunho"],
-                  ["active", "Ativar"],
-                  ["paused", "Pausar"],
-                  ["completed", "Concluir"],
-                ] as const
-              ).map(([status, label]) => (
-                <form key={status} action={setPathStatus}>
-                  <input type="hidden" name="id" value={path.id} />
-                  <input type="hidden" name="student_id" value={studentId} />
-                  <input type="hidden" name="status" value={status} />
-                  <Button
-                    type="submit"
-                    size="sm"
-                    variant={path.status === status ? "default" : "outline"}
-                    disabled={path.status === status}
-                  >
-                    {label}
-                  </Button>
-                </form>
-              ))}
-              <form
-                action={deletePath}
-                className="ml-auto"
-                onSubmit={(e) => {
-                  if (
-                    !confirm(
-                      "Eliminar este percurso e todos os blocos? Esta ação não tem volta.",
-                    )
-                  ) {
-                    e.preventDefault();
-                  }
-                }}
-              >
-                <input type="hidden" name="id" value={path.id} />
-                <input type="hidden" name="student_id" value={studentId} />
-                <Button type="submit" size="sm" variant="destructive">
-                  Eliminar percurso
-                </Button>
-              </form>
             </div>
           </Card>
 

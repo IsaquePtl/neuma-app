@@ -63,6 +63,7 @@ export async function agentStartRun(input: {
   mentorId: string;
   threadId?: string;
   pageContext?: string;
+  studentId?: string;
   newThread?: boolean;
 }) {
   const res = await agentFetch("/run", {
@@ -73,6 +74,7 @@ export async function agentStartRun(input: {
       mentor_id: input.mentorId,
       thread_id: input.threadId,
       page_context: input.pageContext,
+      student_id: input.studentId,
       new_thread: input.newThread ?? false,
     }),
   });

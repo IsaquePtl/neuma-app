@@ -1,6 +1,7 @@
 import { cache } from "react";
 
 import { getCurrentProfile, getSessionUser } from "@/lib/auth/session";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type {
   BillingPlan,
@@ -19,6 +20,7 @@ export type AccessReason =
   | "grandfathered"
   | "subscription"
   | "grace"
+  | "one_to_one"
   | "none";
 
 export type SubscriptionSummary = {
@@ -73,7 +75,7 @@ async function paywallStartAt(): Promise<Date | null> {
     if (!Number.isNaN(parsed.getTime())) return parsed;
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data } = await supabase
     .from("finance_settings")
     .select("value")
@@ -180,16 +182,28 @@ export const getAccessState = cache(async (): Promise<AccessState> => {
     return { ...base, reason: "mentor", subscription };
   }
 
-  // O perfil de sessao nao traz billing_exempt; lemos so o que falta.
+  // O perfil de sessao nao traz flags de billing; lemos so o que falta.
   const supabase = await createClient();
   const { data: flags } = await supabase
     .from("profiles")
-    .select("billing_exempt")
+    .select("billing_exempt, is_one_to_one, one_to_one_access_until")
     .eq("id", profile.id)
     .maybeSingle();
 
   if (flags?.billing_exempt) {
     return { ...base, reason: "exempt", subscription };
+  }
+
+  const oneToOneWindowOpen =
+    !!flags?.one_to_one_access_until &&
+    new Date(flags.one_to_one_access_until) > new Date();
+  const oneToOneSubscription =
+    !!flags?.is_one_to_one &&
+    !!subscription &&
+    HEALTHY.includes(subscription.status);
+
+  if (flags?.is_one_to_one && (oneToOneWindowOpen || oneToOneSubscription)) {
+    return { ...base, reason: "one_to_one", subscription };
   }
 
   const cutoff = await paywallStartAt();
