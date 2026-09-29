@@ -1,18 +1,21 @@
+import { ActionNeededList } from "@/components/action-needed-list";
 import { OnboardingInboxSection } from "@/components/mentor-dashboard/onboarding-inbox-section";
 import { PendingCheckinsSection } from "@/components/mentor-dashboard/pending-checkins-section";
 import { UpcomingSessionsSection } from "@/components/mentor-dashboard/upcoming-sessions-section";
 import { loadUpcomingSessions } from "@/lib/calendar/events";
+import { loadActionNeeded } from "@/lib/mentor/action-needed";
 import { loadPendingCheckIns } from "@/lib/mentor/checkins";
 import { loadOnboardingInbox } from "@/lib/mentor/onboardings";
 
 const DASHBOARD_RETURN_TO = "/studio";
 
 export default async function StudioDashboard() {
-  const [upcomingSessions, pendingCheckIns, { inbox, students }] =
+  const [upcomingSessions, pendingCheckIns, { inbox, students }, actionNeeded] =
     await Promise.all([
       loadUpcomingSessions(7),
       loadPendingCheckIns(60),
       loadOnboardingInbox(),
+      loadActionNeeded(),
     ]);
 
   return (
@@ -25,6 +28,7 @@ export default async function StudioDashboard() {
       </header>
 
       <div className="neuma-enter-up neuma-enter-delay-1 space-y-8">
+        <ActionNeededList items={actionNeeded} />
         <UpcomingSessionsSection
           sessions={upcomingSessions}
           returnTo={DASHBOARD_RETURN_TO}

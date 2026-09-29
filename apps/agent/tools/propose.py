@@ -56,12 +56,19 @@ def propose_path_draft(
     nodes_json: str,
     claim_email: str = "",
     brief_id: str = "",
+    student_id: str = "",
+    period_months: int = 3,
 ) -> str:
     """
-    Propõe um percurso em rascunho (não publica).
-    nodes_json: JSON array de {title, description, kind, order_index, week_number?}.
+    Cria um percurso em rascunho HITL (status=draft; mentor activa depois).
+    Duração em meses (default 3) → semanas Mon–Fri a partir da próxima segunda.
+    Cada nível: duration_weeks (mín. 1). Se omitido, distribui pelas semanas do período.
+    nodes_json: [{title, description, kind, order_index, duration_weeks?, week_number?}].
     kind: lesson|practice|call|milestone.
+    Passa student_id (UUID) quando o aluno já está seleccionado na UI.
     """
+    from shared.path_draft import insert_draft_path
+
     try:
         nodes = json.loads(nodes_json)
         if not isinstance(nodes, list):
@@ -69,29 +76,49 @@ def propose_path_draft(
     except Exception as e:
         return _record("proposal_error", {"error": f"invalid nodes_json: {e}"})
 
-    payload = {
-        "title": title,
-        "placeholder_name": placeholder_name,
-        "claim_email": claim_email or None,
-        "goal": goal,
-        "description": description,
-        "status": "draft",
-        "student_id": None,
-        "brief_id": brief_id or None,
-        "nodes": nodes,
-    }
-    return _insert_proposal(
-        kind="path_draft",
-        title=f"Percurso: {title}",
-        summary=f"{len(nodes)} níveis · {placeholder_name}",
-        payload=payload,
-        target_table="paths",
+    mentor_id = _CONTEXT.get("mentor_id")
+    if not mentor_id:
+        return _record("proposal_error", {"error": "mentor_id missing in propose context"})
+
+    months = period_months if isinstance(period_months, int) and period_months >= 1 else 3
+    result = insert_draft_path(
+        mentor_id=mentor_id,
+        title=title,
+        nodes=nodes,
+        placeholder_name=placeholder_name,
+        claim_email=claim_email or "",
+        goal=goal,
+        description=description,
+        student_id=(student_id or "").strip() or None,
+        brief_id=(brief_id or "").strip() or None,
+        thread_id=_CONTEXT.get("thread_id"),
+        run_id=_CONTEXT.get("run_id"),
+        period_months=months,
     )
+    if result.get("error"):
+        return _record("proposal_error", result)
+    return _record("path_draft_created", result)
 
 
 @tool
 def propose_path_edit(path_id: str, summary: str, changes_json: str) -> str:
-    """Propõe edições a um percurso existente. changes_json descreve as alterações."""
+    """Propõe edições a um percurso existente. path_id = UUID de list_paths. changes_json descreve as alterações."""
+    import re
+
+    if not re.match(
+        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+        (path_id or "").strip(),
+        re.I,
+    ):
+        return _record(
+            "proposal_error",
+            {
+                "error": (
+                    f"path_id tem de ser UUID de list_paths — recebido: {path_id!r}. "
+                    "Nunca uses 'all' ou status como id."
+                )
+            },
+        )
     try:
         changes = json.loads(changes_json)
     except Exception as e:
@@ -104,6 +131,29 @@ def propose_path_edit(path_id: str, summary: str, changes_json: str) -> str:
         target_table="paths",
         target_id=path_id,
     )
+
+
+@tool
+def apply_draft_path_edit(path_id: str, summary: str, changes_json: str) -> str:
+    """
+    Aplica alterações a um percurso em status=draft (edição directa HITL).
+    changes_json: {title?, goal?, description?, update_nodes?: [...], replace_nodes?: [...]}.
+    Preferir update_nodes com order_index para mudanças pontuais.
+    """
+    from shared.path_draft import apply_draft_path_changes
+
+    try:
+        changes = json.loads(changes_json)
+        if not isinstance(changes, dict):
+            raise ValueError("changes_json must be a JSON object")
+    except Exception as e:
+        return _record("proposal_error", {"error": f"invalid changes_json: {e}"})
+
+    result = apply_draft_path_changes(path_id=path_id, changes=changes)
+    if result.get("error"):
+        return _record("path_draft_edit_error", result)
+    result["summary"] = summary
+    return _record("path_draft_updated", result)
 
 
 @tool
@@ -188,6 +238,7 @@ def propose_student_brief(
 PROPOSE_TOOLS = [
     propose_path_draft,
     propose_path_edit,
+    apply_draft_path_edit,
     propose_calendar_event,
     propose_checkin_nudge,
     propose_student_brief,

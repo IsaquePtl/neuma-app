@@ -85,6 +85,7 @@ export async function claimOnboardingByEmail(params: {
   }
 
   revalidatePath("/home");
+  revalidatePath("/path");
   revalidatePath("/onboarding");
   revalidatePath(`/studio/students/${params.studentId}`);
   revalidatePath("/studio/journeys/onboardings");

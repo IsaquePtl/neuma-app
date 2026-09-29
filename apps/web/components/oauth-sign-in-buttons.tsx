@@ -54,19 +54,25 @@ function AppleIcon({ className }: { className?: string }) {
 }
 
 const OAUTH_BUTTON_CLASS =
-  "h-12 w-full gap-3 border border-white/12 bg-white/[0.06] text-base font-medium text-foreground hover:bg-white/12";
+  "h-11 flex-1 gap-2 border border-white/12 bg-white/[0.06] text-sm font-medium text-foreground hover:bg-white/12";
 
 export function OAuthSignInButtons({
   intent = "login",
   nextPath = "/",
   dividerLabel = "ou continuar com",
+  layout = "stack",
   getSignupDraft,
+  signupNextStep = "identity",
   onBeforeRedirect,
 }: {
   intent?: "login" | "signup";
   nextPath?: string;
   dividerLabel?: string;
+  /** `row` = Google + Apple lado a lado (login). */
+  layout?: "stack" | "row";
   getSignupDraft?: () => SignupProfileDraft | null;
+  /** Passo do wizard a retomar após OAuth no signup. */
+  signupNextStep?: "identity" | "plan" | "profile" | "credentials";
   /** Chamado antes do redirect OAuth (ex.: guardar passo do wizard). */
   onBeforeRedirect?: () => void;
 } = {}) {
@@ -90,7 +96,7 @@ export function OAuthSignInButtons({
         return;
       }
       writeSignupProfileDraft(draft);
-      writeSignupWizardStep("profile");
+      writeSignupWizardStep(signupNextStep);
       setSignupFinishingCookie();
       onBeforeRedirect?.();
     }
@@ -123,39 +129,56 @@ export function OAuthSignInButtons({
     });
   }
 
+  const buttons = (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={pending !== null}
+        onClick={() => signIn("google")}
+        className={cn(
+          OAUTH_BUTTON_CLASS,
+          layout === "stack" && "h-12 w-full gap-3 text-base",
+        )}
+      >
+        <GoogleIcon className={layout === "row" ? "size-4" : undefined} />
+        {pending === "google" ? "A abrir…" : "Google"}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        disabled
+        aria-disabled="true"
+        title="Em breve"
+        className={cn(
+          OAUTH_BUTTON_CLASS,
+          "cursor-not-allowed opacity-40",
+          layout === "stack" && "h-12 w-full gap-3 text-base",
+        )}
+      >
+        <AppleIcon className={layout === "row" ? "size-4" : undefined} />
+        Apple
+      </Button>
+    </>
+  );
+
   return (
     <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <div className="h-px flex-1 bg-white/10" />
-          <span className="text-sm text-muted-foreground">{dividerLabel}</span>
-          <div className="h-px flex-1 bg-white/10" />
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={pending !== null}
-          onClick={() => signIn("google")}
-          className={OAUTH_BUTTON_CLASS}
-        >
-          <GoogleIcon />
-          {pending === "google" ? "A abrir…" : "Google"}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled
-          aria-disabled="true"
-          title="Em breve"
-          className={cn(OAUTH_BUTTON_CLASS, "cursor-not-allowed opacity-40")}
-        >
-          <AppleIcon />
-          Apple
-        </Button>
-        {error ? (
-          <p className="text-sm text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-white/10" />
+        <span className="text-sm text-muted-foreground">{dividerLabel}</span>
+        <div className="h-px flex-1 bg-white/10" />
+      </div>
+      {layout === "row" ? (
+        <div className="flex gap-2">{buttons}</div>
+      ) : (
+        <div className="space-y-3">{buttons}</div>
+      )}
+      {error ? (
+        <p className="text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -32,7 +32,8 @@ declare
   v_series  jsonb;
   v_by_plan jsonb;
 begin
-  if not public.is_mentor() then
+  -- Mentors via JWT; Studio server may use service_role after app-side mentor check.
+  if auth.role() is distinct from 'service_role' and not public.is_mentor() then
     raise exception 'not authorized';
   end if;
 
@@ -228,3 +229,4 @@ $$;
 
 revoke all on function public.finance_dashboard(timestamptz, timestamptz, text, text) from public;
 grant execute on function public.finance_dashboard(timestamptz, timestamptz, text, text) to authenticated;
+grant execute on function public.finance_dashboard(timestamptz, timestamptz, text, text) to service_role;

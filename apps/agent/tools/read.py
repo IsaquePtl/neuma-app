@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from langchain_core.tools import tool
@@ -11,6 +12,13 @@ from shared.db import get_supabase
 
 # Accumulator for Guard: facts returned by tools in this process/request
 _LAST_FACTS: list[dict[str, Any]] = []
+
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.I,
+)
+
+_PATH_STATUSES = frozenset({"draft", "active", "paused", "completed"})
 
 
 def reset_facts() -> None:
@@ -24,6 +32,27 @@ def get_facts() -> list[dict[str, Any]]:
 def _record(kind: str, payload: Any) -> str:
     _LAST_FACTS.append({"kind": kind, "data": payload})
     return json.dumps(payload, default=str, ensure_ascii=False)
+
+
+def _is_uuid(value: str) -> bool:
+    return bool(_UUID_RE.match((value or "").strip()))
+
+
+def _require_uuid(value: str, field: str) -> str | None:
+    """Return error JSON if value is not a UUID (e.g. LLM passed 'all' from list_paths)."""
+    v = (value or "").strip()
+    if not _is_uuid(v):
+        return _record(
+            "tool_error",
+            {
+                "error": (
+                    f"{field} tem de ser um UUID real devolvido por list_paths / "
+                    f"list_students / get_progress_snapshot — recebido: {value!r}. "
+                    "Nunca uses 'all', nomes ou status como id."
+                )
+            },
+        )
+    return None
 
 
 @tool
@@ -42,7 +71,10 @@ def list_students() -> str:
 
 @tool
 def get_student_360(student_id: str) -> str:
-    """Perfil completo de um aluno: perfil, percurso, níveis, check-ins, tally, bookings."""
+    """Perfil completo de um aluno. student_id = UUID de list_students (nunca 'all')."""
+    bad = _require_uuid(student_id, "student_id")
+    if bad:
+        return bad
     sb = get_supabase()
     profile = (
         sb.table("profiles")
@@ -102,21 +134,39 @@ def get_student_360(student_id: str) -> str:
 
 
 @tool
-def list_paths(status: str = "all") -> str:
-    """Lista percursos. status: all|draft|active|paused|completed."""
+def list_paths(status: str = "") -> str:
+    """
+    Lista percursos (devolve UUIDs em id).
+    status opcional: draft|active|paused|completed.
+    Sem status (ou vazio) = todos. NÃO uses este valor como path_id em get_path.
+    """
     sb = get_supabase()
     q = sb.table("paths").select(
         "id, title, status, student_id, placeholder_name, claim_email, created_at"
     )
-    if status != "all":
-        q = q.eq("status", status)
+    st = (status or "").strip().lower()
+    if st and st not in ("all", "any", "*"):
+        if st not in _PATH_STATUSES:
+            return _record(
+                "tool_error",
+                {
+                    "error": (
+                        f"status inválido: {status!r}. "
+                        f"Usa um de: {sorted(_PATH_STATUSES)} ou omite o argumento."
+                    )
+                },
+            )
+        q = q.eq("status", st)
     res = q.order("created_at", desc=True).limit(50).execute()
     return _record("paths", res.data or [])
 
 
 @tool
 def get_path(path_id: str) -> str:
-    """Detalhe de um percurso com todos os níveis (nodes)."""
+    """Detalhe de um percurso com nodes. path_id = UUID de list_paths (nunca 'all')."""
+    bad = _require_uuid(path_id, "path_id")
+    if bad:
+        return bad
     sb = get_supabase()
     path = (
         sb.table("paths")
@@ -149,7 +199,10 @@ def list_pending_checkins() -> str:
 
 @tool
 def get_checkin(check_in_id: str) -> str:
-    """Detalhe de um check-in."""
+    """Detalhe de um check-in. check_in_id = UUID (nunca 'all')."""
+    bad = _require_uuid(check_in_id, "check_in_id")
+    if bad:
+        return bad
     sb = get_supabase()
     res = (
         sb.table("check_ins")
@@ -275,7 +328,7 @@ def search_library(query: str) -> str:
 
 @tool
 def list_tally_submissions(kind: str = "onboarding", status: str = "pending") -> str:
-    """Lista submissões Tally. kind: onboarding|checkin|unknown. status: pending|linked|processed."""
+    """Lista submissões Forms. kind: onboarding|checkin|unknown. status: pending|linked|processed."""
     sb = get_supabase()
     res = (
         sb.table("tally_submissions")
@@ -294,17 +347,26 @@ def list_tally_submissions(kind: str = "onboarding", status: str = "pending") ->
 
 @tool
 def get_student_brief(brief_id: str = "", student_id: str = "", placeholder_name: str = "") -> str:
-    """Obtém um brief de transformação por id, student_id ou placeholder_name."""
+    """Obtém um brief de transformação por id, student_id (UUIDs) ou placeholder_name."""
     sb = get_supabase()
     q = sb.table("student_briefs").select("*")
     if brief_id:
+        bad = _require_uuid(brief_id, "brief_id")
+        if bad:
+            return bad
         q = q.eq("id", brief_id)
     elif student_id:
+        bad = _require_uuid(student_id, "student_id")
+        if bad:
+            return bad
         q = q.eq("student_id", student_id)
     elif placeholder_name:
         q = q.ilike("placeholder_name", placeholder_name)
     else:
-        return _record("brief_error", {"error": "provide brief_id, student_id or placeholder_name"})
+        return _record(
+            "brief_error",
+            {"error": "provide brief_id, student_id or placeholder_name"},
+        )
     res = q.order("created_at", desc=True).limit(5).execute()
     return _record("briefs", res.data or [])
 

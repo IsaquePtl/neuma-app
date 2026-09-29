@@ -63,6 +63,7 @@ export function JourneyPathEditView({
           libraryCategories={data.libraryCategories}
           libraryTopics={data.libraryTopics}
           libraryAssets={data.libraryAssets}
+          autoFocusTitle={isNewDraft}
         />
       </div>
     </JourneyPathEditGuard>

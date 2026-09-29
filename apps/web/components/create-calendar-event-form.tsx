@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { createMentorCalendarEvent } from "@/lib/actions/calendar-events";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { DateTimePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -124,14 +125,14 @@ export function CreateCalendarEventPanel({
               <span className="text-xs font-medium text-muted-foreground">
                 Início
               </span>
-              <Input name="starts_at" type="datetime-local" required />
+              <DateTimePicker name="starts_at" required />
             </label>
 
             <label className="space-y-1.5">
               <span className="text-xs font-medium text-muted-foreground">
                 Fim (opcional)
               </span>
-              <Input name="ends_at" type="datetime-local" />
+              <DateTimePicker name="ends_at" />
             </label>
 
             <label className="space-y-1.5">

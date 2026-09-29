@@ -19,12 +19,11 @@ import {
   Library,
   CalendarDays,
   ChevronLeft,
-  Bot,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
 
-import { logout } from "@/lib/actions/auth";
+import { LogoutForm } from "@/components/logout-form";
 import { MusicStaffIcon } from "@/components/music-staff-icon";
 import { NeumaLogo } from "@/components/neuma-logo";
 import { MobileMenubar, type MobileNavItem } from "@/components/mobile-menubar";
@@ -85,12 +84,6 @@ const mentorNavDesktop: NavItem[] = [
     href: "/studio/calendar",
     icon: CalendarDays,
     match: (p) => p.startsWith("/studio/calendar"),
-  },
-  {
-    label: "Agents",
-    href: "/studio/agent",
-    icon: Bot,
-    match: (p) => p.startsWith("/studio/agent"),
   },
 ];
 
@@ -184,6 +177,7 @@ function shellBackHref(
     }
     if (pathname.startsWith("/checkins/")) return "/checkins";
     if (pathname === "/settings") return "/home";
+    if (pathname.startsWith("/settings/")) return "/settings";
     return "/home";
   }
 
@@ -262,9 +256,11 @@ export function AppShell({
       ? mentorNavMobile
       : studentNav.filter((item) => item.href !== "/tools");
   const settingsHref = role === "mentor" ? "/studio/settings" : "/settings";
-  const settingsActive = pathname === settingsHref;
+  const settingsActive =
+    pathname === settingsHref || pathname.startsWith(`${settingsHref}/`);
   const home = role === "mentor" ? "/studio" : "/home";
   const [navCompact, setNavCompact] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   /** Destino optimista — o header muda já no clique (voltar → logo/menu). */
   const [pendingHref, setPendingHref] = useState<string | null>(null);
@@ -337,14 +333,12 @@ export function AppShell({
           ? journeysBadge
           : item.href === "/session" && badges.checkins
             ? badges.checkins
-            : item.href === "/studio/agent" && badges.proposals
-              ? badges.proposals
-              : undefined,
+            : undefined,
     }));
     items.push({
       label: "Perfil",
       href: settingsHref,
-      match: (p) => p === settingsHref,
+      match: (p) => p === settingsHref || p.startsWith(`${settingsHref}/`),
       profileAvatarUrl: avatarUrl,
       profileName: name,
       profileEmail: email,
@@ -365,15 +359,13 @@ export function AppShell({
       badge:
         item.href === "/studio/journeys" && journeysBadge
           ? journeysBadge
-          : item.href === "/studio/agent" && badges.proposals
-            ? badges.proposals
-            : undefined,
+          : undefined,
     }));
     core.push({
       label: "Perfil",
       href: settingsHref,
       icon: Settings,
-      match: (p) => p === settingsHref,
+      match: (p) => p === settingsHref || p.startsWith(`${settingsHref}/`),
       subtitle: name ?? email,
       profileAvatarUrl: avatarUrl,
       profileName: name,
@@ -398,7 +390,7 @@ export function AppShell({
       label: "Perfil",
       href: settingsHref,
       icon: Settings,
-      match: (p) => p === settingsHref,
+      match: (p) => p === settingsHref || p.startsWith(`${settingsHref}/`),
       subtitle: name ?? email,
       profileAvatarUrl: avatarUrl,
       profileName: name,
@@ -413,24 +405,37 @@ export function AppShell({
   const isRootPage = isShellRootPage(headerPath, role);
   const backHref = shellBackHref(pathname, role, searchParams);
 
+  useEffect(() => {
+    try {
+      setSidebarCollapsed(
+        window.localStorage.getItem("neuma-sidebar-collapsed") === "1",
+      );
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  function toggleSidebarCollapsed() {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(
+          "neuma-sidebar-collapsed",
+          next ? "1" : "0",
+        );
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }
+
   // Prefetch agressivo no mount removido — cada prefetch re-corria middleware + layout.
   useEffect(() => {
     scrollToTop();
     setNavCompact(false);
     setPendingHref(null);
   }, [pathname]);
-
-  useEffect(() => {
-    if (role !== "mentor") return;
-    function onKey(e: KeyboardEvent) {
-      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "j") return;
-      if (pathname.startsWith("/studio/agent")) return;
-      e.preventDefault();
-      router.push("/studio/agent");
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [role, pathname, router]);
 
   useEffect(() => {
     if (!navPending) setPendingHref(null);
@@ -479,116 +484,216 @@ export function AppShell({
 
   return (
     <div className="relative flex min-h-full flex-1 flex-col desktop:flex-row">
-      <aside className="neuma-enter fixed left-0 top-0 z-30 hidden h-dvh w-64 p-3 desktop:block">
-        <div className="glass-panel flex h-full w-full flex-col rounded-3xl p-4">
-          <Link
-            href={home}
-            className="px-2 py-3"
-            prefetch
-            onClick={(e) => {
-              e.preventDefault();
-              onNavClick(home);
-            }}
-          >
-            <NeumaLogo withWordmark={false} />
-          </Link>
-          <div className="neuma-hairline mx-2 mt-1" />
+      <aside
+        className={cn(
+          "neuma-enter fixed left-0 top-0 z-30 hidden h-dvh p-3 transition-[width] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] desktop:block",
+          sidebarCollapsed ? "w-[5.625rem]" : "w-64",
+        )}
+      >
+        {/* Contorno completo (incl. direita). Conteúdo interior em largura fixa — ícones/logo não se mexem. */}
+        <div className="glass-panel relative h-full w-full overflow-hidden rounded-3xl">
+          <div className="absolute inset-y-0 left-0 flex w-[calc(16rem-1.5rem)] flex-col p-3">
+            <button
+              type="button"
+              onClick={toggleSidebarCollapsed}
+              aria-label={
+                sidebarCollapsed ? "Maximizar menu" : "Minimizar menu"
+              }
+              aria-pressed={sidebarCollapsed}
+              title={sidebarCollapsed ? "Maximizar menu" : "Minimizar menu"}
+              className="flex shrink-0 items-center justify-start rounded-xl px-2 py-3"
+            >
+              <NeumaLogo withWordmark={false} size={28} />
+            </button>
+            <div
+              className="neuma-hairline mt-1 w-full shrink-0"
+              style={{
+                clipPath: sidebarCollapsed
+                  ? "inset(0 calc(100% - 2.5rem) 0 1px)"
+                  : "inset(0 0 0 0)",
+                transition:
+                  "clip-path 200ms cubic-bezier(0.32, 0.72, 0, 1)",
+              }}
+            />
 
-          <nav className="mt-4 flex-1 space-y-1">
-            {nav.map((item) => {
-              const active = item.match(pathname);
-              const Icon = item.icon;
-              const badge =
-                item.href === "/studio/journeys" && journeysBadge
-                  ? journeysBadge
-                  : item.href === "/session" && badges.checkins
-                    ? badges.checkins
-                    : item.href === "/studio/agent" && badges.proposals
-                      ? badges.proposals
+            <nav className="mt-4 min-h-0 flex-1 space-y-1">
+              {nav.map((item) => {
+                const active = item.match(pathname);
+                const Icon = item.icon;
+                const badge =
+                  item.href === "/studio/journeys" && journeysBadge
+                    ? journeysBadge
+                    : item.href === "/session" && badges.checkins
+                      ? badges.checkins
                       : 0;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  prefetch
-                  onClick={(e) => {
-                    e.preventDefault();
-                    onNavClick(item.href);
-                  }}
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    prefetch
+                    title={sidebarCollapsed ? item.label : undefined}
+                    aria-label={sidebarCollapsed ? item.label : undefined}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onNavClick(item.href);
+                    }}
+                    className={cn(
+                      "group relative flex h-10 items-center gap-3 rounded-xl px-3 text-sm",
+                      active
+                        ? "text-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "pointer-events-none absolute inset-0",
+                        active
+                          ? "bg-white/[0.12]"
+                          : "bg-transparent group-hover:bg-white/5",
+                      )}
+                      style={{
+                        clipPath: sidebarCollapsed
+                          ? "inset(0 calc(100% - 2.5rem) 0 1px round 1.25rem)"
+                          : "inset(0 0 0 0 round 1.25rem)",
+                        transition:
+                          "clip-path 200ms cubic-bezier(0.32, 0.72, 0, 1)",
+                      }}
+                    />
+                    <span className="relative z-10 grid size-[18px] shrink-0 place-items-center">
+                      <Icon className="size-[18px] shrink-0" />
+                      <NavCountBadge count={badge} active={active} />
+                    </span>
+                    <span
+                      className={cn(
+                        "relative z-10 min-w-0 flex-1 overflow-hidden whitespace-nowrap transition-opacity duration-100 ease-out",
+                        sidebarCollapsed && "pointer-events-none opacity-0",
+                      )}
+                      aria-hidden={sidebarCollapsed}
+                    >
+                      <span className="block">{item.label}</span>
+                    </span>
+                  </Link>
+                );
+              })}
+            </nav>
+
+            <Link
+              href={settingsHref}
+              prefetch
+              title={sidebarCollapsed ? "Perfil" : undefined}
+              aria-label={sidebarCollapsed ? "Perfil" : undefined}
+              onClick={(e) => {
+                e.preventDefault();
+                onNavClick(settingsHref);
+              }}
+              className={cn(
+                "group relative mt-2 flex h-10 shrink-0 items-center gap-3 rounded-2xl px-3",
+                settingsActive ? "text-foreground" : "text-foreground",
+              )}
+            >
+              <span
+                aria-hidden
+                className={cn(
+                  "pointer-events-none absolute inset-0",
+                  settingsActive
+                    ? "bg-white/[0.12]"
+                    : "bg-transparent group-hover:bg-white/5",
+                )}
+                style={{
+                  clipPath: sidebarCollapsed
+                    ? "inset(0 calc(100% - 2.5rem) 0 1px round 1.25rem)"
+                    : "inset(0 0 0 0 round 1.25rem)",
+                  transition:
+                    "clip-path 200ms cubic-bezier(0.32, 0.72, 0, 1)",
+                }}
+              />
+              <span className="relative z-10 size-[18px] shrink-0">
+                <UserAvatar
+                  name={name}
+                  email={email}
+                  avatarUrl={avatarUrl}
+                  size="md"
                   className={cn(
-                    "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
-                    active
-                      ? "bg-white/[0.12] text-foreground"
-                      : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                    "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2",
+                    settingsActive && "ring-2 ring-white/25",
+                  )}
+                />
+              </span>
+              <div
+                className={cn(
+                  "relative z-10 min-w-0 flex-1 overflow-hidden whitespace-nowrap transition-opacity duration-100 ease-out",
+                  sidebarCollapsed && "pointer-events-none opacity-0",
+                )}
+                aria-hidden={sidebarCollapsed}
+              >
+                <p className="truncate text-sm font-medium">{name ?? email}</p>
+                <p
+                  className={cn(
+                    "truncate text-xs",
+                    settingsActive
+                      ? "text-foreground/70"
+                      : "text-muted-foreground",
                   )}
                 >
-                  <span className="relative">
-                    <Icon className="size-[18px]" />
-                    <NavCountBadge count={badge} active={active} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block">{item.label}</span>
-                  </span>
-                </Link>
-              );
-            })}
-          </nav>
-
-          <Link
-            href={settingsHref}
-            prefetch
-            onClick={(e) => {
-              e.preventDefault();
-              onNavClick(settingsHref);
-            }}
-            className={cn(
-              "mt-2 flex items-center gap-3 rounded-2xl p-2 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
-              settingsActive
-                ? "bg-white/[0.12] text-foreground"
-                : "hover:bg-white/5",
-            )}
-          >
-            <UserAvatar
-              name={name}
-              email={email}
-              avatarUrl={avatarUrl}
-              size="md"
-              className={cn(settingsActive && "ring-2 ring-white/25")}
-            />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{name ?? email}</p>
-              <p
+                  Perfil
+                </p>
+              </div>
+              <Settings
                 className={cn(
-                  "truncate text-xs",
+                  "relative z-10 size-4 shrink-0 transition-opacity duration-100 ease-out",
                   settingsActive
                     ? "text-foreground/70"
                     : "text-muted-foreground",
+                  sidebarCollapsed && "pointer-events-none opacity-0",
                 )}
+                aria-hidden={sidebarCollapsed}
+              />
+            </Link>
+            <LogoutForm className="shrink-0">
+              <Button
+                type="submit"
+                variant="ghost"
+                size="sm"
+                title={sidebarCollapsed ? "Sair" : undefined}
+                aria-label={sidebarCollapsed ? "Sair" : undefined}
+                className="relative mt-3 !h-10 w-full !justify-start !gap-3 !px-3 text-muted-foreground hover:!bg-transparent"
               >
-                Perfil
-              </p>
-            </div>
-            <Settings
-              className={cn(
-                "size-4",
-                settingsActive ? "text-foreground/70" : "text-muted-foreground",
-              )}
-            />
-          </Link>
-          <form action={logout}>
-            <Button
-              type="submit"
-              variant="ghost"
-              size="sm"
-              className="mt-3 w-full justify-start gap-2 text-muted-foreground"
-            >
-              <LogOut className="size-4" /> Sair
-            </Button>
-          </form>
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 bg-transparent group-hover/button:bg-white/5"
+                  style={{
+                    clipPath: sidebarCollapsed
+                      ? "inset(0 calc(100% - 2.5rem) 0 1px round 1.25rem)"
+                      : "inset(0 0 0 0 round 1.25rem)",
+                    transition:
+                      "clip-path 200ms cubic-bezier(0.32, 0.72, 0, 1)",
+                  }}
+                />
+                <span className="relative z-10 grid size-[18px] shrink-0 place-items-center">
+                  <LogOut className="size-4" />
+                </span>
+                <span
+                  className={cn(
+                    "relative z-10 whitespace-nowrap transition-opacity duration-100 ease-out",
+                    sidebarCollapsed && "pointer-events-none opacity-0",
+                  )}
+                  aria-hidden={sidebarCollapsed}
+                >
+                  Sair
+                </span>
+              </Button>
+            </LogoutForm>
+          </div>
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col desktop:pl-64">
+      <div
+        className={cn(
+          "flex min-w-0 flex-1 flex-col transition-[padding] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]",
+          sidebarCollapsed ? "desktop:pl-[5.625rem]" : "desktop:pl-64",
+        )}
+      >
         <header
           className={cn(
             "neuma-enter fixed inset-x-0 top-0 z-20 flex items-center bg-transparent desktop:hidden",

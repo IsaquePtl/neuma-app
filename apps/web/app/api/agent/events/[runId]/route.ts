@@ -17,6 +17,22 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   if (!user) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   }
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profile?.role !== "mentor") {
+    return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+  }
+  const { data: run } = await supabase
+    .from("agent_runs")
+    .select("mentor_id")
+    .eq("id", runId)
+    .maybeSingle();
+  if (run && run.mentor_id !== user.id) {
+    return NextResponse.json({ error: "Run não encontrada" }, { status: 404 });
+  }
 
   const token = process.env.NEUMA_AGENT_TOKEN?.trim();
   const upstream = await fetch(agentEventsUrl(runId), {

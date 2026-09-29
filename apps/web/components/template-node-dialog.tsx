@@ -273,18 +273,25 @@ export function TemplateNodeDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="tn-duration">Período</Label>
-            <select
-              id="tn-duration"
-              name="duration_weeks"
-              defaultValue={node?.duration_weeks ?? 1}
-              className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
-            >
-              <option value={1}>1 semana</option>
-              <option value={2}>2 semanas</option>
-              <option value={3}>3 semanas</option>
-              <option value={4}>4 semanas</option>
-            </select>
+            <Label htmlFor="tn-duration">Duração do nível</Label>
+            <div className="flex h-10 overflow-hidden rounded-lg border border-input bg-transparent">
+              <Input
+                id="tn-duration"
+                name="duration_weeks"
+                type="number"
+                min={1}
+                max={52}
+                step={1}
+                defaultValue={node?.duration_weeks ?? 1}
+                className="h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"
+              />
+              <span className="flex items-center border-l border-input px-3 text-sm text-muted-foreground">
+                semanas
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Mínimo 1 semana (segunda a sexta).
+            </p>
           </div>
 
           <DialogFooter>

@@ -165,6 +165,12 @@ export async function changeSubscriptionPlan(
     if (!sub.stripe_item_id) {
       return { ok: false, error: "Subscrição sem item Stripe." };
     }
+    if (sub.plan === "one_to_one") {
+      return {
+        ok: false,
+        error: "O Neuma 1:1 não muda para um plano de subscrição.",
+      };
+    }
     if (sub.plan === plan) {
       return { ok: false, error: "Já está neste plano." };
     }
@@ -302,6 +308,85 @@ export async function grantComplimentaryAccess(
     return { ok: true };
   } catch (error) {
     return fail(error, "Não foi possível conceder acesso de cortesia.");
+  }
+}
+
+export async function grantOneToOneCourtesy(
+  profileId: string,
+  accessUntil: string,
+): Promise<FinanceActionResult> {
+  try {
+    const { mentorId } = await requireMentor();
+    const until = new Date(accessUntil);
+    if (Number.isNaN(until.getTime()) || until <= new Date()) {
+      return { ok: false, error: "Indica uma data de fim no futuro." };
+    }
+
+    const admin = createAdminClient();
+    const { data: student, error: loadError } = await admin
+      .from("profiles")
+      .select("id, role")
+      .eq("id", profileId)
+      .maybeSingle();
+    if (loadError) throw loadError;
+    if (!student || student.role !== "student") {
+      return { ok: false, error: "Aluno não encontrado." };
+    }
+
+    const { error } = await admin
+      .from("profiles")
+      .update({
+        is_one_to_one: true,
+        one_to_one_access_until: until.toISOString(),
+      })
+      .eq("id", profileId)
+      .eq("role", "student");
+    if (error) throw error;
+
+    await recordSubscriptionEvent({
+      subscriptionId: null,
+      profileId,
+      actorId: mentorId,
+      action: "grant_one_to_one_courtesy",
+      detail: { accessUntil: until.toISOString() },
+    });
+
+    revalidateFinance();
+    revalidatePath(`/studio/students/${profileId}`);
+    return { ok: true };
+  } catch (error) {
+    return fail(error, "Não foi possível conceder o Neuma 1:1.");
+  }
+}
+
+export async function revokeOneToOneCourtesy(
+  profileId: string,
+): Promise<FinanceActionResult> {
+  try {
+    const { mentorId } = await requireMentor();
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from("profiles")
+      .update({
+        is_one_to_one: false,
+        one_to_one_access_until: null,
+      })
+      .eq("id", profileId)
+      .eq("role", "student");
+    if (error) throw error;
+
+    await recordSubscriptionEvent({
+      subscriptionId: null,
+      profileId,
+      actorId: mentorId,
+      action: "revoke_one_to_one_courtesy",
+    });
+
+    revalidateFinance();
+    revalidatePath(`/studio/students/${profileId}`);
+    return { ok: true };
+  } catch (error) {
+    return fail(error, "Não foi possível revogar o Neuma 1:1.");
   }
 }
 

@@ -53,8 +53,8 @@ export default async function OnboardingPage() {
             initialName={initialName}
             initialEmail={user?.email ?? ""}
             alreadySubmitted={alreadySubmitted}
-            backHref={user ? "/home" : "/login/signup"}
-            backLabel={user ? "Ir para a app" : "Criar conta"}
+            backHref="/home"
+            backLabel="Ir para a app"
           />
         </div>
       </div>

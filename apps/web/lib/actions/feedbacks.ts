@@ -2,8 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { after } from "next/server";
-
 import { createClient } from "@/lib/supabase/server";
 import { assertMentorMayCompleteNode } from "@/lib/nodes/advance-gate";
 import { completeCurrentAndActivateNext } from "@/lib/nodes/complete-and-activate";
@@ -241,30 +239,36 @@ export async function submitFeedback(formData: FormData) {
     }
   }
 
-  after(async () => {
-    try {
-      const admin = createAdminClient();
-      const { data: checkIn } = await admin
-        .from("check_ins")
-        .select("student_id, student:profiles!check_ins_student_id_fkey(email, full_name)")
-        .eq("id", checkInId)
-        .single();
-      const student = Array.isArray(checkIn?.student)
-        ? checkIn?.student[0]
-        : checkIn?.student;
-      if (student?.email) {
-        await sendEmail({
-          to: student.email,
-          subject: approved
-            ? "Tens feedback novo na Neuma"
-            : "O mentor pediu uma revisao do teu check-in",
-          html: `<p>Ola${student.full_name ? ` ${student.full_name}` : ""},</p><p>Ha novidades no teu check-in.</p><p><a href="${appUrl(`/checkins/${checkInId}`)}">Ver na Neuma</a></p>`,
-        });
-      }
-    } catch (e) {
-      console.error("[notify:feedback]", e);
+  let emailFailed = false;
+  try {
+    const admin = createAdminClient();
+    const { data: checkIn } = await admin
+      .from("check_ins")
+      .select("student_id, student:profiles!check_ins_student_id_fkey(email, full_name)")
+      .eq("id", checkInId)
+      .single();
+    const student = Array.isArray(checkIn?.student)
+      ? checkIn?.student[0]
+      : checkIn?.student;
+    if (student?.email) {
+      const sent = await sendEmail({
+        to: student.email,
+        subject: approved
+          ? "Tens feedback novo na Neuma"
+          : "O mentor pediu uma revisao do teu check-in",
+        html: `<p>Ola${student.full_name ? ` ${student.full_name}` : ""},</p><p>Ha novidades no teu check-in.</p><p><a href="${appUrl(`/checkins/${checkInId}`)}">Ver na Neuma</a></p>`,
+      });
+      if (!sent.ok) emailFailed = true;
     }
-  });
+  } catch (e) {
+    console.error("[notify:feedback]", e);
+    emailFailed = true;
+  }
+
+  const withEmailWarning = (url: string) => {
+    if (!emailFailed) return url;
+    return `${url}${url.includes("?") ? "&" : "?"}aviso=email`;
+  };
 
   revalidatePath("/studio/journeys");
   revalidatePath("/studio/journeys/checkins");
@@ -288,7 +292,7 @@ export async function submitFeedback(formData: FormData) {
     returnTo.startsWith("/studio/students/") ||
     returnTo.startsWith("/studio/journeys/")
   ) {
-    redirect(returnTo);
+    redirect(withEmailWarning(returnTo));
   }
 
   const { data: nextPending } = await supabase
@@ -302,8 +306,8 @@ export async function submitFeedback(formData: FormData) {
 
   if (nextPending?.id) {
     const nextUrl = await resolveCheckInLevelUrl(nextPending.id);
-    redirect(nextUrl ?? `/studio/checkins/${nextPending.id}`);
+    redirect(withEmailWarning(nextUrl ?? `/studio/checkins/${nextPending.id}`));
   }
 
-  redirect("/studio/journeys/checkins");
+  redirect(withEmailWarning("/studio/journeys/checkins"));
 }

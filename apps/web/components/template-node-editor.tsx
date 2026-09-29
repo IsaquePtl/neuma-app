@@ -39,13 +39,6 @@ function normalizeKind(kind: NodeKind): NodeKind {
   return kind === "resource" ? "lesson" : kind;
 }
 
-const PERIOD_OPTIONS = [
-  { value: 1, label: "1 semana" },
-  { value: 2, label: "2 semanas" },
-  { value: 3, label: "3 semanas" },
-  { value: 4, label: "4 semanas" },
-] as const;
-
 export function TemplateNodeEditor({
   templateId,
   node,
@@ -78,7 +71,7 @@ export function TemplateNodeEditor({
     node?.default_resource_url ?? "",
   );
   const [durationWeeks, setDurationWeeks] = useState<number>(
-    node?.duration_weeks && node.duration_weeks >= 1 && node.duration_weeks <= 4
+    node?.duration_weeks && node.duration_weeks >= 1
       ? node.duration_weeks
       : 1,
   );
@@ -229,19 +222,28 @@ export function TemplateNodeEditor({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="tn-duration">Período</Label>
-          <select
-            id="tn-duration"
-            value={durationWeeks}
-            onChange={(e) => setDurationWeeks(Number(e.target.value))}
-            className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
-          >
-            {PERIOD_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+          <Label htmlFor="tn-duration">Duração do nível</Label>
+          <div className="flex h-10 overflow-hidden rounded-lg border border-input bg-transparent">
+            <Input
+              id="tn-duration"
+              type="number"
+              min={1}
+              max={52}
+              step={1}
+              value={durationWeeks}
+              onChange={(e) => {
+                const next = Number(e.target.value);
+                if (Number.isFinite(next) && next >= 1) setDurationWeeks(next);
+              }}
+              className="h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"
+            />
+            <span className="flex items-center border-l border-input px-3 text-sm text-muted-foreground">
+              semanas
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Mínimo 1 semana (segunda a sexta).
+          </p>
         </div>
 
         <div className="flex flex-wrap gap-2 pt-1">

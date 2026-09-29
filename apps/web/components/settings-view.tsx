@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { Camera, Check, LogOut, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 import { updateProfile, uploadAvatar } from "@/lib/actions/profile";
-import { logout } from "@/lib/actions/auth";
+import { LogoutForm } from "@/components/logout-form";
 import { prepareAvatarFile } from "@/lib/images/prepare-avatar";
 import {
   instagramProfileUrl,
@@ -29,6 +29,7 @@ export function SettingsView({
   bio,
   instagram: initialInstagram,
   whatsapp: initialWhatsapp,
+  footerExtra,
 }: {
   name: string | null;
   email: string;
@@ -37,6 +38,7 @@ export function SettingsView({
   bio?: string | null;
   instagram?: string | null;
   whatsapp?: string | null;
+  footerExtra?: ReactNode;
 }) {
   const [pending, startTransition] = useTransition();
   const [bioPending, startBioTransition] = useTransition();
@@ -228,7 +230,7 @@ export function SettingsView({
   return (
     <div
       className={cn(
-        "flex min-h-0 w-full flex-1 flex-col gap-3 overflow-hidden overscroll-none pt-0.5",
+        "neuma-mobile-viewport flex w-full flex-col gap-3 overflow-hidden overscroll-none pt-0.5",
         "desktop:h-auto desktop:min-h-0 desktop:flex-none desktop:gap-8 desktop:overflow-visible desktop:pb-4",
       )}
     >
@@ -241,7 +243,7 @@ export function SettingsView({
         </p>
       </header>
 
-      <div className="flex min-h-0 shrink flex-col items-center gap-2">
+      <div className="mt-8 flex min-h-0 shrink flex-col items-center gap-2 desktop:mt-0">
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
@@ -359,7 +361,7 @@ export function SettingsView({
         </div>
       </div>
 
-      <div className="mt-auto shrink-0 space-y-3 pt-3 desktop:mt-0 desktop:pt-2">
+      <div className="mt-auto shrink-0 space-y-3 pt-2 desktop:mt-0 desktop:pt-2">
         <div className="space-y-2">
           <div className="space-y-2">
             <Input
@@ -417,7 +419,7 @@ export function SettingsView({
           </div>
         </div>
 
-        <div className="flex flex-col items-start gap-2">
+        <div className="flex flex-col items-stretch gap-3">
           <form onSubmit={onSaveAll} className="w-full">
             <Button
               type="submit"
@@ -427,15 +429,23 @@ export function SettingsView({
               {pending ? "A guardar…" : "Guardar"}
             </Button>
           </form>
-          <form action={logout}>
-            <Button
-              type="submit"
-              variant="ghost"
-              className="h-9 gap-2 px-3 text-sm text-muted-foreground hover:text-destructive"
-            >
-              <LogOut className="size-4" /> Terminar sessão
-            </Button>
-          </form>
+          <div
+            className={cn(
+              "mt-1 flex w-full items-center gap-2",
+              footerExtra ? "justify-between" : "justify-start",
+            )}
+          >
+            <LogoutForm>
+              <Button
+                type="submit"
+                variant="ghost"
+                className="h-9 gap-2 px-3 text-sm text-muted-foreground hover:text-destructive"
+              >
+                <LogOut className="size-4" /> Terminar sessão
+              </Button>
+            </LogoutForm>
+            {footerExtra}
+          </div>
         </div>
       </div>
     </div>

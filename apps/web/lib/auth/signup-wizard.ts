@@ -1,8 +1,8 @@
 export type SignupWizardStep =
   | "identity"
   | "credentials"
-  | "profile"
-  | "plan";
+  | "plan"
+  | "profile";
 
 export const SIGNUP_WIZARD_STEP_KEY = "neuma-signup-step";
 export const SIGNUP_FINISHING_COOKIE = "neuma-signup-finishing";
@@ -10,8 +10,8 @@ export const SIGNUP_FINISHING_COOKIE = "neuma-signup-finishing";
 const VALID_STEPS: readonly SignupWizardStep[] = [
   "identity",
   "credentials",
-  "profile",
   "plan",
+  "profile",
 ];
 
 export function readSignupWizardStep(): SignupWizardStep | null {
@@ -31,17 +31,25 @@ export function clearSignupWizardStep() {
   window.sessionStorage.removeItem(SIGNUP_WIZARD_STEP_KEY);
 }
 
+const SIGNUP_FINISHING_UI_KEY = "neuma-signup-finishing-ui";
+
 export function setSignupFinishingCookie() {
-  document.cookie = `${SIGNUP_FINISHING_COOKIE}=1; path=/; max-age=1800; SameSite=Lax`;
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(SIGNUP_FINISHING_UI_KEY, "1");
+  void import("@/lib/actions/signup-finishing").then((mod) =>
+    mod.setSignupFinishingCookieAction(),
+  );
 }
 
 export function clearSignupFinishingCookie() {
-  document.cookie = `${SIGNUP_FINISHING_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(SIGNUP_FINISHING_UI_KEY);
+  void import("@/lib/actions/signup-finishing").then((mod) =>
+    mod.clearSignupFinishingCookieAction(),
+  );
 }
 
 export function hasSignupFinishingCookie() {
-  if (typeof document === "undefined") return false;
-  return document.cookie
-    .split(";")
-    .some((c) => c.trim().startsWith(`${SIGNUP_FINISHING_COOKIE}=1`));
+  if (typeof window === "undefined") return false;
+  return window.sessionStorage.getItem(SIGNUP_FINISHING_UI_KEY) === "1";
 }

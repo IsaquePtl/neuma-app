@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import type { Database } from "@/lib/types/database.types";
 import { SIGNUP_FINISHING_COOKIE } from "@/lib/auth/signup-wizard";
+import { isOneToOneInvitePath } from "@/lib/one-to-one/invite-path";
 
 const PUBLIC_PATHS = [
   "/",
@@ -74,7 +75,8 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/api/tally/") ||
     (path.startsWith("/login/") && !isPostSignup) ||
     path.startsWith("/auth/") ||
-    path.startsWith("/1-1/");
+    path.startsWith("/1-1/") ||
+    isOneToOneInvitePath(path);
 
   if (!user && !isPublic) {
     // APIs devem devolver JSON — nunca HTML do /login (quebra fetch().json()).
@@ -92,7 +94,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  // Autenticado a terminar registo (passo 3) — cookie definido antes do OAuth ou ao criar conta.
+  // Autenticado a terminar registo (plano / perfil) — cookie definido antes do OAuth ou ao criar conta.
   if (user && path === "/login/signup") {
     const finishing =
       request.cookies.get(SIGNUP_FINISHING_COOKIE)?.value === "1";

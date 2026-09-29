@@ -126,7 +126,7 @@ export function LibraryAgentNeedsYou({
             </ul>
           )}
           <Link
-            href={pathId ? `/studio/journeys/${pathId}` : "/studio/journeys#agent-paths"}
+            href={pathId ? `/studio/journeys/${pathId}` : "/studio/journeys#drafts"}
             className="text-sm underline underline-offset-4"
           >
             {pathId ? "Abrir percurso" : "Ver percursos do Agent"}
