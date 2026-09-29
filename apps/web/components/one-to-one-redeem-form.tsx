@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 
-import { redeemOneToOneInvite } from "@/lib/actions/one-to-one";
+import {
+  redeemOneToOneInvite,
+  startOneToOneCheckoutForSession,
+} from "@/lib/actions/one-to-one";
 import { PASSWORD_MIN_LENGTH, isValidPassword } from "@/lib/auth/validation";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -153,12 +156,12 @@ export function OneToOneRedeemForm({
       {existingAccount ? (
         <p className="text-center text-sm text-muted-foreground">
           <Link
-            href="/login"
+            href={`/login?next=${encodeURIComponent(`/1-1/${token}`)}`}
             className="text-foreground underline-offset-4 hover:underline"
           >
             Entra na tua conta
           </Link>{" "}
-          e volta a abrir este link para continuar.
+          e voltas ao pagamento deste convite.
         </p>
       ) : null}
 
@@ -176,5 +179,41 @@ export function OneToOneRedeemForm({
         {pending ? "A activar…" : "Criar conta e continuar"}
       </Button>
     </form>
+  );
+}
+
+export function OneToOneContinueButton({ token }: { token: string }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function onContinue() {
+    setError(null);
+    startTransition(async () => {
+      const result = await startOneToOneCheckoutForSession(token);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      window.location.href = result.checkoutUrl;
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      {error ? (
+        <p className="text-base text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <Button
+        type="button"
+        size="lg"
+        disabled={pending}
+        onClick={onContinue}
+        className="h-14 w-full bg-[var(--neuma-orange)] text-base font-semibold text-white hover:bg-[var(--neuma-orange)]/90"
+      >
+        {pending ? "A abrir pagamento…" : "Continuar para pagamento"}
+      </Button>
+    </div>
   );
 }

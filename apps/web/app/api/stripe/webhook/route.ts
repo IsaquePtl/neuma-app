@@ -138,7 +138,13 @@ export async function POST(request: NextRequest) {
             ? session.subscription
             : session.subscription?.id;
         if (subscriptionId) {
-          await syncSubscription(subscriptionId, { eventAt });
+          await syncSubscription(subscriptionId, {
+            eventAt,
+            profileId:
+              session.metadata?.neuma_profile_id ??
+              session.client_reference_id ??
+              null,
+          });
         }
         if (session.invoice) {
           const invoiceId =
@@ -278,17 +284,25 @@ async function handleSetupCompleted(
 async function markInviteAsPaid(session: Stripe.Checkout.Session) {
   const inviteId = session.metadata?.neuma_invite_id;
   if (!inviteId) return;
+  if (
+    session.payment_status !== "paid" &&
+    session.payment_status !== "no_payment_required"
+  ) {
+    return;
+  }
 
   const admin = createAdminClient();
-  await admin
+  const { error } = await admin
     .from("one_to_one_invites")
     .update({
       status: "paid",
       stripe_checkout_session_id: session.id,
       redeemed_at: new Date().toISOString(),
-      redeemed_profile_id: session.client_reference_id ?? null,
+      redeemed_profile_id:
+        session.metadata?.neuma_profile_id ?? session.client_reference_id ?? null,
     })
     .eq("id", inviteId);
+  if (error) throw new Error(error.message);
 
   if (session.client_reference_id) {
     await admin

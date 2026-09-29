@@ -127,7 +127,7 @@ export function JourneyPathComposer({
                   disabled={savePending}
                   onClick={savePathChanges}
                 >
-                  {savePending ? "A guardar…" : "Guardar"}
+                  {savePending ? "A confirmar…" : "Concluído"}
                 </Button>
               ) : null}
             </div>

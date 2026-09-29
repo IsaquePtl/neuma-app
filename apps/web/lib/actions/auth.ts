@@ -321,6 +321,13 @@ export async function login(formData: FormData) {
   await supabase.auth.getSession();
 
   revalidatePath("/", "layout");
+  const next = String(formData.get("next") ?? "");
+  if (
+    profile?.role === "student" &&
+    /^\/1-1\/[A-Za-z0-9_-]+$/.test(next)
+  ) {
+    redirect(next);
+  }
   redirect(profile?.role === "mentor" ? "/studio" : "/home");
 }
 

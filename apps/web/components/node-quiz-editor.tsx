@@ -41,7 +41,13 @@ function emptyQuestion(): DraftQuestion {
   };
 }
 
-export function NodeQuizEditor({ nodeId }: { nodeId: string }) {
+export function NodeQuizEditor({
+  nodeId,
+  passRule = "mentor",
+}: {
+  nodeId: string;
+  passRule?: "mentor" | "quiz" | "check_in" | "none";
+}) {
   const [questions, setQuestions] = useState<DraftQuestion[]>([]);
   const [attempts, setAttempts] = useState<QuizAttemptSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,8 +135,9 @@ export function NodeQuizEditor({ nodeId }: { nodeId: string }) {
       <div>
         <p className="text-sm font-medium">Quiz do check-point</p>
         <p className="text-xs text-muted-foreground">
-          Escolha múltipla com nota automática. Não bloqueia o percurso — tu
-          validas a passagem de nível.
+          {passRule === "quiz"
+            ? "Escolha múltipla. Uma nota igual ou acima do limiar desbloqueia o nível seguinte. Abaixo disso o nível fica onde está."
+            : "Escolha múltipla com nota automática. Neste nível a nota não desbloqueia o percurso — tu validas a passagem."}
         </p>
       </div>
 

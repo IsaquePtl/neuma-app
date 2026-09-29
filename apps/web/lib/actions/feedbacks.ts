@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
+import { assertMentorMayCompleteNode } from "@/lib/nodes/advance-gate";
+import { completeCurrentAndActivateNext } from "@/lib/nodes/complete-and-activate";
 import { tryIncrementWeekExtensions } from "@/lib/nodes/week-extensions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildMentorFeedbackKey, uploadToR2 } from "@/lib/storage/r2";
@@ -188,10 +190,11 @@ export async function submitFeedback(formData: FormData) {
       { onConflict: "check_in_id" },
     );
 
-  await supabase
+  const { error: statusError } = await supabase
     .from("check_ins")
     .update({ status: approved ? "approved" : "needs_revision" })
     .eq("id", checkInId);
+  if (statusError) throw new Error(statusError.message);
 
   // Revision request grants one more check-in slot for that level.
   if (!approved) {
@@ -227,36 +230,13 @@ export async function submitFeedback(formData: FormData) {
     if (checkIn?.node_id) {
       const { data: node } = await supabase
         .from("nodes")
-        .select("id, path_id, order_index")
+        .select("id, path_id")
         .eq("id", checkIn.node_id)
         .single();
 
       if (node) {
-        await supabase
-          .from("nodes")
-          .update({ status: "completed" })
-          .eq("id", node.id);
-
-        const { data: next } = await supabase
-          .from("nodes")
-          .select("id")
-          .eq("path_id", node.path_id)
-          .gt("order_index", node.order_index)
-          .order("order_index", { ascending: true })
-          .limit(1)
-          .maybeSingle();
-
-        if (next) {
-          await supabase
-            .from("nodes")
-            .update({ status: "active" })
-            .eq("id", next.id);
-        } else {
-          await supabase
-            .from("paths")
-            .update({ status: "completed" })
-            .eq("id", node.path_id);
-        }
+        await assertMentorMayCompleteNode(supabase, node.id, "approve_check_in");
+        await completeCurrentAndActivateNext(supabase, node.id, node.path_id);
       }
     }
   }

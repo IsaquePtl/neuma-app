@@ -288,11 +288,11 @@ export function NodeEditorForm({
         </p>
       ) : null}
 
-      {kind === "milestone" && isEdit && node ? (
-        <NodeQuizEditor nodeId={node.id} />
+      {(passRule === "quiz" || kind === "milestone") && isEdit && node ? (
+        <NodeQuizEditor nodeId={node.id} passRule={passRule} />
       ) : null}
 
-      {kind === "milestone" && !isEdit ? (
+      {passRule === "quiz" && !isEdit ? (
         <p className="text-xs text-muted-foreground">
           Depois de criar o nível, volta a editar para configurar o quiz.
         </p>

@@ -7,7 +7,7 @@ import type {
 /** Limiar completo para pass_rule=quiz. Sem half-wiring. */
 export const DEFAULT_QUIZ_PASS_SCORE = 60;
 
-export type NodeCheckInKind = Extract<CheckInKind, "video" | "text"> | null;
+export type NodeCheckInKind = CheckInKind | null;
 
 export function defaultPassRule(kind: NodeKind): NodePassRule {
   if (kind === "practice") return "check_in";
@@ -61,7 +61,7 @@ export function parseCheckInKind(
 ): NodeCheckInKind {
   if (passRule !== "check_in") return null;
   const value = (raw ?? "").trim();
-  if (value === "video" || value === "text") return value;
+  if (value === "video" || value === "text" || value === "call") return value;
   return defaultCheckInKind(kind, passRule);
 }
 
@@ -77,10 +77,10 @@ export function nodeUsesQuizGate(passRule: NodePassRule | null | undefined) {
   return passRule === "quiz";
 }
 
-/** Video slot / allowance applies only to video check-ins (text = mentoria). */
+/** Video slot / allowance applies only to video check-ins (text and call do not). */
 export function nodeUsesVideoCheckInSlot(
   passRule: NodePassRule | null | undefined,
   checkInKind: CheckInKind | string | null | undefined,
 ) {
-  return passRule === "check_in" && checkInKind !== "text";
+  return passRule === "check_in" && checkInKind !== "text" && checkInKind !== "call";
 }

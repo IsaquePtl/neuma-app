@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { assertMentorMayCompleteNode } from "@/lib/nodes/advance-gate";
 import { completeCurrentAndActivateNext } from "@/lib/nodes/complete-and-activate";
 import { tryIncrementWeekExtensions } from "@/lib/nodes/week-extensions";
 import {
@@ -51,6 +52,7 @@ export async function advanceLevel(formData: FormData) {
   const pathId = String(formData.get("path_id") ?? "");
   if (!nodeId || !pathId) throw new Error("Dados em falta");
 
+  await assertMentorMayCompleteNode(supabase, nodeId, "advance");
   await completeCurrentAndActivateNext(supabase, nodeId, pathId);
 
   const { data: path } = await supabase
@@ -147,16 +149,26 @@ export async function extendLevelWeek(formData: FormData) {
   base.setDate(base.getDate() + daysToAdd);
   const nextDue = base.toISOString().slice(0, 10);
 
-  await supabase
+  const { error: dueError } = await supabase
     .from("nodes")
     .update({
       due_date: nextDue,
       status: "active",
     })
     .eq("id", nodeId);
+  if (dueError) throw new Error(dueError.message);
 
-  // One extend action → one extra check-in slot (when migration 0032 is applied).
+  // One extend → one extra check-in slot. Throws if 0032 is missing.
   await tryIncrementWeekExtensions(supabase, nodeId);
+
+  // A pending submission leaves "Por rever". The student can send another
+  // because the extra slot was just granted. This is a revision, not a pass.
+  const { error: queueError } = await supabase
+    .from("check_ins")
+    .update({ status: "needs_revision" })
+    .eq("node_id", nodeId)
+    .eq("status", "pending");
+  if (queueError) throw new Error(queueError.message);
 
   // Ensure this is the active node
   const { data: siblings } = await supabase

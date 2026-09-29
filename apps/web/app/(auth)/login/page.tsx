@@ -6,9 +6,10 @@ import { Card } from "@/components/ui/card";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; ok?: string }>;
+  searchParams: Promise<{ error?: string; ok?: string; next?: string }>;
 }) {
-  const { error, ok } = await searchParams;
+  const { error, ok, next } = await searchParams;
+  const safeNext = next && /^\/1-1\/[A-Za-z0-9_-]+$/.test(next) ? next : undefined;
 
   return (
     <div className="flex w-full flex-col items-center desktop:items-stretch">
@@ -27,7 +28,7 @@ export default async function LoginPage({
             {ok}
           </p>
         ) : null}
-        <LoginForm error={error} />
+        <LoginForm error={error} nextPath={safeNext} />
       </Card>
     </div>
   );

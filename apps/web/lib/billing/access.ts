@@ -1,6 +1,7 @@
 import { cache } from "react";
 
 import { getCurrentProfile, getSessionUser } from "@/lib/auth/session";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type {
   BillingPlan,
@@ -53,37 +54,57 @@ export function isBillingEnabled(): boolean {
   return raw === "1" || raw === "true";
 }
 
-function graceDays(): number {
-  const raw = Number(process.env.NEUMA_PAST_DUE_GRACE_DAYS);
-  return Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_GRACE_DAYS;
+type BillingSettings = {
+  cutoff: Date | null;
+  graceDays: number;
+};
+
+function parseCutoff(raw: unknown): Date | null {
+  if (typeof raw !== "string" || !raw || raw === "null") return null;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function parseGraceDays(raw: unknown): number {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : DEFAULT_GRACE_DAYS;
 }
 
 /**
- * Data a partir da qual as contas novas passam pelo paywall.
+ * Cutoff and grace come from finance_settings, the same rows has_app_access()
+ * reads. Students have no SELECT on that table, so this uses the service role
+ * and fails closed when the key is missing — a silent fallback used to
+ * grandfather every account.
  *
- * Le primeiro NEUMA_PAYWALL_START_AT, para o paywall poder ser testado em
- * localhost sem escrever nada na base de dados que producao partilha. Se a
- * variavel nao existir, cai para finance_settings.paywall_start_at, que fica
- * a null em producao e mantem todos com acesso.
+ * NEUMA_PAYWALL_START_AT still wins, so localhost can exercise the paywall
+ * without writing the shared database.
  */
-async function paywallStartAt(): Promise<Date | null> {
+async function loadBillingSettings(): Promise<BillingSettings> {
   const fromEnv = process.env.NEUMA_PAYWALL_START_AT?.trim();
-  if (fromEnv) {
-    const parsed = new Date(fromEnv);
-    if (!Number.isNaN(parsed.getTime())) return parsed;
+  const envCutoff = fromEnv ? parseCutoff(fromEnv) : null;
+
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch {
+    throw new Error(
+      "Paywall activo mas falta SUPABASE_SERVICE_ROLE_KEY para ler finance_settings.",
+    );
   }
 
-  const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await admin
     .from("finance_settings")
-    .select("value")
-    .eq("key", "paywall_start_at")
-    .maybeSingle();
+    .select("key, value")
+    .in("key", ["paywall_start_at", "past_due_grace_days"]);
+  if (error) {
+    throw new Error(`Não foi possível ler finance_settings: ${error.message}`);
+  }
 
-  const raw = data?.value;
-  if (typeof raw !== "string" || !raw) return null;
-  const parsed = new Date(raw);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  const map = new Map((data ?? []).map((row) => [row.key, row.value]));
+  return {
+    cutoff: envCutoff ?? parseCutoff(map.get("paywall_start_at")),
+    graceDays: parseGraceDays(map.get("past_due_grace_days")),
+  };
 }
 
 function toSummary(row: {
@@ -192,11 +213,11 @@ export const getAccessState = cache(async (): Promise<AccessState> => {
     return { ...base, reason: "exempt", subscription };
   }
 
-  const cutoff = await paywallStartAt();
-  if (!cutoff) {
+  const settings = await loadBillingSettings();
+  if (!settings.cutoff) {
     return { ...base, reason: "grandfathered", subscription };
   }
-  if (profile.created_at && new Date(profile.created_at) < cutoff) {
+  if (profile.created_at && new Date(profile.created_at) < settings.cutoff) {
     return { ...base, reason: "grandfathered", subscription };
   }
 
@@ -209,7 +230,7 @@ export const getAccessState = cache(async (): Promise<AccessState> => {
       ? new Date(subscription.pastDueSince)
       : new Date();
     const ends = new Date(since);
-    ends.setDate(ends.getDate() + graceDays());
+    ends.setDate(ends.getDate() + settings.graceDays);
     if (ends > new Date()) {
       return {
         ...base,
