@@ -1,0 +1,5 @@
+Contact: mailto:isaqueportilho2014@gmail.com
+Expires: 2027-10-05T00:00:00.000Z
+Preferred-Languages: pt, en
+Canonical: https://www.comunidadeneuma.com/.well-known/security.txt
+Policy: https://www.comunidadeneuma.com/privacidade

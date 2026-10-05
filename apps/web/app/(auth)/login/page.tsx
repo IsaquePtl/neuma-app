@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 
 import { LoginForm } from "@/components/login-form";
 import { Card } from "@/components/ui/card";
@@ -34,6 +35,14 @@ export default async function LoginPage({
         ) : null}
         <LoginForm error={error} nextPath={safeNext} />
       </Card>
+      <nav className="mt-5 flex justify-center gap-4 text-xs text-muted-foreground">
+        <Link href="/privacidade" className="hover:text-foreground">
+          Privacidade
+        </Link>
+        <Link href="/termos" className="hover:text-foreground">
+          Termos
+        </Link>
+      </nav>
     </div>
   );
 }

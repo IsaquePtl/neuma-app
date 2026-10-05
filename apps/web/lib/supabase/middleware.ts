@@ -19,6 +19,10 @@ const PUBLIC_PATHS = [
   "/api/stripe/webhook",
   "/subscrever",
   "/subscrever/sucesso",
+  "/privacidade",
+  "/termos",
+  "/robots.txt",
+  "/sitemap.xml",
 ];
 
 /** Pós-signup: autenticado pode ficar; anónimo é redireccionado para login. */
@@ -75,6 +79,7 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/api/tally/") ||
     (path.startsWith("/login/") && !isPostSignup) ||
     path.startsWith("/auth/") ||
+    path.startsWith("/.well-known/") ||
     path.startsWith("/1-1/") ||
     isOneToOneInvitePath(path);
 
