@@ -722,49 +722,58 @@ body:has(.auth-shell) .neuma-bg::before {
 }
 
 /*
- * Quiz CTA halo (mobile). Outer box-shadow on the button is clipped by
- * .neuma-ui (overflow-x: hidden) and .neuma-mobile-viewport (overflow-y: auto).
- * Host reclaims main px-4 gutter; ::before matches button width and paints
- * the halo into the gutter plus vertical padding-block for top/bottom bleed.
+ * Quiz CTA: room for the button's own drop-shadow (parent overflow clips it).
+ * Glow lives on .neuma-quiz-cta — not a separate halo layer.
+ * Host expands into main px so the glow can bleed into the side gaps;
+ * padding keeps the button face aligned with content above.
  */
 .neuma-quiz-cta-host {
   position: relative;
+  z-index: 1;
   margin-inline: -1rem;
-  padding-block: 1.25rem;
+  padding: 0.85rem 1rem;
+  overflow: visible;
 }
 
-.neuma-quiz-cta-host::before {
-  content: "";
-  position: absolute;
-  z-index: 0;
-  left: 1rem;
-  right: 1rem;
-  top: 50%;
-  height: 3.5rem;
-  transform: translateY(-50%);
-  border-radius: 1rem;
-  pointer-events: none;
-  box-shadow:
-    0 0 28px 4px color-mix(in oklch, var(--neuma-coral) 58%, transparent),
-    0 0 44px 10px color-mix(in oklch, var(--neuma-coral) 32%, transparent);
-  opacity: 0.95;
+.neuma-quiz-cta-host--inset {
+  margin-inline: 0;
+  padding: 0.75rem 0;
 }
 
-.neuma-quiz-cta-host:has(.neuma-quiz-cta:hover)::before,
-.neuma-quiz-cta-host:has(.neuma-quiz-cta:focus-visible)::before {
-  box-shadow:
-    0 0 32px 6px color-mix(in oklch, var(--neuma-coral) 65%, transparent),
-    0 0 52px 14px color-mix(in oklch, var(--neuma-coral) 38%, transparent);
+.neuma-quiz-cta {
+  transform: translateY(0) scale(1);
+  /* Soft coral bloom — must not be clipped by overflow on the button itself. */
+  filter: drop-shadow(
+    0 0 12px color-mix(in oklch, var(--neuma-coral) 38%, transparent)
+  );
+  transition:
+    transform 200ms ease,
+    background-color 200ms ease,
+    filter 200ms ease;
+}
+
+/* Lift só com ponteiro fino; :active tem prioridade para o press não “congelar”. */
+@media (hover: hover) and (pointer: fine) {
+  .neuma-quiz-cta:hover {
+    transform: translateY(-2px) scale(1);
+    filter: drop-shadow(
+      0 0 16px color-mix(in oklch, var(--neuma-coral) 46%, transparent)
+    );
+  }
+}
+
+.neuma-quiz-cta:active {
+  transform: translateY(0) scale(0.995);
+  filter: drop-shadow(
+    0 0 12px color-mix(in oklch, var(--neuma-coral) 38%, transparent)
+  );
+  transition-duration: 120ms;
 }
 
 @media (min-width: 850px) {
   .neuma-quiz-cta-host {
-    margin-inline: 0;
-    padding-block: 0;
-  }
-
-  .neuma-quiz-cta-host::before {
-    content: none;
+    margin-inline: -0.5rem;
+    padding: 0.85rem 0.5rem;
   }
 }
 
@@ -778,18 +787,45 @@ body:has(.auth-shell) .neuma-bg::before {
 
 /*
  * Viewport mobile das páginas centradas (Geral / Percurso / Mentor / …).
- * Altura = ecrã − header (4rem + safe-top) − main pt (1rem) − menubar reserve.
- * Não subtrai safe-bottom (evita double-count; root já é full-bleed).
+ * Altura = ecrã − header (4rem + safe-top) − main pt (1rem).
+ * Chega ao fundo do ecrã — a menubar flutuante sobrepõe o conteúdo.
  */
 .neuma-mobile-viewport {
-  height: calc(
-    100lvh - 4rem - env(safe-area-inset-top, 0px) - 1rem - 6.5rem - 8px
-  );
+  height: calc(100lvh - 4rem - env(safe-area-inset-top, 0px) - 1rem);
 }
 @media (min-width: 850px) {
   .neuma-mobile-viewport {
     height: auto;
     min-height: 0;
+  }
+}
+
+/*
+ * Fade de opacidade no topo (mobile): o conteúdo sobe e some como sombra.
+ * A banda de fade fica acima do conteúdo em repouso (margin↑ + padding↓),
+ * para o encabeçamento ficar legível com o scroll no topo.
+ */
+.neuma-mobile-scroll-fade {
+  --neuma-scroll-fade: 1.75rem;
+  margin-top: calc(var(--neuma-scroll-fade) * -1);
+  padding-top: var(--neuma-scroll-fade);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--neuma-scroll-fade)
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--neuma-scroll-fade)
+  );
+}
+@media (min-width: 850px) {
+  .neuma-mobile-scroll-fade {
+    margin-top: 0;
+    padding-top: 0;
+    -webkit-mask-image: none;
+    mask-image: none;
   }
 }
 

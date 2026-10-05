@@ -383,6 +383,8 @@ export function OnboardingForm({
   alreadySubmitted = false,
   backHref = "/home",
   backLabel = "Ir para a app",
+  variant = "fullscreen",
+  onBack,
 }: {
   studentId?: string | null;
   initialName?: string;
@@ -390,7 +392,12 @@ export function OnboardingForm({
   alreadySubmitted?: boolean;
   backHref?: string;
   backLabel?: string;
+  /** fullscreen = rota /onboarding; inline = embutido no /home (com shell). */
+  variant?: "fullscreen" | "inline";
+  /** Voltar sem navegar (modo inline). */
+  onBack?: () => void;
 }) {
+  const isInline = variant === "inline";
   const router = useRouter();
   const isLoggedIn = Boolean(studentId);
   const [step, setStep] = useState(1);
@@ -566,7 +573,14 @@ export function OnboardingForm({
 
   if (phase === "thankYou") {
     return (
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-4 text-center text-white">
+      <div
+        className={cn(
+          "flex flex-col items-center justify-center gap-4 px-4 text-center text-white",
+          isInline
+            ? "mx-auto w-full max-w-md min-h-0 flex-1 py-8"
+            : "absolute inset-0",
+        )}
+      >
         <CheckCircle2 className="size-14 text-white" />
         <div className="space-y-2">
           <h1 className="font-heading text-3xl font-semibold tracking-tight">
@@ -580,21 +594,47 @@ export function OnboardingForm({
               : "Tudo recebido. Falo contigo em breve!"}
           </p>
         </div>
-        {isLoggedIn ? (
+        {isLoggedIn && !isInline ? (
           <Link
             href={backHref}
             className="mt-2 rounded-xl bg-white/10 px-6 py-3 text-base font-medium text-white transition-colors hover:bg-white/15"
           >
             {backLabel}
           </Link>
+        ) : isLoggedIn && isInline ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (onBack) {
+                onBack();
+                return;
+              }
+              // Mantém a secção actual (home ou path) sem query.
+              const base =
+                typeof window !== "undefined" &&
+                window.location.pathname.startsWith("/path")
+                  ? "/path"
+                  : "/home";
+              router.replace(base);
+            }}
+            className="mt-2 rounded-xl bg-white/10 px-6 py-3 text-base font-medium text-white transition-colors hover:bg-white/15"
+          >
+            Voltar
+          </button>
         ) : null}
       </div>
     );
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col text-white">
-      {isLoggedIn ? (
+    <div
+      className={cn(
+        "flex min-h-0 flex-col text-white",
+        isInline ? "w-full max-w-md flex-1" : "h-full",
+      )}
+    >
+      {/* Fullscreen público: link no canto. Inline: o AppShell mostra o chevron (como /session/review). */}
+      {isLoggedIn && !isInline ? (
         <Link
           href={backHref}
           className="absolute right-4 top-[max(0.75rem,env(safe-area-inset-top,0px))] z-20 text-base text-white/70 underline-offset-4 hover:text-white hover:underline"
@@ -603,20 +643,31 @@ export function OnboardingForm({
         </Link>
       ) : null}
 
-      <div className={ONBOARDING_SCROLL}>
+      <div
+        className={cn(
+          ONBOARDING_SCROLL,
+          isInline &&
+            "w-full px-0 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]",
+        )}
+      >
         <div
           className={cn(
             "mx-auto flex w-full max-w-md flex-col",
-            ONBOARDING_CENTER_BLOCK,
+            isInline ? "my-auto py-2" : ONBOARDING_CENTER_BLOCK,
           )}
         >
           <Image
             src="/brand/mark-white.png"
             alt="Neuma"
-            width={80}
-            height={80}
+            width={isInline ? 56 : 80}
+            height={isInline ? 56 : 80}
             priority
-            className="mb-4 h-16 w-16 shrink-0 self-start desktop:mb-5 desktop:h-20 desktop:w-20"
+            className={cn(
+              "shrink-0 self-start",
+              isInline
+                ? "mb-3 h-12 w-12 sm:h-14 sm:w-14"
+                : "mb-4 h-16 w-16 desktop:mb-5 desktop:h-20 desktop:w-20",
+            )}
           />
 
           <p className="mb-4 text-sm text-white/70">

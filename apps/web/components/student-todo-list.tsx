@@ -12,18 +12,26 @@ export type StudentTodoItem = {
   title: string;
   href: string;
   tag: string;
+  /** Sem navegação — o pai trata (ex.: abrir form inline no /home). */
+  inline?: boolean;
 };
 
 const PAGE_SIZE = 3;
 
-function TodoSlots({ items }: { items: StudentTodoItem[] }) {
+function TodoSlots({
+  items,
+  onInlineItem,
+}: {
+  items: StudentTodoItem[];
+  onInlineItem?: (item: StudentTodoItem) => void;
+}) {
   const placeholderCount =
     items.length < PAGE_SIZE ? PAGE_SIZE - items.length : 0;
 
   return (
     <>
       {items.map((t) => (
-        <TodoRow key={t.key} item={t} />
+        <TodoRow key={t.key} item={t} onInlineItem={onInlineItem} />
       ))}
       {Array.from({ length: placeholderCount }, (_, i) => (
         <TodoPlaceholder key={`placeholder-${i}`} />
@@ -32,7 +40,13 @@ function TodoSlots({ items }: { items: StudentTodoItem[] }) {
   );
 }
 
-export function StudentTodoList({ items }: { items: StudentTodoItem[] }) {
+export function StudentTodoList({
+  items,
+  onInlineItem,
+}: {
+  items: StudentTodoItem[];
+  onInlineItem?: (item: StudentTodoItem) => void;
+}) {
   const [start, setStart] = useState(0);
   const maxStart = Math.max(0, items.length - PAGE_SIZE);
   const pageStart = Math.min(start, maxStart);
@@ -56,7 +70,7 @@ export function StudentTodoList({ items }: { items: StudentTodoItem[] }) {
             "min-h-[calc(3*4.25rem+2*0.5rem)]",
           )}
         >
-          <TodoSlots items={visible} />
+          <TodoSlots items={visible} onInlineItem={onInlineItem} />
         </ul>
 
         <div className="flex h-[calc(3*4.25rem+2*0.5rem)] shrink-0 flex-col items-center justify-between self-start desktop:hidden">
@@ -93,7 +107,7 @@ export function StudentTodoList({ items }: { items: StudentTodoItem[] }) {
 
       {/* Desktop: lista completa, sem setas */}
       <ul className="hidden space-y-2 desktop:block">
-        <TodoSlots items={items} />
+        <TodoSlots items={items} onInlineItem={onInlineItem} />
       </ul>
     </Card>
   );
@@ -107,26 +121,45 @@ function TodoPlaceholder() {
   );
 }
 
-function TodoRow({ item }: { item: StudentTodoItem }) {
+function TodoRow({
+  item,
+  onInlineItem,
+}: {
+  item: StudentTodoItem;
+  onInlineItem?: (item: StudentTodoItem) => void;
+}) {
+  const content = (
+    <div className="flex w-full items-center justify-between gap-2">
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--neuma-coral)]">
+          {item.tag}
+        </p>
+        <p className="mt-0.5 truncate text-[0.9375rem] font-semibold tracking-tight">
+          {item.title}
+        </p>
+      </div>
+      <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5" />
+    </div>
+  );
+
+  const rowClass =
+    "group flex min-h-[4.25rem] w-full items-center rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3 text-left transition-colors hover:bg-white/[0.06]";
+
   return (
     <li>
-      <Link
-        href={item.href}
-        prefetch={item.href === "/onboarding"}
-        className="group flex min-h-[4.25rem] items-center rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3 transition-colors hover:bg-white/[0.06]"
-      >
-        <div className="flex w-full items-center justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--neuma-coral)]">
-              {item.tag}
-            </p>
-            <p className="mt-0.5 truncate text-[0.9375rem] font-semibold tracking-tight">
-              {item.title}
-            </p>
-          </div>
-          <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5" />
-        </div>
-      </Link>
+      {item.inline && onInlineItem ? (
+        <button
+          type="button"
+          onClick={() => onInlineItem(item)}
+          className={rowClass}
+        >
+          {content}
+        </button>
+      ) : (
+        <Link href={item.href} prefetch={false} className={rowClass}>
+          {content}
+        </Link>
+      )}
     </li>
   );
 }

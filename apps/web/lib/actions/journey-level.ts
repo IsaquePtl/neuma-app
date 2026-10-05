@@ -5,6 +5,9 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { assertMentorMayCompleteNode } from "@/lib/nodes/advance-gate";
 import { completeCurrentAndActivateNext } from "@/lib/nodes/complete-and-activate";
+import { resegmentPath } from "@/lib/nodes/schedule-server";
+import { MAX_EXTENSION_WEEKS } from "@/lib/nodes/week-budget";
+import { addWeeksToDate } from "@/lib/path-period";
 import { tryIncrementWeekExtensions } from "@/lib/nodes/week-extensions";
 import {
   nodeAllowsMarkSeen,
@@ -113,50 +116,53 @@ export async function markNodeSeen(formData: FormData) {
   await revalidateJourney(supabase, path.id, user.id, node.id);
 }
 
-function resolveExtensionDays(formData: FormData): number {
-  const unit = String(formData.get("unit") ?? "weeks");
-  const amountRaw = Number(
-    formData.get("amount") ?? formData.get("weeks") ?? formData.get("days") ?? 1,
-  );
-  const amount =
-    Number.isFinite(amountRaw) && amountRaw > 0
-      ? Math.min(Math.floor(amountRaw), unit === "days" ? 365 : 52)
-      : 0;
-  if (amount < 1) return 0;
-  return unit === "days" ? amount : amount * 7;
+function resolveExtensionWeeks(formData: FormData): number {
+  const raw = Number(formData.get("weeks") ?? formData.get("amount") ?? 1);
+  if (!Number.isFinite(raw) || raw < 1) return 0;
+  return Math.min(Math.floor(raw), MAX_EXTENSION_WEEKS);
 }
 
-/** Mantém o aluno no nível e prolonga o prazo (dias ou semanas). */
+/**
+ * Mantém o aluno no nível e prolonga-o em semanas inteiras (mínimo 1).
+ * Os níveis seguintes avançam o mesmo número de semanas.
+ */
 export async function extendLevelWeek(formData: FormData) {
   const { supabase } = await mentorClient();
   const nodeId = String(formData.get("node_id") ?? "");
   const pathId = String(formData.get("path_id") ?? "");
-  const daysToAdd = resolveExtensionDays(formData);
+  const weeks = resolveExtensionWeeks(formData);
   if (!nodeId || !pathId) throw new Error("Dados em falta");
-  if (daysToAdd < 1) throw new Error("Indica quanto tempo prolongar");
+  if (weeks < 1) throw new Error("Prolonga pelo menos 1 semana");
 
   const { data: node, error: nodeError } = await supabase
     .from("nodes")
-    .select("id, due_date, status")
+    .select("id, status, due_date, extended_weeks, path:paths!inner(start_date)")
     .eq("id", nodeId)
     .eq("path_id", pathId)
     .single();
   if (nodeError || !node) throw new Error("Nível não encontrado");
+  const pathRow = Array.isArray(node.path) ? node.path[0] : node.path;
 
-  const base = node.due_date
-    ? new Date(`${node.due_date}T12:00:00`)
-    : new Date();
-  base.setDate(base.getDate() + daysToAdd);
-  const nextDue = base.toISOString().slice(0, 10);
-
-  const { error: dueError } = await supabase
+  const { error: extendError } = await supabase
     .from("nodes")
     .update({
-      due_date: nextDue,
+      extended_weeks: Math.min(52, (node.extended_weeks ?? 0) + weeks),
       status: "active",
     })
     .eq("id", nodeId);
-  if (dueError) throw new Error(dueError.message);
+  if (extendError) throw new Error(extendError.message);
+  await resegmentPath(supabase, pathId);
+
+  if (!pathRow?.start_date) {
+    // No calendar yet: keep a concrete deadline relative to the old one.
+    const today = new Date().toISOString().slice(0, 10);
+    const from = node.due_date && node.due_date > today ? node.due_date : today;
+    const { error: dueError } = await supabase
+      .from("nodes")
+      .update({ due_date: addWeeksToDate(from, weeks) })
+      .eq("id", nodeId);
+    if (dueError) throw new Error(dueError.message);
+  }
 
   // One extend → one extra check-in slot. Throws if 0032 is missing.
   await tryIncrementWeekExtensions(supabase, nodeId);

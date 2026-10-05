@@ -1,10 +1,12 @@
+import Image from "next/image";
 import { redirect } from "next/navigation";
 
 import { PlanPicker } from "@/components/plan-picker";
 import { LogoutForm } from "@/components/logout-form";
-import { getAccessState } from "@/lib/billing/access";
-import { getSessionUser } from "@/lib/auth/session";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { getAccessState } from "@/lib/billing/access";
+import { getCurrentProfile, getSessionUser } from "@/lib/auth/session";
 
 function lapsedNotice(
   access: Awaited<ReturnType<typeof getAccessState>>,
@@ -20,7 +22,6 @@ function lapsedNotice(
     return "A tua subscrição está por pagar há demasiado tempo. Renova o plano para recuperares o acesso.";
   }
 
-  // past_due beyond grace (access already false) — atraso prolongado
   if (sub.status === "past_due" && !access.hasAccess) {
     return "O pagamento está em atraso há demasiado tempo. Actualiza o plano para recuperares o acesso.";
   }
@@ -36,7 +37,11 @@ export default async function SubscribePage({
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  // Legacy Stripe cancel links used ?cancelado=1 — strip to normal plan picker.
+  const profile = await getCurrentProfile();
+  if (profile?.signup_incomplete) {
+    redirect("/login/signup");
+  }
+
   const params = await searchParams;
   if (params.cancelado === "1") {
     redirect("/subscrever");
@@ -51,8 +56,17 @@ export default async function SubscribePage({
   const isLapsed = Boolean(notice);
 
   return (
-    <main className="neuma-app-bg flex min-h-dvh flex-col px-4 py-10">
-      <div className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center">
+    <div className="flex w-full flex-col items-center desktop:items-stretch">
+      <Image
+        src="/brand/mark-white.png"
+        alt="Neuma"
+        width={96}
+        height={96}
+        priority
+        className="auth-mobile-mark mb-8 h-24 w-24 animate-float desktop:hidden"
+      />
+
+      <Card className="auth-enter-form--instant w-full space-y-6 p-6 sm:p-8">
         <PlanPicker
           title={isLapsed ? "Recupera o teu acesso" : "Activa a tua conta"}
           subtitle={
@@ -64,12 +78,12 @@ export default async function SubscribePage({
           notice={notice}
         />
 
-        <LogoutForm className="mt-8 flex justify-center">
+        <LogoutForm className="flex justify-center">
           <Button type="submit" variant="ghost" className="text-muted-foreground">
             Terminar sessão
           </Button>
         </LogoutForm>
-      </div>
-    </main>
+      </Card>
+    </div>
   );
 }

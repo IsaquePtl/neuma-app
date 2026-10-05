@@ -4,7 +4,7 @@ import type { createClient } from "@/lib/supabase/server";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
-/** Base slots per level + mentor extensions (or revision grants). */
+/** Base slots per level + mentor extensions (prolongar / pedir revisão). */
 export function allowedCheckInsForNode(weekExtensions: number | null | undefined) {
   const extras =
     typeof weekExtensions === "number" && Number.isFinite(weekExtensions)
@@ -23,8 +23,8 @@ export type CheckInAllowance = {
 };
 
 /**
- * Video check-ins count toward the per-level limit.
- * Mentorship 1:1 messages (kind=text) do not.
+ * Um check-in por nível (vídeo, texto ou call).
+ * Novo envio só com `week_extensions` (mentor prolonga ou “chumba”).
  */
 export async function getCheckInAllowance(
   supabase: Supabase,
@@ -42,13 +42,13 @@ export async function getCheckInAllowance(
       .select("id", { count: "exact", head: true })
       .eq("node_id", nodeId)
       .eq("student_id", studentId)
-      .eq("kind", "video"),
+      .in("kind", ["video", "text", "call"]),
     supabase
       .from("check_ins")
       .select("id", { count: "exact", head: true })
       .eq("node_id", nodeId)
       .eq("student_id", studentId)
-      .eq("kind", "video")
+      .in("kind", ["video", "text", "call"])
       .eq("status", "pending"),
   ]);
 

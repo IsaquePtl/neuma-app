@@ -9,10 +9,24 @@ import {
   parsePassScore,
 } from "@/lib/nodes/pass-rule";
 import {
-  segmentNodeTimeline,
-  weekFridayForPath,
-  weeksBetweenDates,
-} from "@/lib/path-period";
+  applyPathPhaseLayout,
+  parsePhaseFields,
+  releasePathPhaseCheckpoint,
+  reorderPathNodes,
+} from "@/lib/nodes/phase-layout";
+import {
+  planPhaseAwareDrop,
+  planPhaseAwareMove,
+  planPhaseRanges,
+  validatePhaseRanges,
+  type PhaseRange,
+} from "@/lib/nodes/phases";
+import {
+  checkWeeksFit,
+  loadPathWeekBudget,
+  resegmentPath,
+} from "@/lib/nodes/schedule-server";
+import { plannedWeeks } from "@/lib/nodes/week-budget";
 import type { NodeKind, NodeStatus } from "@/lib/types/database.types";
 
 async function mentorClient() {
@@ -48,78 +62,70 @@ function revalidateJourneyPath(pathId: string) {
   revalidatePath("/studio/journeys");
 }
 
-function parseDurationWeeks(formData: FormData): number {
-  const raw = Number(formData.get("duration_weeks") ?? 1);
-  if (!Number.isFinite(raw) || raw < 1) return 1;
-  return Math.min(Math.floor(raw), 52);
-}
-
-/** Recompute week_number + due_date (Friday) from path start and each level's weeks. */
-async function resegmentPathLevels(
+async function revalidateAfterNodeChange(
   supabase: Awaited<ReturnType<typeof createClient>>,
   pathId: string,
 ) {
-  const { data: path } = await supabase
-    .from("paths")
-    .select("start_date, end_date")
-    .eq("id", pathId)
-    .single();
+  const studentId = await studentIdOfPath(supabase, pathId);
+  if (studentId) {
+    revalidatePath(`/studio/students/${studentId}`);
+    revalidatePath("/home");
+    revalidatePath("/path", "layout");
+    revalidatePath("/session");
+  }
+  revalidateJourneyPath(pathId);
+}
 
-  const { data: nodes } = await supabase
+/** Null when the form doesn't carry the field (weeks edited elsewhere). */
+function parseDurationWeeks(formData: FormData): number | null {
+  const value = formData.get("duration_weeks");
+  if (value == null || value === "") return null;
+  return plannedWeeks(Number(value));
+}
+
+const resegmentPathLevels = resegmentPath;
+
+async function assertWeeksFit(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  pathId: string,
+  nodeId: string | null,
+  weeks: number,
+) {
+  const budget = await loadPathWeekBudget(supabase, pathId);
+  const message = checkWeeksFit(budget, nodeId, weeks);
+  if (message) throw new Error(message);
+}
+
+/** Inline stepper on the level card. Returns the error instead of throwing (prod hides messages). */
+export async function setNodeWeeks(input: {
+  id: string;
+  pathId: string;
+  weeks: number;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await mentorClient();
+  const weeks = plannedWeeks(input.weeks);
+  const budget = await loadPathWeekBudget(supabase, input.pathId);
+  if (!budget.byNode.has(input.id)) return { ok: false, error: "Nível não encontrado." };
+  const message = checkWeeksFit(budget, input.id, weeks);
+  if (message) return { ok: false, error: message };
+
+  const { error } = await supabase
     .from("nodes")
-    .select("id, order_index, duration_weeks")
-    .eq("path_id", pathId)
-    .order("order_index", { ascending: true });
+    .update({ duration_weeks: weeks })
+    .eq("id", input.id)
+    .eq("path_id", input.pathId);
+  if (error) return { ok: false, error: "Não foi possível guardar as semanas." };
 
-  if (!nodes?.length) return;
-
-  const startDate = path?.start_date;
-  const endDate = path?.end_date;
-  const totalWeeks =
-    startDate && endDate ? weeksBetweenDates(startDate, endDate) : null;
-
-  const durations = nodes.map((n) =>
-    n.duration_weeks != null && n.duration_weeks >= 1 ? n.duration_weeks : 1,
-  );
-
-  const segments =
-    totalWeeks != null
-      ? segmentNodeTimeline(nodes.length, totalWeeks, durations)
-      : (() => {
-          let week = 1;
-          return durations.map((duration_weeks) => {
-            const seg = { week_number: week, duration_weeks };
-            week += duration_weeks;
-            return seg;
-          });
-        })();
-
-  await Promise.all(
-    nodes.map((node, i) => {
-      const segment = segments[i];
-      const dueDate =
-        startDate != null
-          ? weekFridayForPath(
-              startDate,
-              segment.week_number + segment.duration_weeks - 1,
-            )
-          : null;
-      return supabase
-        .from("nodes")
-        .update({
-          week_number: segment.week_number,
-          duration_weeks: segment.duration_weeks,
-          due_date: dueDate,
-        })
-        .eq("id", node.id);
-    }),
-  );
+  await resegmentPathLevels(supabase, input.pathId);
+  await revalidateAfterNodeChange(supabase, input.pathId);
+  return { ok: true };
 }
 
 export async function createNode(formData: FormData) {
   const supabase = await mentorClient();
   const pathId = formData.get("path_id") as string;
-  const durationWeeks = parseDurationWeeks(formData);
+  const durationWeeks = parseDurationWeeks(formData) ?? 1;
+  await assertWeeksFit(supabase, pathId, null, durationWeeks);
 
   const { data: last } = await supabase
     .from("nodes")
@@ -139,7 +145,13 @@ export async function createNode(formData: FormData) {
     (formData.get("pass_rule") as string) || "",
     kind,
   );
-  await supabase.from("nodes").insert({
+  const { phaseKey, isPhaseCheckpoint } = parsePhaseFields(formData, kind);
+  if (isPhaseCheckpoint && phaseKey) {
+    await releasePathPhaseCheckpoint(supabase, pathId, phaseKey);
+  }
+  const { data: created, error: insertError } = await supabase
+    .from("nodes")
+    .insert({
     path_id: pathId,
     title: (formData.get("title") as string)?.trim() || "Novo bloco",
     description: ((formData.get("description") as string) || "").trim() || null,
@@ -155,22 +167,25 @@ export async function createNode(formData: FormData) {
       kind,
       passRule,
     ),
-    phase_key: ((formData.get("phase_key") as string) || "").trim() || null,
+    phase_key: phaseKey,
     node_code: ((formData.get("node_code") as string) || "").trim() || null,
+    is_phase_checkpoint: isPhaseCheckpoint,
     order_index: nextIndex,
     status,
-  });
-
-  await resegmentPathLevels(supabase, pathId);
-
-  const studentId = await studentIdOfPath(supabase, pathId);
-  if (studentId) {
-    revalidatePath(`/studio/students/${studentId}`);
-    revalidatePath("/home");
-    revalidatePath("/path");
-    revalidatePath("/session");
+    })
+    .select("id")
+    .single();
+  if (insertError || !created) {
+    throw new Error(insertError?.message ?? "Não foi possível criar o nível");
   }
-  revalidateJourneyPath(pathId);
+
+  await applyPathPhaseLayout(
+    supabase,
+    pathId,
+    isPhaseCheckpoint ? created.id : null,
+  );
+  await resegmentPathLevels(supabase, pathId);
+  await revalidateAfterNodeChange(supabase, pathId);
 }
 
 export async function updateNode(formData: FormData) {
@@ -178,6 +193,9 @@ export async function updateNode(formData: FormData) {
   const id = formData.get("id") as string;
   const pathId = formData.get("path_id") as string;
   const durationWeeks = parseDurationWeeks(formData);
+  if (durationWeeks != null) {
+    await assertWeeksFit(supabase, pathId, id, durationWeeks);
+  }
 
   const kind = ((formData.get("kind") as NodeKind) || "practice");
   const passRule = parsePassRule(
@@ -195,12 +213,16 @@ export async function updateNode(formData: FormData) {
       );
     }
   }
-  await supabase
+  const { phaseKey, isPhaseCheckpoint } = parsePhaseFields(formData, kind);
+  if (isPhaseCheckpoint && phaseKey) {
+    await releasePathPhaseCheckpoint(supabase, pathId, phaseKey, id);
+  }
+  const { error: updateError } = await supabase
     .from("nodes")
     .update({
       title: (formData.get("title") as string)?.trim() || "Bloco",
       description: ((formData.get("description") as string) || "").trim() || null,
-      duration_weeks: durationWeeks,
+      ...(durationWeeks != null ? { duration_weeks: durationWeeks } : {}),
       kind,
       status: ((formData.get("status") as NodeStatus) || "locked"),
       resource_url: ((formData.get("resource_url") as string) || "").trim() || null,
@@ -213,21 +235,16 @@ export async function updateNode(formData: FormData) {
         kind,
         passRule,
       ),
-      phase_key: ((formData.get("phase_key") as string) || "").trim() || null,
+      phase_key: phaseKey,
       node_code: ((formData.get("node_code") as string) || "").trim() || null,
+      is_phase_checkpoint: isPhaseCheckpoint,
     })
     .eq("id", id);
+  if (updateError) throw new Error(updateError.message);
 
+  await applyPathPhaseLayout(supabase, pathId, isPhaseCheckpoint ? id : null);
   await resegmentPathLevels(supabase, pathId);
-
-  const studentId = await studentIdOfPath(supabase, pathId);
-  if (studentId) {
-    revalidatePath(`/studio/students/${studentId}`);
-    revalidatePath("/home");
-    revalidatePath("/path");
-    revalidatePath("/session");
-  }
-  revalidateJourneyPath(pathId);
+  await revalidateAfterNodeChange(supabase, pathId);
 }
 
 export async function deleteNode(formData: FormData) {
@@ -235,17 +252,12 @@ export async function deleteNode(formData: FormData) {
   const id = formData.get("id") as string;
   const pathId = formData.get("path_id") as string;
   await supabase.from("nodes").delete().eq("id", id);
+  await applyPathPhaseLayout(supabase, pathId);
   await resegmentPathLevels(supabase, pathId);
-  const studentId = await studentIdOfPath(supabase, pathId);
-  if (studentId) {
-    revalidatePath(`/studio/students/${studentId}`);
-    revalidatePath("/home");
-    revalidatePath("/path");
-    revalidatePath("/session");
-  }
-  revalidateJourneyPath(pathId);
+  await revalidateAfterNodeChange(supabase, pathId);
 }
 
+/** Crossing a phase boundary moves the level into that phase; checkpoints stay last. */
 export async function moveNode(formData: FormData) {
   const supabase = await mentorClient();
   const id = formData.get("id") as string;
@@ -254,30 +266,100 @@ export async function moveNode(formData: FormData) {
 
   const { data: nodes } = await supabase
     .from("nodes")
-    .select("id, order_index")
+    .select("id, kind, phase_key, is_phase_checkpoint, order_index")
     .eq("path_id", pathId)
     .order("order_index", { ascending: true });
-
   if (!nodes) return;
-  const idx = nodes.findIndex((n) => n.id === id);
-  const swapWith = direction === "up" ? idx - 1 : idx + 1;
-  if (idx < 0 || swapWith < 0 || swapWith >= nodes.length) return;
 
-  const a = nodes[idx];
-  const b = nodes[swapWith];
+  const move = planPhaseAwareMove(nodes, id, direction);
+  if (!move) return;
 
-  // Troca os order_index (usa valor temporario para evitar colisao no unique)
-  await supabase.from("nodes").update({ order_index: -1 }).eq("id", a.id);
-  await supabase.from("nodes").update({ order_index: a.order_index }).eq("id", b.id);
-  await supabase.from("nodes").update({ order_index: b.order_index }).eq("id", a.id);
-
-  await resegmentPathLevels(supabase, pathId);
-
-  const studentId = await studentIdOfPath(supabase, pathId);
-  if (studentId) {
-    revalidatePath(`/studio/students/${studentId}`);
+  if (move.phaseChanged) {
+    const { error } = await supabase
+      .from("nodes")
+      .update({ phase_key: move.phaseKey })
+      .eq("id", id);
+    if (error) throw new Error(error.message);
   }
-  revalidateJourneyPath(pathId);
+  await reorderPathNodes(supabase, pathId, nodes, move.orderedIds);
+  await applyPathPhaseLayout(supabase, pathId);
+  await resegmentPathLevels(supabase, pathId);
+  await revalidateAfterNodeChange(supabase, pathId);
+}
+
+/** Phase editor in the calendar: phases as contiguous level ranges. */
+export async function setPathPhases(input: {
+  pathId: string;
+  phases: PhaseRange[];
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await mentorClient();
+  const { data: nodes } = await supabase
+    .from("nodes")
+    .select("id, kind, phase_key, is_phase_checkpoint, order_index")
+    .eq("path_id", input.pathId)
+    .order("order_index", { ascending: true });
+  if (!nodes) return { ok: false, error: "Percurso não encontrado." };
+
+  const invalid = validatePhaseRanges(input.phases, nodes.length);
+  if (invalid) return { ok: false, error: invalid };
+
+  const planned = planPhaseRanges(nodes, input.phases);
+  const changed = planned.filter((next, i) => {
+    const prev = nodes[i];
+    return (
+      next.phase_key !== (prev.phase_key ?? null) ||
+      next.is_phase_checkpoint !== Boolean(prev.is_phase_checkpoint)
+    );
+  });
+  const results = await Promise.all(
+    changed.map((n) =>
+      supabase
+        .from("nodes")
+        .update({ phase_key: n.phase_key, is_phase_checkpoint: n.is_phase_checkpoint })
+        .eq("id", n.id),
+    ),
+  );
+  if (results.some((r) => r.error)) {
+    return { ok: false, error: "Não foi possível guardar as fases." };
+  }
+
+  await applyPathPhaseLayout(supabase, input.pathId);
+  await resegmentPathLevels(supabase, input.pathId);
+  await revalidateAfterNodeChange(supabase, input.pathId);
+  return { ok: true };
+}
+
+/** Drag & drop: `toIndex` is the level's final position (0-based). */
+export async function reorderNode(input: {
+  id: string;
+  pathId: string;
+  toIndex: number;
+}) {
+  const supabase = await mentorClient();
+  const { id, pathId, toIndex } = input;
+  if (!Number.isFinite(toIndex)) throw new Error("Posição inválida.");
+
+  const { data: nodes } = await supabase
+    .from("nodes")
+    .select("id, kind, phase_key, is_phase_checkpoint, order_index")
+    .eq("path_id", pathId)
+    .order("order_index", { ascending: true });
+  if (!nodes) return;
+
+  const move = planPhaseAwareDrop(nodes, id, toIndex);
+  if (!move) return;
+
+  if (move.phaseChanged) {
+    const { error } = await supabase
+      .from("nodes")
+      .update({ phase_key: move.phaseKey })
+      .eq("id", id);
+    if (error) throw new Error(error.message);
+  }
+  await reorderPathNodes(supabase, pathId, nodes, move.orderedIds);
+  await applyPathPhaseLayout(supabase, pathId);
+  await resegmentPathLevels(supabase, pathId);
+  await revalidateAfterNodeChange(supabase, pathId);
 }
 
 export async function activateNode(formData: FormData) {

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Camera } from "lucide-react";
 
 import {
@@ -87,8 +87,18 @@ export function OneToOneRedeemForm({
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [pending, startTransition] = useTransition();
+  const [checkoutOpening, setCheckoutOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [existingAccount, setExistingAccount] = useState(false);
+
+  useEffect(() => {
+    const resetCheckoutUi = () => {
+      setCheckoutOpening(false);
+      setError(null);
+    };
+    window.addEventListener("pageshow", resetCheckoutUi);
+    return () => window.removeEventListener("pageshow", resetCheckoutUi);
+  }, []);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -100,17 +110,28 @@ export function OneToOneRedeemForm({
   const emailOk = isValidEmail(enteredEmail);
   const meta = STEP_META[step];
 
-  function goCheckout() {
-    startTransition(async () => {
-      setError(null);
+  async function goCheckout() {
+    if (checkoutOpening || pending) return;
+    setError(null);
+    setStep("checkout");
+    setCheckoutOpening(true);
+
+    try {
       const result = await startOneToOneCheckout({ token });
       if (!result.ok) {
         setError(result.error);
-        setStep("checkout");
+        setCheckoutOpening(false);
         return;
       }
-      window.location.href = result.checkoutUrl;
-    });
+      window.location.assign(result.url);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Não foi possível iniciar o pagamento.",
+      );
+      setCheckoutOpening(false);
+    }
   }
 
   function onConfirmEmail(event: React.FormEvent) {
@@ -160,12 +181,14 @@ export function OneToOneRedeemForm({
       }
 
       setStep("checkout");
+      setCheckoutOpening(true);
       const checkout = await startOneToOneCheckout({ token });
       if (!checkout.ok) {
         setError(checkout.error);
+        setCheckoutOpening(false);
         return;
       }
-      window.location.href = checkout.checkoutUrl;
+      window.location.assign(checkout.url);
     });
   }
 
@@ -374,11 +397,11 @@ export function OneToOneRedeemForm({
         <Button
           type="button"
           size="lg"
-          disabled={pending}
-          onClick={goCheckout}
+          disabled={checkoutOpening || pending}
+          onClick={() => void goCheckout()}
           className="h-14 w-full bg-[var(--neuma-orange)] text-base font-semibold text-white hover:bg-[var(--neuma-orange)]/90"
         >
-          {pending ? "A abrir pagamento…" : "Continuar para pagamento"}
+          Continuar para pagamento
         </Button>
       </div>
     );

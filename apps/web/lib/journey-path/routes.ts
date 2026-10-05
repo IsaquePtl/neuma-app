@@ -21,21 +21,25 @@ export function studentProfileHref(studentId: string, returnTo: string): string 
 
 type JourneyPathMatch = {
   pathId: string;
-  kind: "detail" | "edit" | "level";
+  kind: "detail" | "edit" | "level" | "quiz";
+  nodeId?: string;
 };
 
-/** Path detail, edit, or level review — not list/checkins/onboardings index pages. */
+/** Path detail, edit, level review, or quiz preview — not list/checkins/onboardings. */
 export function matchJourneyPathPage(
   pathname: string,
 ): JourneyPathMatch | null {
   const match = pathname.match(
-    /^\/studio\/journeys\/([^/]+)(?:\/(edit|levels\/([^/]+)))?$/,
+    /^\/studio\/journeys\/([^/]+)(?:\/(edit|levels\/([^/]+)(?:\/(quiz))?))?$/,
   );
   if (!match) return null;
   const pathId = match[1];
   if (JOURNEY_LIST_SEGMENTS.has(pathId)) return null;
   if (match[2] === "edit") return { pathId, kind: "edit" };
-  if (match[3]) return { pathId, kind: "level" };
+  if (match[3] && match[4] === "quiz") {
+    return { pathId, kind: "quiz", nodeId: match[3] };
+  }
+  if (match[3]) return { pathId, kind: "level", nodeId: match[3] };
   return { pathId, kind: "detail" };
 }
 
@@ -45,11 +49,14 @@ export function isJourneyPathDetailPage(pathname: string): boolean {
 
 /**
  * Back target for mentor journey path pages:
- * level/edit → path detail → journeys list.
+ * quiz → level → path detail → journeys list.
  */
 export function journeyPathBackHref(pathname: string): string | null {
   const match = matchJourneyPathPage(pathname);
   if (!match) return null;
+  if (match.kind === "quiz" && match.nodeId) {
+    return `/studio/journeys/${match.pathId}/levels/${match.nodeId}?tab=nivel`;
+  }
   if (match.kind === "detail") return "/studio/journeys";
   return `/studio/journeys/${match.pathId}`;
 }

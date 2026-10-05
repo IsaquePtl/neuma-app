@@ -16,6 +16,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { nodeKindHint, nodeKindLabel } from "@/lib/labels";
 import { NodeGateFields } from "@/components/node-gate-fields";
+import { PhaseFields } from "@/components/phase-fields";
+import type { PhaseOption } from "@/lib/nodes/phases";
 import { defaultPassRule } from "@/lib/nodes/pass-rule";
 import type { NodeKind, NodePassRule } from "@/lib/types/database.types";
 
@@ -33,6 +35,7 @@ export type TemplateNodeData = {
   check_in_kind?: string | null;
   phase_key?: string | null;
   node_code?: string | null;
+  is_phase_checkpoint?: boolean | null;
 };
 
 function normalizeKind(kind: NodeKind): NodeKind {
@@ -48,6 +51,7 @@ export function TemplateNodeEditor({
   assets,
   onCancel,
   onSaved,
+  phases = [],
 }: {
   templateId: string;
   node?: TemplateNodeData;
@@ -57,6 +61,7 @@ export function TemplateNodeEditor({
   assets: PickerAsset[];
   onCancel: () => void;
   onSaved?: () => void;
+  phases?: PhaseOption[];
 }) {
   const [pending, startTransition] = useTransition();
   const [kind, setKind] = useState<NodeKind>(
@@ -160,25 +165,24 @@ export function TemplateNodeEditor({
           selectClass="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
         />
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2">
-            <Label htmlFor="tn-phase">Fase</Label>
-            <Input
-              id="tn-phase"
-              name="phase_key"
-              defaultValue={node?.phase_key ?? ""}
-              placeholder="A"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="tn-code">Código</Label>
-            <Input
-              id="tn-code"
-              name="node_code"
-              defaultValue={node?.node_code ?? ""}
-              placeholder="A1"
-            />
-          </div>
+        <PhaseFields
+          kind={kind}
+          phases={phases}
+          nodeId={node?.id}
+          initialPhaseKey={node?.phase_key}
+          initialIsCheckpoint={Boolean(node?.is_phase_checkpoint)}
+          selectClass="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+          idPrefix="tn"
+        />
+
+        <div className="space-y-2">
+          <Label htmlFor="tn-code">Código</Label>
+          <Input
+            id="tn-code"
+            name="node_code"
+            defaultValue={node?.node_code ?? ""}
+            placeholder="A1"
+          />
         </div>
 
         <LibraryAssetPicker

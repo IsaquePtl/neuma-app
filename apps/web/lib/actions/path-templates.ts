@@ -16,6 +16,13 @@ import type {
   PathTemplateStatus,
 } from "@/lib/types/database.types";
 import { defaultPassRule, parseCheckInKind, parsePassRule, parsePassScore } from "@/lib/nodes/pass-rule";
+import {
+  applyTemplatePhaseLayout,
+  parsePhaseFields,
+  releaseTemplatePhaseCheckpoint,
+  reorderTemplateNodes,
+} from "@/lib/nodes/phase-layout";
+import { normalizePhaseRows, planPhaseAwareMove } from "@/lib/nodes/phases";
 import type { Json } from "@/lib/types/database.types";
 
 async function requireMentor() {
@@ -177,7 +184,7 @@ export async function savePathAsTemplate(formData: FormData) {
       supabase
         .from("nodes")
         .select(
-          "title, description, kind, week_number, order_index, resource_url, check_in_kind, phase_key, node_code, pass_rule, pass_score, id",
+          "title, description, kind, week_number, order_index, resource_url, check_in_kind, phase_key, node_code, is_phase_checkpoint, pass_rule, pass_score, id",
         )
         .eq("path_id", pathId)
         .order("order_index", { ascending: true }),
@@ -226,19 +233,20 @@ export async function savePathAsTemplate(formData: FormData) {
       quizzesByNode.set(q.node_id, list);
     }
 
-    const rows = nodes.map((n, i) => ({
+    const rows = normalizePhaseRows(nodes).map((n, i) => ({
       template_id: template.id,
       title: n.title,
       description: n.description,
       kind: n.kind,
       week_number: n.week_number,
-      order_index: n.order_index ?? i,
+      order_index: i,
       default_resource_url: n.resource_url,
       check_in_kind: n.check_in_kind,
       pass_rule: n.pass_rule,
       pass_score: n.pass_score,
       phase_key: n.phase_key,
       node_code: n.node_code,
+      is_phase_checkpoint: n.is_phase_checkpoint,
       quiz_questions: quizzesByNode.get(n.id) ?? [],
     }));
     const { error: insertErr } = await supabase
@@ -276,6 +284,7 @@ export async function upsertTemplateNode(formData: FormData) {
     (formData.get("pass_rule") as string) || "",
     kind,
   );
+  const { phaseKey, isPhaseCheckpoint } = parsePhaseFields(formData, kind);
   const payload = {
     title: (formData.get("title") as string)?.trim() || "Nível",
     description: ((formData.get("description") as string) || "").trim() || null,
@@ -297,10 +306,21 @@ export async function upsertTemplateNode(formData: FormData) {
       kind,
       passRule,
     ),
-    phase_key: ((formData.get("phase_key") as string) || "").trim() || null,
+    phase_key: phaseKey,
     node_code: ((formData.get("node_code") as string) || "").trim() || null,
+    is_phase_checkpoint: isPhaseCheckpoint,
   };
 
+  if (isPhaseCheckpoint && phaseKey) {
+    await releaseTemplatePhaseCheckpoint(
+      supabase,
+      templateId,
+      phaseKey,
+      id ?? undefined,
+    );
+  }
+
+  let savedId = id;
   if (id) {
     const { error } = await supabase
       .from("path_template_nodes")
@@ -316,13 +336,24 @@ export async function upsertTemplateNode(formData: FormData) {
       .limit(1)
       .maybeSingle();
 
-    const { error } = await supabase.from("path_template_nodes").insert({
-      ...payload,
-      template_id: templateId,
-      order_index: (last?.order_index ?? -1) + 1,
-    });
-    if (error) throw new Error(error.message);
+    const { data: created, error } = await supabase
+      .from("path_template_nodes")
+      .insert({
+        ...payload,
+        template_id: templateId,
+        order_index: (last?.order_index ?? -1) + 1,
+      })
+      .select("id")
+      .single();
+    if (error || !created) throw new Error(error?.message ?? "Falha ao criar nível");
+    savedId = created.id;
   }
+
+  await applyTemplatePhaseLayout(
+    supabase,
+    templateId,
+    isPhaseCheckpoint ? savedId : null,
+  );
 
   revalidatePath(`/studio/library/templates/${templateId}`);
   revalidatePath("/studio/library");
@@ -338,6 +369,7 @@ export async function deleteTemplateNode(formData: FormData) {
     .delete()
     .eq("id", id);
   if (error) throw new Error(error.message);
+  await applyTemplatePhaseLayout(supabase, templateId);
   revalidatePath(`/studio/library/templates/${templateId}`);
   revalidatePath("/studio/library");
   revalidatePath("/studio/journeys");
@@ -351,30 +383,23 @@ export async function moveTemplateNode(formData: FormData) {
 
   const { data: nodes } = await supabase
     .from("path_template_nodes")
-    .select("id, order_index")
+    .select("id, kind, phase_key, is_phase_checkpoint, order_index")
     .eq("template_id", templateId)
     .order("order_index", { ascending: true });
-
   if (!nodes) return;
-  const idx = nodes.findIndex((n) => n.id === id);
-  const swapWith = direction === "up" ? idx - 1 : idx + 1;
-  if (idx < 0 || swapWith < 0 || swapWith >= nodes.length) return;
 
-  const a = nodes[idx];
-  const b = nodes[swapWith];
+  const move = planPhaseAwareMove(nodes, id, direction);
+  if (!move) return;
 
-  await supabase
-    .from("path_template_nodes")
-    .update({ order_index: -1 })
-    .eq("id", a.id);
-  await supabase
-    .from("path_template_nodes")
-    .update({ order_index: a.order_index })
-    .eq("id", b.id);
-  await supabase
-    .from("path_template_nodes")
-    .update({ order_index: b.order_index })
-    .eq("id", a.id);
+  if (move.phaseChanged) {
+    const { error } = await supabase
+      .from("path_template_nodes")
+      .update({ phase_key: move.phaseKey })
+      .eq("id", id);
+    if (error) throw new Error(error.message);
+  }
+  await reorderTemplateNodes(supabase, templateId, nodes, move.orderedIds);
+  await applyTemplatePhaseLayout(supabase, templateId);
 
   revalidatePath(`/studio/library/templates/${templateId}`);
   revalidatePath("/studio/library");
@@ -391,7 +416,7 @@ export async function applyPathTemplate(formData: FormData) {
   const { data: template, error: tErr } = await supabase
     .from("path_templates")
     .select(
-      "id, title, description, goal, duration_label, period_months, start_date, end_date, path_template_nodes(id, order_index, title, description, kind, week_number, duration_weeks, default_resource_url, library_asset_id, check_in_kind, phase_key, node_code, pass_rule, pass_score, quiz_questions, library_assets(url, body))",
+      "id, title, description, goal, duration_label, period_months, start_date, end_date, path_template_nodes(id, order_index, title, description, kind, week_number, duration_weeks, default_resource_url, library_asset_id, check_in_kind, phase_key, node_code, is_phase_checkpoint, pass_rule, pass_score, quiz_questions, library_assets(url, body))",
     )
     .eq("id", templateId)
     .single();
@@ -448,8 +473,10 @@ export async function applyPathTemplate(formData: FormData) {
     .eq("role", "student");
 
   const rawNodes = Array.isArray(template.path_template_nodes)
-    ? [...template.path_template_nodes].sort(
-        (a, b) => a.order_index - b.order_index,
+    ? normalizePhaseRows(
+        [...template.path_template_nodes].sort(
+          (a, b) => a.order_index - b.order_index,
+        ),
       )
     : [];
 
@@ -499,6 +526,7 @@ export async function applyPathTemplate(formData: FormData) {
         pass_score: n.pass_score,
         phase_key: n.phase_key ?? null,
         node_code: n.node_code ?? null,
+        is_phase_checkpoint: n.is_phase_checkpoint,
       };
     });
 

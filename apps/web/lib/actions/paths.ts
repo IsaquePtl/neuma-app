@@ -5,12 +5,8 @@ import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 import { purgeAgentShellsForPathTitles } from "@/lib/actions/agent-library";
-import {
-  resolvePathSchedule,
-  segmentNodeTimeline,
-  weekFridayForPath,
-  weeksBetweenDates,
-} from "@/lib/path-period";
+import { resegmentPath } from "@/lib/nodes/schedule-server";
+import { resolvePathSchedule } from "@/lib/path-period";
 import type { PathStatus } from "@/lib/types/database.types";
 
 async function requireMentor() {
@@ -26,46 +22,6 @@ async function requireMentor() {
     .single();
   if (profile?.role !== "mentor") throw new Error("Sem permissao");
   return { supabase, user };
-}
-
-async function segmentPathNodes(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  pathId: string,
-  startDate: string,
-  endDate: string,
-) {
-  const { data: nodes } = await supabase
-    .from("nodes")
-    .select("id, order_index, duration_weeks")
-    .eq("path_id", pathId)
-    .order("order_index", { ascending: true });
-
-  if (!nodes?.length) return;
-
-  const totalWeeks = weeksBetweenDates(startDate, endDate);
-  const segments = segmentNodeTimeline(
-    nodes.length,
-    totalWeeks,
-    nodes.map((n) => n.duration_weeks),
-  );
-
-  await Promise.all(
-    nodes.map((node, i) => {
-      const segment = segments[i];
-      const dueDate = weekFridayForPath(
-        startDate,
-        segment.week_number + segment.duration_weeks - 1,
-      );
-      return supabase
-        .from("nodes")
-        .update({
-          week_number: segment.week_number,
-          duration_weeks: segment.duration_weeks,
-          due_date: dueDate,
-        })
-        .eq("id", node.id);
-    }),
-  );
 }
 
 export async function createDraftPath(formData: FormData) {
@@ -138,8 +94,8 @@ export async function upsertPath(formData: FormData) {
     pathId = data?.id ?? null;
   }
 
-  if (pathId && schedule.startDate && schedule.endDate) {
-    await segmentPathNodes(supabase, pathId, schedule.startDate, schedule.endDate);
+  if (pathId) {
+    await resegmentPath(supabase, pathId);
     revalidatePath(`/studio/journeys/${pathId}`);
     revalidatePath(`/studio/journeys/${pathId}/edit`);
   }

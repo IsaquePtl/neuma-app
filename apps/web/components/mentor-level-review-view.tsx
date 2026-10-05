@@ -551,6 +551,7 @@ export function MentorLevelReviewView({
             node={node}
             levelNumber={levelNumber}
             preview
+            pathId={pathId}
           />
         </div>
       ) : (

@@ -30,8 +30,11 @@ import { rejectFeedbackDraft } from "@/lib/actions/ai-drafts";
 import { advanceLevel, extendLevelWeek } from "@/lib/actions/journey-level";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { WeekStepper } from "@/components/week-stepper";
 import { Label } from "@/components/ui/label";
+import { formatDate } from "@/lib/labels";
+import { MAX_EXTENSION_WEEKS } from "@/lib/nodes/week-budget";
+import { addWeeksToDate } from "@/lib/path-period";
 import { Textarea } from "@/components/ui/textarea";
 import { requestMentorBadgesRefresh } from "@/lib/mentor-badges-client";
 import type { StudentNode } from "@/lib/students/queries";
@@ -151,8 +154,7 @@ function useMentorFeedbackForm({
   );
   const [uploading, setUploading] = useState(false);
   const [decision, setDecision] = useState<Decision>("advance");
-  const [extendUnit, setExtendUnit] = useState<"days" | "weeks">("weeks");
-  const [extendAmount, setExtendAmount] = useState("1");
+  const [extendWeeks, setExtendWeeks] = useState(1);
   const [pendingDiscard, startDiscard] = useTransition();
   const [pendingSubmit, startSubmit] = useTransition();
   const [pendingUpdate, startUpdate] = useTransition();
@@ -171,14 +173,10 @@ function useMentorFeedbackForm({
     !isEditing &&
     (submitted || hasExistingFeedback);
 
-  const extendMax = extendUnit === "days" ? 365 : 52;
-  const parsedExtendAmount =
-    extendAmount.trim() === "" ? NaN : Number(extendAmount);
   const isExtendAmountValid =
-    Number.isFinite(parsedExtendAmount) &&
-    Number.isInteger(parsedExtendAmount) &&
-    parsedExtendAmount >= 1 &&
-    parsedExtendAmount <= extendMax;
+    Number.isInteger(extendWeeks) &&
+    extendWeeks >= 1 &&
+    extendWeeks <= MAX_EXTENSION_WEEKS;
 
   function discardDraft() {
     if (!draft || !checkInId) return;
@@ -312,15 +310,13 @@ function useMentorFeedbackForm({
           markSubmitted();
         } else {
           if (!isExtendAmountValid) {
-            toast.error("Indica uma duração válida (mínimo 1)");
+            toast.error("Prolonga pelo menos 1 semana");
             return;
           }
-          const amount = parsedExtendAmount;
           const fd = new FormData();
           fd.set("node_id", nodeId);
           fd.set("path_id", pathId);
-          fd.set("unit", extendUnit);
-          fd.set("amount", String(amount));
+          fd.set("weeks", String(extendWeeks));
           await extendLevelWeek(fd);
 
           if (
@@ -360,10 +356,8 @@ function useMentorFeedbackForm({
     uploading,
     decision,
     setDecision,
-    extendUnit,
-    setExtendUnit,
-    extendAmount,
-    setExtendAmount,
+    extendWeeks,
+    setExtendWeeks,
     pendingDiscard,
     pendingSubmit,
     pendingUpdate,
@@ -665,50 +659,22 @@ export function MentorDecisionAndSubmit({ className }: { className?: string }) {
         ) : null}
 
         {form.decision === "extend" ? (
-          <div className="space-y-1.5 rounded-xl border border-white/10 bg-black/20 p-4">
-            <Label htmlFor="extend-amount">Duração</Label>
-            <div className="flex items-center gap-3">
-              <Input
-                id="extend-amount"
-                type="number"
-                min={1}
-                max={form.extendUnit === "days" ? 365 : 52}
-                step={1}
-                value={form.extendAmount}
-                onChange={(e) => form.setExtendAmount(e.target.value)}
-                className="h-9 w-20 shrink-0 border-white/10 bg-black/30"
-              />
-              <div
-                className="ml-auto inline-flex h-9 shrink-0 items-stretch overflow-hidden rounded-lg border border-white/10 bg-black/30"
-                role="group"
-                aria-label="Unidade de duração"
-              >
-                <button
-                  type="button"
-                  onClick={() => form.setExtendUnit("days")}
-                  className={cn(
-                    "px-3 text-xs font-medium transition-colors",
-                    form.extendUnit === "days"
-                      ? "bg-white/10 text-foreground"
-                      : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-                  )}
-                >
-                  Dias
-                </button>
-                <button
-                  type="button"
-                  onClick={() => form.setExtendUnit("weeks")}
-                  className={cn(
-                    "px-3 text-xs font-medium transition-colors",
-                    form.extendUnit === "weeks"
-                      ? "bg-white/10 text-foreground"
-                      : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-                  )}
-                >
-                  Semanas
-                </button>
-              </div>
-            </div>
+          <div className="space-y-2 rounded-xl border border-white/10 bg-black/20 p-4">
+            <Label>Prolongar o nível em</Label>
+            <WeekStepper
+              label="Semanas a prolongar"
+              value={form.extendWeeks}
+              onChange={form.setExtendWeeks}
+              min={1}
+              max={MAX_EXTENSION_WEEKS}
+            />
+            <p className="text-xs text-muted-foreground">
+              {form.node.due_date
+                ? `Novo prazo: ${formatDate(addWeeksToDate(form.node.due_date, form.extendWeeks))}. `
+                : null}
+              Os níveis seguintes avançam{" "}
+              {form.extendWeeks === 1 ? "1 semana" : `${form.extendWeeks} semanas`}.
+            </p>
           </div>
         ) : null}
       </div>

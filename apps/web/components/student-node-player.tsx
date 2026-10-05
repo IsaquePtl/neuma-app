@@ -11,6 +11,8 @@ import { isPlayableVideoUrl } from "@/components/video-embed";
 import { CheckpointQuiz } from "@/components/checkpoint-quiz";
 import { SessionBookingSection } from "@/components/session-booking-section";
 import { SupportMediaToggle } from "@/components/support-media-toggle";
+import { PhaseReviewChecklist } from "@/components/phase-review-checklist";
+import type { PhaseReview } from "@/lib/nodes/phase-review";
 import { markNodeSeen } from "@/lib/actions/journey-level";
 import { formatDate, nodeKindLabel, phaseKeyLabel } from "@/lib/labels";
 import {
@@ -195,23 +197,41 @@ function GateControls({
   canSubmitCheckIn = true,
   blockedMessage = null,
   preview = false,
+  pathId,
+  phaseCheckpoint = null,
 }: {
   node: StudentNode;
   practiceStyle?: boolean;
   canSubmitCheckIn?: boolean;
   blockedMessage?: string | null;
   preview?: boolean;
+  pathId?: string;
+  phaseCheckpoint?: PhaseReview | null;
 }) {
   const showQuiz =
     node.kind === "milestone" || nodeUsesQuizGate(node.pass_rule);
+  const quizGate = nodeUsesQuizGate(node.pass_rule);
+  const phase =
+    phaseCheckpoint && quizGate && phaseCheckpoint.items.length > 0
+      ? {
+          label: phaseCheckpoint.phaseLabel,
+          reviewCount: phaseCheckpoint.items.length,
+          pendingReview: phaseCheckpoint.reviewRequired
+            ? phaseCheckpoint.pendingCount
+            : 0,
+        }
+      : null;
 
   return (
     <>
       {showQuiz ? (
         <CheckpointQuiz
           nodeId={node.id}
-          quizGate={nodeUsesQuizGate(node.pass_rule)}
+          quizGate={quizGate}
           passScore={node.pass_score}
+          preview={preview}
+          pathId={pathId}
+          phase={node.status === "completed" ? null : phase}
         />
       ) : null}
       <CheckInActions
@@ -235,6 +255,7 @@ function SessionLayout({
   canSubmitCheckIn = true,
   blockedMessage = null,
   preview = false,
+  pathId,
 }: {
   node: StudentNode;
   levelNumber: number;
@@ -245,6 +266,7 @@ function SessionLayout({
   canSubmitCheckIn?: boolean;
   blockedMessage?: string | null;
   preview?: boolean;
+  pathId?: string;
 }) {
   return (
     <div className="min-w-0 w-full max-w-full space-y-5">
@@ -276,6 +298,7 @@ function SessionLayout({
         canSubmitCheckIn={canSubmitCheckIn}
         blockedMessage={blockedMessage}
         preview={preview}
+        pathId={pathId}
       />
     </div>
   );
@@ -287,12 +310,14 @@ function RecordingLayout({
   canSubmitCheckIn = true,
   blockedMessage = null,
   preview = false,
+  pathId,
 }: {
   node: StudentNode;
   levelNumber: number;
   canSubmitCheckIn?: boolean;
   blockedMessage?: string | null;
   preview?: boolean;
+  pathId?: string;
 }) {
   return (
     <div className="min-w-0 w-full max-w-full space-y-6">
@@ -321,6 +346,7 @@ function RecordingLayout({
         canSubmitCheckIn={canSubmitCheckIn}
         blockedMessage={blockedMessage}
         preview={preview}
+        pathId={pathId}
       />
     </div>
   );
@@ -332,12 +358,14 @@ function PracticeLayout({
   canSubmitCheckIn = true,
   blockedMessage = null,
   preview = false,
+  pathId,
 }: {
   node: StudentNode;
   levelNumber: number;
   canSubmitCheckIn?: boolean;
   blockedMessage?: string | null;
   preview?: boolean;
+  pathId?: string;
 }) {
   const hasVideo = isPlayableVideoUrl(node.resource_url);
 
@@ -372,6 +400,7 @@ function PracticeLayout({
         canSubmitCheckIn={canSubmitCheckIn}
         blockedMessage={blockedMessage}
         preview={preview}
+        pathId={pathId}
       />
     </div>
   );
@@ -383,12 +412,16 @@ function CheckpointLayout({
   canSubmitCheckIn = true,
   blockedMessage = null,
   preview = false,
+  pathId,
+  phaseCheckpoint = null,
 }: {
   node: StudentNode;
   levelNumber: number;
   canSubmitCheckIn?: boolean;
   blockedMessage?: string | null;
   preview?: boolean;
+  pathId?: string;
+  phaseCheckpoint?: PhaseReview | null;
 }) {
   return (
     <div className="min-w-0 w-full max-w-full space-y-6">
@@ -400,11 +433,17 @@ function CheckpointLayout({
         </div>
       ) : null}
 
+      {phaseCheckpoint?.reviewRequired && !preview ? (
+        <PhaseReviewChecklist review={phaseCheckpoint} />
+      ) : null}
+
       <GateControls
         node={node}
         canSubmitCheckIn={canSubmitCheckIn}
         blockedMessage={blockedMessage}
         preview={preview}
+        pathId={pathId}
+        phaseCheckpoint={phaseCheckpoint}
       />
 
       {node.resource_url ? (
@@ -428,6 +467,8 @@ export function StudentNodePlayer({
   canSubmitCheckIn = true,
   checkInBlockedMessage = null,
   preview = false,
+  pathId,
+  phaseCheckpoint = null,
 }: {
   node: StudentNode;
   levelNumber: number;
@@ -438,6 +479,9 @@ export function StudentNodePlayer({
   canSubmitCheckIn?: boolean;
   checkInBlockedMessage?: string | null;
   preview?: boolean;
+  pathId?: string;
+  /** Present when this level is the checkpoint that closes its phase. */
+  phaseCheckpoint?: PhaseReview | null;
 }) {
   const calUser =
     calUsername ||
@@ -456,6 +500,7 @@ export function StudentNodePlayer({
         canSubmitCheckIn={canSubmitCheckIn}
         blockedMessage={checkInBlockedMessage}
         preview={preview}
+        pathId={pathId}
       />
     );
   }
@@ -468,6 +513,7 @@ export function StudentNodePlayer({
         canSubmitCheckIn={canSubmitCheckIn}
         blockedMessage={checkInBlockedMessage}
         preview={preview}
+        pathId={pathId}
       />
     );
   }
@@ -480,6 +526,8 @@ export function StudentNodePlayer({
         canSubmitCheckIn={canSubmitCheckIn}
         blockedMessage={checkInBlockedMessage}
         preview={preview}
+        pathId={pathId}
+        phaseCheckpoint={phaseCheckpoint}
       />
     );
   }
@@ -491,6 +539,7 @@ export function StudentNodePlayer({
       canSubmitCheckIn={canSubmitCheckIn}
       blockedMessage={checkInBlockedMessage}
       preview={preview}
+      pathId={pathId}
     />
   );
 }

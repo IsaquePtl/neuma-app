@@ -229,6 +229,9 @@ export async function completeSignupProfile(input: {
   }
 
   const fullName = composeFullName(firstName, lastName);
+  const { isBillingEnabled } = await import("@/lib/billing/access");
+  const billingOn = isBillingEnabled();
+
   const { error } = await supabase.from("profiles").upsert(
     {
       id: user.id,
@@ -236,6 +239,8 @@ export async function completeSignupProfile(input: {
       age,
       gender,
       email: user.email ?? null,
+      // Só incompleto enquanto falta o pagamento do signup.
+      signup_incomplete: billingOn,
     },
     { onConflict: "id" },
   );
@@ -255,6 +260,21 @@ export async function completeSignupProfile(input: {
       gender,
     },
   });
+
+  // OAuth a meio do signup → lead de marketing + email de retoma.
+  if (billingOn && user.email) {
+    const { markOAuthSignupIncomplete } = await import(
+      "@/lib/actions/signup-leads"
+    );
+    await markOAuthSignupIncomplete({
+      profileId: user.id,
+      email: user.email,
+      firstName,
+      lastName,
+      age,
+      gender,
+    });
+  }
 
   revalidatePath("/", "layout");
   return { ok: true as const };
@@ -312,7 +332,7 @@ export async function login(formData: FormData) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, signup_incomplete")
     .eq("id", data.user.id)
     .maybeSingle();
 
@@ -330,6 +350,13 @@ export async function login(formData: FormData) {
     (/^\/1-1\/[A-Za-z0-9_-]+$/.test(next) || isOneToOneInvitePath(next))
   ) {
     redirect(next);
+  }
+  if (profile?.signup_incomplete) {
+    const { setSignupFinishingCookieAction } = await import(
+      "@/lib/actions/signup-finishing"
+    );
+    await setSignupFinishingCookieAction();
+    redirect("/login/signup");
   }
   redirect(profile?.role === "mentor" ? "/studio" : "/home");
 }

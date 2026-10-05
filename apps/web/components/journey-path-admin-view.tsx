@@ -287,41 +287,53 @@ export function JourneyPathAdminView({
                   <span
                     aria-hidden
                     className={cn(
-                      "student-path-rail absolute bottom-0 w-px",
-                      isPast || isActive ? "bg-white/15" : "bg-white/10",
+                      "student-path-rail absolute bottom-0 left-[2rem] w-px -translate-x-1/2",
+                      isActive
+                        ? "top-[calc(0.125rem+3.5rem)]"
+                        : isPast
+                          ? "top-[calc(0.125rem+2.75rem)]"
+                          : "top-[calc(0.125rem+2.5rem)]",
+                      isPast || isActive ? "bg-white/20" : "bg-white/15",
                     )}
-                    style={{
-                      top: isActive ? "3.5rem" : "2.75rem",
-                      left: isActive ? "1.7rem" : "1.35rem",
-                    }}
                   />
                 ) : null}
 
-                <div className="flex flex-col items-center pt-0.5">
+                <div className="ml-1 flex w-14 shrink-0 flex-col items-center pt-0.5">
                   <span
                     className={cn(
-                      "student-path-marker relative z-10 grid shrink-0 place-items-center rounded-full transition-transform",
-                      isActive &&
-                        "size-14 neuma-gradient text-white shadow-[0_0_28px_-4px_color-mix(in_oklch,var(--neuma-coral)_55%,transparent)]",
-                      isPast &&
-                        !isActive &&
-                        "size-11 neuma-gradient text-white/90 opacity-45",
-                      isFuture &&
-                        "size-10 border-2 border-white/10 bg-white/[0.03] text-muted-foreground/50",
+                      "relative z-10 inline-grid shrink-0 place-items-center rounded-full",
+                      isActive ? "size-14" : isPast ? "size-11" : "size-10",
                     )}
                   >
-                    {isFuture ? (
-                      <Lock className="size-3.5 opacity-70" />
-                    ) : (
-                      <span
-                        className={cn(
-                          "font-semibold tabular-nums",
-                          isActive ? "text-base" : "text-sm",
-                        )}
-                      >
-                        {levelNum}
-                      </span>
-                    )}
+                    <span
+                      aria-hidden
+                      className="absolute inset-0 rounded-full bg-[var(--neuma-ink)]"
+                    />
+                    <span
+                      className={cn(
+                        "student-path-marker relative grid size-full place-items-center rounded-full transition-transform",
+                        isActive &&
+                          "neuma-gradient text-white shadow-[0_0_28px_-4px_color-mix(in_oklch,var(--neuma-coral)_55%,transparent)]",
+                        isPast &&
+                          !isActive &&
+                          "neuma-gradient text-white/90 opacity-45",
+                        isFuture &&
+                          "border-2 border-white/10 bg-white/[0.03] text-muted-foreground/50",
+                      )}
+                    >
+                      {isFuture ? (
+                        <Lock className="size-3.5 opacity-70" />
+                      ) : (
+                        <span
+                          className={cn(
+                            "font-semibold tabular-nums",
+                            isActive ? "text-base" : "text-sm",
+                          )}
+                        >
+                          {levelNum}
+                        </span>
+                      )}
+                    </span>
                   </span>
                 </div>
 

@@ -54,6 +54,10 @@ export type OneToOneInviteStatus =
   | "paid"
   | "expired"
   | "revoked";
+export type SignupLeadStatus =
+  | "pending_payment"
+  | "converted"
+  | "abandoned";
 
 export type Json =
   | string
@@ -87,6 +91,7 @@ export interface Database {
           billing_exempt: boolean;
           is_one_to_one: boolean;
           one_to_one_access_until: string | null;
+          signup_incomplete: boolean;
           created_at: string;
         };
         Insert: {
@@ -109,6 +114,7 @@ export interface Database {
           billing_exempt?: boolean;
           is_one_to_one?: boolean;
           one_to_one_access_until?: string | null;
+          signup_incomplete?: boolean;
           created_at?: string;
         };
         Update: {
@@ -131,6 +137,7 @@ export interface Database {
           billing_exempt?: boolean;
           is_one_to_one?: boolean;
           one_to_one_access_until?: string | null;
+          signup_incomplete?: boolean;
           created_at?: string;
         };
         Relationships: [
@@ -234,11 +241,13 @@ export interface Database {
           resource_url: string | null;
           content_body: string | null;
           week_extensions: number;
+          extended_weeks: number;
           pass_rule: NodePassRule;
           pass_score: number | null;
           check_in_kind: CheckInKind | null;
           phase_key: string | null;
           node_code: string | null;
+          is_phase_checkpoint: boolean;
           created_at: string;
         };
         Insert: {
@@ -255,11 +264,13 @@ export interface Database {
           content_body?: string | null;
           resource_url?: string | null;
           week_extensions?: number;
+          extended_weeks?: number;
           pass_rule?: NodePassRule;
           pass_score?: number | null;
           check_in_kind?: CheckInKind | null;
           phase_key?: string | null;
           node_code?: string | null;
+          is_phase_checkpoint?: boolean;
           created_at?: string;
         };
         Update: {
@@ -276,11 +287,13 @@ export interface Database {
           resource_url?: string | null;
           content_body?: string | null;
           week_extensions?: number;
+          extended_weeks?: number;
           pass_rule?: NodePassRule;
           pass_score?: number | null;
           check_in_kind?: CheckInKind | null;
           phase_key?: string | null;
           node_code?: string | null;
+          is_phase_checkpoint?: boolean;
           created_at?: string;
         };
         Relationships: [
@@ -426,6 +439,39 @@ export interface Database {
         Relationships: [
           {
             foreignKeyName: "level_feedbacks_node_id_fkey";
+            columns: ["node_id"];
+            isOneToOne: false;
+            referencedRelation: "nodes";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      node_visits: {
+        Row: {
+          student_id: string;
+          node_id: string;
+          visited_at: string;
+        };
+        Insert: {
+          student_id: string;
+          node_id: string;
+          visited_at?: string;
+        };
+        Update: {
+          student_id?: string;
+          node_id?: string;
+          visited_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "node_visits_student_id_fkey";
+            columns: ["student_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "node_visits_node_id_fkey";
             columns: ["node_id"];
             isOneToOne: false;
             referencedRelation: "nodes";
@@ -1140,6 +1186,7 @@ export interface Database {
           check_in_kind: CheckInKind | null;
           phase_key: string | null;
           node_code: string | null;
+          is_phase_checkpoint: boolean;
           quiz_questions: Json;
           created_at: string;
         };
@@ -1159,6 +1206,7 @@ export interface Database {
           check_in_kind?: CheckInKind | null;
           phase_key?: string | null;
           node_code?: string | null;
+          is_phase_checkpoint?: boolean;
           quiz_questions?: Json;
           created_at?: string;
         };
@@ -1178,6 +1226,7 @@ export interface Database {
           check_in_kind?: CheckInKind | null;
           phase_key?: string | null;
           node_code?: string | null;
+          is_phase_checkpoint?: boolean;
           quiz_questions?: Json;
           created_at?: string;
         };
@@ -1924,12 +1973,82 @@ export interface Database {
         };
         Relationships: [];
       };
+      signup_leads: {
+        Row: {
+          id: string;
+          email: string;
+          first_name: string;
+          last_name: string;
+          full_name: string;
+          age: number;
+          gender: ProfileGender;
+          resume_token: string;
+          status: SignupLeadStatus;
+          selected_plan: BillingPlan | null;
+          stripe_checkout_session_id: string | null;
+          converted_profile_id: string | null;
+          resume_email_sent_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          email: string;
+          first_name: string;
+          last_name: string;
+          full_name: string;
+          age: number;
+          gender: ProfileGender;
+          resume_token: string;
+          status?: SignupLeadStatus;
+          selected_plan?: BillingPlan | null;
+          stripe_checkout_session_id?: string | null;
+          converted_profile_id?: string | null;
+          resume_email_sent_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          email?: string;
+          first_name?: string;
+          last_name?: string;
+          full_name?: string;
+          age?: number;
+          gender?: ProfileGender;
+          resume_token?: string;
+          status?: SignupLeadStatus;
+          selected_plan?: BillingPlan | null;
+          stripe_checkout_session_id?: string | null;
+          converted_profile_id?: string | null;
+          resume_email_sent_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "signup_leads_converted_profile_id_fkey";
+            columns: ["converted_profile_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     Functions: {
       is_mentor: {
         Args: Record<string, never>;
         Returns: boolean;
+      };
+      reorder_path_nodes: {
+        Args: { p_path_id: string; p_ids: string[] };
+        Returns: undefined;
+      };
+      reorder_template_nodes: {
+        Args: { p_template_id: string; p_ids: string[] };
+        Returns: undefined;
       };
       mentor_dashboard_facts: {
         Args: Record<string, never>;
@@ -1965,6 +2084,7 @@ export interface Database {
       billing_plan: BillingPlan;
       subscription_status: SubscriptionStatus;
       one_to_one_invite_status: OneToOneInviteStatus;
+      signup_lead_status: SignupLeadStatus;
     };
   };
 }

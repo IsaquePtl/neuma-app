@@ -191,6 +191,22 @@ export async function GET(request: NextRequest) {
     await ensureDefaultMentorForStudent(data.user.id);
   }
 
+  // Signup OAuth: marcar incompleto até pagar (evita /subscrever).
+  if (intent === "signup") {
+    try {
+      const { isBillingEnabled } = await import("@/lib/billing/access");
+      if (isBillingEnabled()) {
+        const admin = createAdminClient();
+        await admin
+          .from("profiles")
+          .update({ signup_incomplete: true })
+          .eq("id", data.user.id);
+      }
+    } catch (err) {
+      console.error("[auth.callback] signup_incomplete:", err);
+    }
+  }
+
   await supabase.auth.getSession();
 
   const destination =

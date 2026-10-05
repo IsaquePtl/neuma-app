@@ -5,10 +5,11 @@ import Cal, { getCalApi } from "@calcom/embed-react";
 import { Phone } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
+import { getCalEventTypeSlug, getCalUsername } from "@/lib/cal-config";
 import { cn } from "@/lib/utils";
 
-const DEFAULT_CAL_USER =
-  process.env.NEXT_PUBLIC_CALCOM_USERNAME || "isaque-portilho-nutfa9";
+const DEFAULT_CAL_USER = getCalUsername();
+const DEFAULT_CAL_EVENT = getCalEventTypeSlug();
 
 /** Config do botão element-click (oficial Cal.com). */
 const CAL_DATA_CONFIG = JSON.stringify({
@@ -34,6 +35,8 @@ export type CalBookingSuccessData = {
   videoCallUrl?: string;
   isReschedule?: boolean;
   previousUid?: string | null;
+  attendeeEmail?: string;
+  attendeeName?: string;
 };
 
 export type CalBookingCancelledData = {
@@ -41,16 +44,16 @@ export type CalBookingCancelledData = {
 };
 
 type CalLinkProps = {
-  /** Ex.: `isaque-portilho-nutfa9/30min`. */
+  /** Ex.: `isaque-portilho-nutfa9/neuma1-1`. */
   calLink?: string;
-  /** Namespace oficial Cal (`30min` | `sessao-de-duvidas`). */
+  /** Namespace oficial Cal (igual ao slug do event type). */
   namespace?: string;
   eventType?: string;
 };
 
 function resolveCalLink({
   calLink,
-  eventType = "30min",
+  eventType = DEFAULT_CAL_EVENT,
 }: Pick<CalLinkProps, "calLink" | "eventType">) {
   return calLink ?? `${DEFAULT_CAL_USER}/${eventType}`;
 }
@@ -66,10 +69,21 @@ function asString(value: unknown): string | undefined {
   return t.length > 0 ? t : undefined;
 }
 
+function firstAttendee(source: Record<string, unknown> | null) {
+  const attendees = source?.attendees;
+  if (!Array.isArray(attendees) || attendees.length === 0) return null;
+  return asRecord(attendees[0]);
+}
+
 function extractBookingData(e: unknown): CalBookingSuccessData {
   const detail = asRecord((e as { detail?: unknown })?.detail);
   const data = asRecord(detail?.data) ?? {};
   const booking = asRecord(data.booking);
+  const attendee =
+    firstAttendee(data) ??
+    firstAttendee(booking) ??
+    asRecord(data.attendee) ??
+    asRecord(booking?.attendee);
 
   return {
     uid:
@@ -80,12 +94,20 @@ function extractBookingData(e: unknown): CalBookingSuccessData {
     startTime:
       asString(data.startTime) ??
       asString(booking?.startTime) ??
+      asString(data.start) ??
+      asString(booking?.start) ??
       asString(data.date),
-    endTime: asString(data.endTime) ?? asString(booking?.endTime),
+    endTime:
+      asString(data.endTime) ??
+      asString(booking?.endTime) ??
+      asString(data.end) ??
+      asString(booking?.end),
     status: asString(data.status) ?? asString(booking?.status),
     videoCallUrl:
       asString(data.videoCallUrl) ??
       asString(booking?.videoCallUrl) ??
+      asString(data.meetingUrl) ??
+      asString(booking?.meetingUrl) ??
       asString(asRecord(booking?.metadata)?.videoCallUrl as string | undefined),
     previousUid:
       asString(data.rescheduleUid) ??
@@ -93,6 +115,14 @@ function extractBookingData(e: unknown): CalBookingSuccessData {
       asString(booking?.rescheduleUid) ??
       asString(booking?.fromReschedule) ??
       null,
+    attendeeEmail:
+      asString(attendee?.email) ??
+      asString(data.attendeeEmail) ??
+      asString(booking?.attendeeEmail),
+    attendeeName:
+      asString(attendee?.name) ??
+      asString(data.attendeeName) ??
+      asString(booking?.attendeeName),
   };
 }
 
@@ -238,7 +268,7 @@ type CalBookButtonProps = CalLinkProps & {
 export function CalBookButton({
   calLink,
   namespace,
-  eventType = "30min",
+  eventType = DEFAULT_CAL_EVENT,
   className,
   label = "Agendar chamada",
   description,
@@ -353,8 +383,8 @@ type CalEmbedProps = CalLinkProps & {
 /** Inline embed — preferir `CalBookButton` (modal). */
 export function CalEmbed({
   calLink,
-  namespace = "30min",
-  eventType = "30min",
+  namespace = DEFAULT_CAL_EVENT,
+  eventType = DEFAULT_CAL_EVENT,
   className,
   compact = true,
 }: CalEmbedProps) {
@@ -401,8 +431,8 @@ export function CalEmbed({
 
 export function CalEmbedDisclosure({
   calLink,
-  namespace = "30min",
-  eventType = "30min",
+  namespace = DEFAULT_CAL_EVENT,
+  eventType = DEFAULT_CAL_EVENT,
   summary = "Abrir agenda Cal.com",
   id = "agendar",
 }: {

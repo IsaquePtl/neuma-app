@@ -42,6 +42,8 @@ export type StudentNode = {
   description: string | null;
   week_number: number | null;
   duration_weeks: number | null;
+  /** Weeks added by "Prolongar prazo" (outside the week budget). */
+  extended_weeks?: number;
   kind: NodeKind;
   status: NodeStatus;
   due_date: string | null;
@@ -53,6 +55,7 @@ export type StudentNode = {
   check_in_kind: CheckInKind | null;
   phase_key: string | null;
   node_code: string | null;
+  is_phase_checkpoint: boolean;
 };
 
 export type StudentCheckIn = {
@@ -280,6 +283,7 @@ export function mapNode(n: {
   description: string | null;
   week_number: number | null;
   duration_weeks?: number | null;
+  extended_weeks?: number | null;
   kind: NodeKind;
   status: NodeStatus;
   due_date: string | null;
@@ -291,6 +295,7 @@ export function mapNode(n: {
   check_in_kind?: CheckInKind | null;
   phase_key?: string | null;
   node_code?: string | null;
+  is_phase_checkpoint?: boolean | null;
 }): StudentNode {
   return {
     id: n.id,
@@ -298,6 +303,7 @@ export function mapNode(n: {
     description: n.description,
     week_number: n.week_number,
     duration_weeks: n.duration_weeks ?? null,
+    extended_weeks: n.extended_weeks ?? 0,
     kind: n.kind,
     status: n.status,
     due_date: n.due_date,
@@ -309,6 +315,7 @@ export function mapNode(n: {
     check_in_kind: n.check_in_kind ?? null,
     phase_key: n.phase_key ?? null,
     node_code: n.node_code ?? null,
+    is_phase_checkpoint: Boolean(n.is_phase_checkpoint),
   };
 }
 
@@ -324,7 +331,7 @@ export async function loadMyPathWithNodes(studentId: string): Promise<{
   const { data: nodes } = await supabase
     .from("nodes")
     .select(
-      "id, title, description, week_number, duration_weeks, kind, status, due_date, resource_url, content_body, order_index, pass_rule, pass_score, check_in_kind, phase_key, node_code",
+      "id, title, description, week_number, duration_weeks, extended_weeks, kind, status, due_date, resource_url, content_body, order_index, pass_rule, pass_score, check_in_kind, phase_key, node_code, is_phase_checkpoint",
     )
     .eq("path_id", pathRow.id)
     .order("order_index", { ascending: true });

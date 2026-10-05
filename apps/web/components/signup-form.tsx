@@ -9,6 +9,7 @@ import {
   createSignupAccount,
   setSignupPassword,
 } from "@/lib/actions/auth";
+import { createSignupLead } from "@/lib/actions/signup-leads";
 import {
   isValidEmail,
   isValidPassword,
@@ -23,8 +24,10 @@ import {
 } from "@/lib/auth/signup-profile";
 import {
   hasSignupFinishingCookie,
+  readSignupLeadToken,
   readSignupWizardStep,
   setSignupFinishingCookie,
+  writeSignupLeadToken,
   writeSignupWizardStep,
   type SignupWizardStep,
 } from "@/lib/auth/signup-wizard";
@@ -78,11 +81,21 @@ export function SignupWizard({
   error: initialError,
   oauthFromLogin = false,
   billingEnabled = false,
+  resumeLead = null,
   onStepChange,
 }: {
   error?: string;
   oauthFromLogin?: boolean;
   billingEnabled?: boolean;
+  /** Lead válido de ?resume= — aterra no passo plano. */
+  resumeLead?: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    age: number;
+    gender: string;
+    resumeToken: string;
+  } | null;
   onStepChange?: (step: SignupWizardStep) => void;
 }) {
   const [step, setStepState] = useState<SignupWizardStep>("identity");
@@ -98,6 +111,9 @@ export function SignupWizard({
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [oauthMode, setOauthMode] = useState(oauthFromLogin);
+  const [leadToken, setLeadToken] = useState<string | null>(
+    resumeLead?.resumeToken ?? null,
+  );
 
   function setStep(next: SignupWizardStep) {
     setStepState(next);
@@ -108,6 +124,24 @@ export function SignupWizard({
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      // Retoma por email (?resume=) — sem sessão Auth.
+      if (resumeLead && billingEnabled) {
+        writeSignupLeadToken(resumeLead.resumeToken);
+        setSignupFinishingCookie();
+        writeSignupWizardStep("plan");
+        if (!cancelled) {
+          setLeadToken(resumeLead.resumeToken);
+          setFirstName(resumeLead.firstName);
+          setLastName(resumeLead.lastName);
+          setEmail(resumeLead.email);
+          setAge(String(resumeLead.age));
+          setGender(resumeLead.gender);
+          setStep("plan");
+          setHydrated(true);
+        }
+        return;
+      }
+
       const supabase = createClient();
       const {
         data: { user },
@@ -115,17 +149,35 @@ export function SignupWizard({
 
       const saved = readSignupWizardStep();
       const draft = readSignupProfileDraft();
+      const storedLeadToken = readSignupLeadToken();
       const finishing =
         hasSignupFinishingCookie() ||
         saved === "profile" ||
         saved === "plan" ||
         saved === "credentials" ||
-        Boolean(user);
+        Boolean(user) ||
+        Boolean(storedLeadToken);
       const fromLoginOAuth = oauthFromLogin && finishing && Boolean(user);
       const oauth = Boolean(user && isOAuthUser(user));
 
       if (fromLoginOAuth || oauth) {
         setOauthMode(true);
+      }
+
+      // Lead em sessionStorage (sem auth) — voltar ao passo plano.
+      if (
+        !user &&
+        storedLeadToken &&
+        billingEnabled &&
+        (saved === "plan" || finishing)
+      ) {
+        setSignupFinishingCookie();
+        if (!cancelled) {
+          setLeadToken(storedLeadToken);
+          setStep("plan");
+          setHydrated(true);
+        }
+        return;
       }
 
       if (user && finishing) {
@@ -161,7 +213,7 @@ export function SignupWizard({
             setStep("identity");
           }
         } else if (!cancelled) {
-          // Conta já criada no passo 1 — avançar para plano / password / perfil.
+          // OAuth / conta já criada — avançar para plano / password / perfil.
           if (billingEnabled) setStep("plan");
           else setStep(oauth ? "profile" : "credentials");
         }
@@ -175,7 +227,7 @@ export function SignupWizard({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oauthFromLogin]);
+  }, [oauthFromLogin, resumeLead]);
 
   useEffect(() => {
     if (step !== "profile") return;
@@ -236,7 +288,20 @@ export function SignupWizard({
     setError(undefined);
 
     startTransition(async () => {
-      // Sem password → conta provisória para o Checkout Stripe.
+      if (billingEnabled) {
+        // Billing on: só lead de marketing — conta Auth só após pagamento.
+        const result = await createSignupLead(fd);
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        writeSignupLeadToken(result.resumeToken);
+        setLeadToken(result.resumeToken);
+        goAfterIdentity();
+        return;
+      }
+
+      // Billing off: cria conta de imediato (fluxo antigo).
       const result = await createSignupAccount(fd);
       if (!result.ok) {
         setError(result.error);
@@ -288,7 +353,12 @@ export function SignupWizard({
         </div>
         <PlanPicker
           title="Escolhe o teu plano"
-          cancelReturnPath="/login/signup"
+          cancelReturnPath={
+            leadToken
+              ? `/login/signup?resume=${encodeURIComponent(leadToken)}`
+              : "/login/signup"
+          }
+          signupResumeToken={leadToken}
         />
       </div>
     );

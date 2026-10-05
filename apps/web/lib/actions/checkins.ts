@@ -139,10 +139,8 @@ export async function submitCheckIn(formData: FormData) {
     if (node && !nodeRequiresCheckIn(node.pass_rule)) {
       throw new Error("Este nível não pede check-in.");
     }
-    // Só vídeo conta o slot; texto = mentoria 1:1 (allowance.ts).
-    if (kind === "video") {
-      await assertCanSubmitCheckIn(supabase, nodeId, user.id);
-    }
+    // 1 check-in por nível (qualquer kind); novo só com prolongar / revisão.
+    await assertCanSubmitCheckIn(supabase, nodeId, user.id);
   }
 
   const { data: inserted, error } = await supabase

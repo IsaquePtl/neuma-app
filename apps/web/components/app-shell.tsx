@@ -159,8 +159,21 @@ const MENTOR_ROOT_PATHS = new Set([
   "/studio/settings",
 ]);
 
-function isShellRootPage(pathname: string, role: "mentor" | "student") {
-  if (role === "student") return STUDENT_ROOT_PATHS.has(pathname);
+function isShellRootPage(
+  pathname: string,
+  role: "mentor" | "student",
+  searchParams?: URLSearchParams | { get: (key: string) => string | null },
+) {
+  if (role === "student") {
+    // Onboarding embutido — mesmo layout de página interna (ex. /session/review).
+    if (
+      (pathname === "/home" || pathname === "/path") &&
+      searchParams?.get("onboarding") === "1"
+    ) {
+      return false;
+    }
+    return STUDENT_ROOT_PATHS.has(pathname);
+  }
   return MENTOR_ROOT_PATHS.has(pathname);
 }
 
@@ -170,9 +183,21 @@ function shellBackHref(
   searchParams?: URLSearchParams | { get: (key: string) => string | null },
 ) {
   if (role === "student") {
+    if (pathname === "/home" && searchParams?.get("onboarding") === "1") {
+      return "/home";
+    }
+    if (pathname === "/path" && searchParams?.get("onboarding") === "1") {
+      return "/path";
+    }
+    const quizMatch = pathname.match(/^\/path\/([^/]+)\/quiz\/?$/);
+    if (quizMatch) return `/path/${quizMatch[1]}`;
     if (pathname.startsWith("/path/")) return "/path";
     if (pathname.startsWith("/session/")) return "/session";
     if (pathname === "/checkins" || pathname.startsWith("/checkins/new")) {
+      const nodeId = searchParams?.get("node")?.trim();
+      if (nodeId && pathname.startsWith("/checkins/new")) {
+        return `/path/${nodeId}`;
+      }
       return "/session";
     }
     if (pathname.startsWith("/checkins/")) return "/checkins";
@@ -401,8 +426,10 @@ export function AppShell({
 
   const drawerItems =
     role === "mentor" ? mentorDrawerItems : studentDrawerItems;
-  const headerPath = pendingHref ?? pathname;
-  const isRootPage = isShellRootPage(headerPath, role);
+  // Com pendingHref (nav optimista) não há query — trata como destino limpo.
+  const isRootPage = pendingHref
+    ? isShellRootPage(pendingHref, role)
+    : isShellRootPage(pathname, role, searchParams);
   const backHref = shellBackHref(pathname, role, searchParams);
 
   useEffect(() => {
@@ -468,12 +495,18 @@ export function AppShell({
   function onNavClick(href?: string) {
     scrollToTop();
     setNavCompact(false);
-    if (href && href !== pathname) {
-      setPendingHref(href);
-      startNavTransition(() => {
-        router.push(href);
-      });
-    }
+    if (!href) return;
+
+    const [targetPath, targetSearch = ""] = href.split("?");
+    const currentSearch = searchParams.toString();
+    const samePlace =
+      targetPath === pathname && targetSearch === currentSearch;
+    if (samePlace) return;
+
+    setPendingHref(targetPath);
+    startNavTransition(() => {
+      router.push(href);
+    });
   }
 
   function onBackClick(href: string) {
@@ -744,7 +777,7 @@ export function AppShell({
           aria-hidden
         />
 
-        <main className="neuma-enter neuma-enter-delay-1 flex w-full min-w-0 flex-1 flex-col px-4 pt-4 pb-[calc(6.5rem+8px)] desktop:px-10 desktop:pb-14 desktop:pt-10">
+        <main className="neuma-enter neuma-enter-delay-1 flex w-full min-w-0 flex-1 flex-col px-4 pt-4 pb-0 desktop:px-10 desktop:pb-14 desktop:pt-10">
           {navPending ? (
             <ScreenLoader />
           ) : (

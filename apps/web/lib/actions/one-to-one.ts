@@ -17,6 +17,7 @@ import {
 } from "@/lib/one-to-one/invite-path";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { CHECKOUT_PAYMENT_METHOD_TYPES } from "@/lib/stripe/checkout-branding";
 import { requireStripe } from "@/lib/stripe/client";
 import { createOneToOnePrice } from "@/lib/stripe/one-to-one";
 import { ensureStripeCustomer } from "@/lib/stripe/sync";
@@ -378,12 +379,11 @@ export async function redeemOneToOneAccount(input: {
 }
 
 export type RedeemCheckoutResult =
-  | { ok: true; checkoutUrl: string }
+  | { ok: true; url: string }
   | { ok: false; error: string };
 
 /**
- * Passo 3 — abre Stripe Checkout (subscription ou one-time) para o convite.
- * Requer sessão autenticada do aluno do convite.
+ * Passo 3 — Checkout hospedado Stripe (subscription ou one-time) para o convite.
  */
 export async function startOneToOneCheckout(input: {
   token: string;
@@ -470,14 +470,16 @@ export async function startOneToOneCheckout(input: {
       invite.billing_mode === "one_time" ? "one_time" : "recurring";
     const durationMonths = Math.max(1, invite.duration_months ?? 1);
 
+    const base = origin.replace(/\/$/, "");
     const session = await stripe.checkout.sessions.create({
       mode: billingMode === "one_time" ? "payment" : "subscription",
       customer: customerId,
       client_reference_id: user.id,
       line_items: [{ price: invite.stripe_price_id, quantity: 1 }],
-      success_url: `${origin.replace(/\/$/, "")}/subscrever/sucesso?session_id={CHECKOUT_SESSION_ID}&one_to_one=1`,
-      cancel_url: `${origin.replace(/\/$/, "")}${oneToOneInvitePath(input.token)}?cancelado=1`,
+      success_url: `${base}/subscrever/sucesso?session_id={CHECKOUT_SESSION_ID}&one_to_one=1`,
+      cancel_url: `${base}${oneToOneInvitePath(input.token)}`,
       locale: "pt",
+      payment_method_types: [...CHECKOUT_PAYMENT_METHOD_TYPES],
       integration_identifier: checkoutIntegrationId("one_to_one"),
       metadata: {
         neuma_invite_id: invite.id,
@@ -522,7 +524,7 @@ export async function startOneToOneCheckout(input: {
       .eq("id", invite.id);
     if (inviteError) return { ok: false, error: inviteError.message };
 
-    return { ok: true, checkoutUrl: session.url };
+    return { ok: true, url: session.url };
   } catch (error) {
     console.error("[one-to-one:checkout]", error);
     return {
@@ -541,7 +543,7 @@ export async function redeemOneToOneInvite(input: {
   password: string;
   firstName: string;
   lastName: string;
-}): Promise<{ ok: true; checkoutUrl: string } | { ok: false; error: string }> {
+}): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
   const account = await redeemOneToOneAccount({
     token: input.token,
     password: input.password,

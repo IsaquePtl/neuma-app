@@ -14,6 +14,7 @@ import {
   cancelCalBookingFromEmbed,
   syncCalBookingFromEmbed,
 } from "@/lib/actions/cal-bookings";
+import { getCalEventTypeSlug, getCalLink } from "@/lib/cal-config";
 import { formatDate, formatDateTime } from "@/lib/labels";
 
 function GoogleMeetMark({ className }: { className?: string }) {
@@ -149,9 +150,9 @@ export function SessionBookingSection({
       <CallBookingCard booking={booking} mentorName={mentorName} />
       {canBookSessions ? (
         <CalBookButton
-          calLink={`${calUser}/30min`}
-          namespace="30min"
-          eventType="30min"
+          calLink={getCalLink(calUser)}
+          namespace={getCalEventTypeSlug()}
+          eventType={getCalEventTypeSlug()}
           label={hasBooking ? "Alterar agendamento" : "Agendar sessão"}
           size={hasBooking ? "default" : "lg"}
           variant={hasBooking ? "secondary" : "default"}
@@ -190,6 +191,8 @@ export function SessionBookingSection({
                     previousUid && previousUid !== data.uid
                       ? previousUid
                       : null,
+                  attendeeEmail: data.attendeeEmail,
+                  attendeeName: data.attendeeName,
                 });
               }
             } catch (err) {

@@ -26,6 +26,11 @@ export default async function StudentLayout({
     redirect("/login?error=perfil-invalido");
   }
 
+  // Signup OAuth/incompleto: terminar registo — nunca /subscrever.
+  if (profile.signup_incomplete) {
+    redirect("/login/signup");
+  }
+
   if (!access.hasAccess) {
     redirect("/subscrever");
   }

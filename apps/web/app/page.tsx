@@ -14,12 +14,16 @@ export default async function Home() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, onboarding_completed")
+    .select("role, onboarding_completed, signup_incomplete")
     .eq("id", user.id)
     .single();
 
   if (profile?.role === "mentor") {
     redirect("/studio");
+  }
+
+  if (profile?.signup_incomplete) {
+    redirect("/login/signup");
   }
 
   redirect("/home");

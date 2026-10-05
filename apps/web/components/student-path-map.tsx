@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, Fragment } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   Lock,
@@ -12,7 +12,8 @@ import {
 } from "lucide-react";
 
 import type { StudentNode } from "@/lib/students/queries";
-import { formatDate, isPhaseBoundary, nodeKindLabel, phaseKeyLabel } from "@/lib/labels";
+import { formatDate, nodeKindLabel, phaseKeyLabel } from "@/lib/labels";
+import { normalizePhaseKey, resolvePhaseCheckpointIds } from "@/lib/nodes/phases";
 import { cn } from "@/lib/utils";
 import type { NodeKind } from "@/lib/types/database.types";
 import {
@@ -43,43 +44,81 @@ function kindAccent(
   return null;
 }
 
+function nearestScrollRoot(el: HTMLElement): HTMLElement | null {
+  let node: HTMLElement | null = el.parentElement;
+  while (node) {
+    const { overflowY } = getComputedStyle(node);
+    if (
+      overflowY === "auto" ||
+      overflowY === "scroll" ||
+      overflowY === "overlay"
+    ) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
+}
+
+export type PathMapReview = {
+  checkpointId: string;
+  pendingIds: string[];
+  done: number;
+  total: number;
+};
+
 export function StudentPathMap({
   nodes,
   unviewedByNodeId = new Map<string, number>(),
+  review = null,
 }: {
   nodes: StudentNode[];
   unviewedByNodeId?: Map<string, number>;
+  /** Failed phase checkpoint: levels still to revisit before the retry. */
+  review?: PathMapReview | null;
 }) {
   const activeIndex = nodes.findIndex((n) => n.status === "active");
-  const activeNodeId =
-    activeIndex >= 0
-      ? nodes[activeIndex]?.id
-      : nodes.find((n) => n.status !== "locked")?.id ?? null;
-  const activeStepRef = useRef<HTMLLIElement>(null);
+  const activeRef = useRef<HTMLLIElement | null>(null);
+
+  const checkpointIds = resolvePhaseCheckpointIds(nodes);
+  const keys = nodes.map((n) => normalizePhaseKey(n.phase_key));
+  const gatedKeys = new Set(
+    nodes.filter((n) => checkpointIds.has(n.id)).map((n) => normalizePhaseKey(n.phase_key)),
+  );
+  const phaseProgress = new Map<string, { done: number; total: number }>();
+  nodes.forEach((n, i) => {
+    const key = keys[i];
+    if (!key) return;
+    const entry = phaseProgress.get(key) ?? { done: 0, total: 0 };
+    entry.total += 1;
+    if (n.status === "completed") entry.done += 1;
+    phaseProgress.set(key, entry);
+  });
+  const pendingReview = new Set(review?.pendingIds ?? []);
 
   useEffect(() => {
-    const el = activeStepRef.current;
+    // Só a partir do nível 5 (índice 4): topo → centrar o actual.
+    if (activeIndex < 4) return;
+    const el = activeRef.current;
     if (!el) return;
 
-    const reducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
+    const scrollRoot = nearestScrollRoot(el);
+    if (scrollRoot) scrollRoot.scrollTop = 0;
+    else window.scrollTo({ top: 0, left: 0, behavior: "auto" });
 
-    // Defer until after AppShell's pathname scrollToTop (parent useEffect).
-    const timer = window.setTimeout(() => {
-      el.scrollIntoView({
-        block: "center",
-        behavior: reducedMotion ? "auto" : "smooth",
-      });
-    }, 0);
+    const timeout = window.setTimeout(() => {
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 100);
 
-    return () => window.clearTimeout(timer);
-  }, [activeNodeId]);
+    return () => window.clearTimeout(timeout);
+  }, [activeIndex]);
 
   return (
     <ol className="student-path-journey relative w-full list-none pl-0">
       {nodes.map((node, i) => {
-        const isActive = node.status === "active" || (activeIndex < 0 && i === 0 && node.status !== "locked");
+        const isActive =
+          node.status === "active" ||
+          (activeIndex < 0 && i === 0 && node.status !== "locked");
         // Passado = antes do activo (ou completed). Futuro = depois do activo.
         const isPast =
           node.status === "completed" ||
@@ -94,32 +133,54 @@ export function StudentPathMap({
         const Icon = kindIcon(node.kind);
         const accent = kindAccent(node.kind);
         const levelNum = i + 1;
+        const key = keys[i];
+        const isPhaseStart = Boolean(key) && (i === 0 || keys[i - 1] !== key);
+        const isPhaseCheckpoint = checkpointIds.has(node.id);
+        const inGatedPhase = Boolean(key && gatedKeys.has(key));
+        // Destaque só dentro da fase, até ao check-point — não por baixo dele.
+        const railInPhase = inGatedPhase && !isPhaseCheckpoint;
+        const needsReview = pendingReview.has(node.id);
+        const reviewOnThis = review?.checkpointId === node.id ? review : null;
+        const progress = key ? phaseProgress.get(key) : undefined;
 
+        const markerSize = isActive ? "size-14" : isPast ? "size-11" : "size-10";
         const marker = (
           <span
             className={cn(
-              "student-path-marker relative z-10 grid shrink-0 place-items-center rounded-full transition-transform",
-              isActive &&
-                "size-14 neuma-gradient text-white shadow-[0_0_28px_-4px_color-mix(in_oklch,var(--neuma-coral)_55%,transparent)]",
-              isPast &&
-                !isActive &&
-                "size-11 neuma-gradient text-white/90 opacity-45",
-              isFuture &&
-                "size-10 border-2 border-white/10 bg-white/[0.03] text-muted-foreground/50",
+              "relative z-10 inline-grid shrink-0 place-items-center rounded-full",
+              markerSize,
             )}
           >
-            {isFuture ? (
-              <Lock className="size-3.5 opacity-70" />
-            ) : (
-              <span
-                className={cn(
-                  "font-semibold tabular-nums",
-                  isActive ? "text-base" : "text-sm",
-                )}
-              >
-                {levelNum}
-              </span>
-            )}
+            {/* Disco opaco: esconde a linha por trás do círculo */}
+            <span
+              aria-hidden
+              className="absolute inset-0 rounded-full bg-[var(--neuma-ink)]"
+            />
+            <span
+              className={cn(
+                "student-path-marker relative grid size-full place-items-center rounded-full transition-transform",
+                isActive &&
+                  "neuma-gradient text-white shadow-[0_0_28px_-4px_color-mix(in_oklch,var(--neuma-coral)_55%,transparent)]",
+                isPast &&
+                  !isActive &&
+                  "neuma-gradient text-white/90 opacity-45",
+                isFuture &&
+                  "border-2 border-white/10 bg-white/[0.03] text-muted-foreground/50",
+              )}
+            >
+              {isFuture ? (
+                <Lock className="size-3.5 opacity-70" />
+              ) : (
+                <span
+                  className={cn(
+                    "font-semibold tabular-nums",
+                    isActive ? "text-base" : "text-sm",
+                  )}
+                >
+                  {levelNum}
+                </span>
+              )}
+            </span>
           </span>
         );
 
@@ -160,9 +221,16 @@ export function StudentPathMap({
                     )}
                   >
                     <Icon className="size-3" />
-                    {nodeKindLabel[node.kind]}
+                    {isPhaseCheckpoint
+                      ? `Check-point · Fecha a ${phaseKeyLabel(key)}`
+                      : nodeKindLabel[node.kind]}
                     {node.week_number ? ` · Sem. ${node.week_number}` : null}
                   </span>
+                  {needsReview ? (
+                    <span className="rounded-full bg-[var(--neuma-orange)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--neuma-orange)]">
+                      Rever
+                    </span>
+                  ) : null}
                 </div>
                 <p
                   className={cn(
@@ -194,6 +262,13 @@ export function StudentPathMap({
                 />
               ) : null}
             </div>
+            {reviewOnThis ? (
+              <p className="mt-2 text-xs text-[var(--neuma-orange)]">
+                {reviewOnThis.done < reviewOnThis.total
+                  ? `Revê os níveis da fase para repetir o quiz · ${reviewOnThis.done} de ${reviewOnThis.total}`
+                  : "Revisão feita — já podes repetir o quiz"}
+              </p>
+            ) : null}
             {isActive ? (
               <ActiveLevelFeedbackHint hasUnviewedFeedback={unviewedCount > 0} />
             ) : null}
@@ -210,52 +285,82 @@ export function StudentPathMap({
 
         return (
           <Fragment key={node.id}>
-            {isPhaseBoundary(nodes, i) ? (
+            {isPhaseStart ? (
               <li className="relative list-none pb-3 pt-1 first:pt-0">
-                <p className="pl-[3.75rem] text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground sm:pl-[4.25rem]">
-                  {phaseKeyLabel(node.phase_key)}
-                </p>
+                {/* Sem linha acima do nível 1; só continua entre fases a meio do percurso */}
+                {i > 0 ? (
+                  <span
+                    aria-hidden
+                    className="student-path-rail absolute inset-y-0 left-[2rem] w-px -translate-x-1/2 bg-white/20"
+                  />
+                ) : null}
+                <div className="flex items-baseline justify-between gap-3 pl-[4.75rem] sm:pl-[5.25rem]">
+                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                    {phaseKeyLabel(key)}
+                  </p>
+                  {progress ? (
+                    <p className="shrink-0 text-[11px] tabular-nums text-muted-foreground/70">
+                      {progress.done}/{progress.total}
+                    </p>
+                  ) : null}
+                </div>
               </li>
             ) : null}
-          <li
-            ref={isActive ? activeStepRef : undefined}
-            data-student-path-active={isActive ? "" : undefined}
-            className={cn(
-              "relative flex gap-4 sm:gap-5",
-              isActive ? "pb-10" : "pb-8",
-              isLast && "pb-2",
-            )}
-          >
-            {!isLast ? (
+            <li
+              ref={isActive ? activeRef : undefined}
+              data-student-path-active={isActive ? "" : undefined}
+              className={cn(
+                "relative flex gap-4 sm:gap-5",
+                isActive ? "pb-10" : "pb-8",
+                isLast && "pb-2",
+              )}
+            >
               <span
                 aria-hidden
                 className={cn(
-                  "student-path-rail absolute bottom-0 w-px",
-                  isPast || isActive ? "bg-white/15" : "bg-white/10",
+                  // Continua entre níveis, mas pára no círculo (não atravessa o marcador)
+                  "student-path-rail absolute bottom-0 left-[2rem] w-px -translate-x-1/2",
+                  isLast && "hidden",
+                  railInPhase
+                    ? "bg-[color-mix(in_oklch,color-mix(in_oklch,var(--neuma-blue)_25%,white)_55%,transparent)]"
+                    : "bg-white/20",
                 )}
                 style={{
-                  top: isActive ? "3.5rem" : "2.75rem",
-                  left: isActive ? "1.7rem" : "1.35rem",
+                  // pt-0.5 + altura do marcador (+ anel do check-point)
+                  top: `calc(0.125rem + ${
+                    isActive ? "3.5rem" : isPast ? "2.75rem" : "2.5rem"
+                  }${isPhaseCheckpoint ? " + 0.25rem" : ""})`,
                 }}
               />
-            ) : null}
 
-            <div className="flex flex-col items-center pt-0.5">{marker}</div>
-
-            {openable ? (
-              <Link
-                href={`/path/${node.id}`}
-                prefetch={true}
-                className="min-w-0 flex-1 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
-              >
-                {body}
-              </Link>
-            ) : (
-              <div className="min-w-0 flex-1 cursor-not-allowed opacity-90">
-                {body}
+              <div className="ml-1 flex w-14 shrink-0 flex-col items-center pt-0.5">
+                {isPhaseCheckpoint ? (
+                  <span className="relative inline-flex rounded-full">
+                    {marker}
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute -inset-1 rounded-full border-2 border-[color-mix(in_oklch,color-mix(in_oklch,var(--neuma-blue)_30%,white)_70%,transparent)]"
+                    />
+                  </span>
+                ) : (
+                  marker
+                )}
               </div>
-            )}
-          </li>
+
+              {openable ? (
+                <Link
+                  href={`/path/${node.id}`}
+                  prefetch={true}
+                  className="min-w-0 flex-1 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
+                >
+                  {body}
+                </Link>
+              ) : (
+                <div className="min-w-0 flex-1 cursor-not-allowed opacity-90">
+                  {body}
+                </div>
+              )}
+            </li>
           </Fragment>
         );
       })}

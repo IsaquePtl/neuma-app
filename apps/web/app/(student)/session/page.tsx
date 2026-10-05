@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 import { CalBookButton } from "@/components/calcom-embed";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
+import { getCalEventTypeSlug, getCalLink } from "@/lib/cal-config";
 import {
   checkInBlockedMessage,
   getCheckInAllowance,
@@ -127,10 +128,10 @@ export default async function StudentSessionPage({
     : "/checkins/new";
 
   const checkInAllowance =
-    activeNode && videoCheckIn
+    activeNode && needsCheckIn
       ? await getCheckInAllowance(supabase, activeNode.id, user!.id)
       : null;
-  const canSubmitCheckIn = !videoCheckIn || (checkInAllowance?.allowed ?? true);
+  const canSubmitCheckIn = checkInAllowance?.allowed ?? true;
   const checkInBlocked = checkInAllowance
     ? checkInBlockedMessage(checkInAllowance)
     : null;
@@ -230,7 +231,12 @@ export default async function StudentSessionPage({
               disabled
               className="h-[3.5rem] w-full gap-2 text-base font-semibold"
             >
-              <Video className="size-5" /> Fazer check-in
+              {videoCheckIn ? (
+                <Video className="size-5" />
+              ) : (
+                <MessageSquareText className="size-5" />
+              )}
+              {videoCheckIn ? "Fazer check-in" : "Enviar notas"}
             </Button>
             <p className="-mt-0.5 text-center text-xs leading-snug text-muted-foreground">
               {checkInBlocked}
@@ -291,10 +297,10 @@ export default async function StudentSessionPage({
 
         {canBookSessions ? (
           <CalBookButton
-            calLink={`${calUser}/sessao-de-duvidas`}
-            namespace="sessao-de-duvidas"
-            eventType="sessao-de-duvidas"
-            label="Agendar sessão de dúvidas"
+            calLink={getCalLink(calUser)}
+            namespace={getCalEventTypeSlug()}
+            eventType={getCalEventTypeSlug()}
+            label="Agendar sessão"
             size="lg"
             className="[&_button]:h-[3.5rem]"
           />
@@ -305,7 +311,7 @@ export default async function StudentSessionPage({
               disabled
               className="h-[3.5rem] w-full gap-2 text-base font-semibold"
             >
-              <Phone className="size-5" /> Agendar sessão de dúvidas
+              <Phone className="size-5" /> Agendar sessão
             </Button>
             <p className="-mt-0.5 text-center text-xs leading-snug text-muted-foreground">
               O agendamento de sessões não está disponível de momento.

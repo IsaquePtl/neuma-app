@@ -1,12 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cookies, headers } from "next/headers";
+import { headers } from "next/headers";
 
 import { getAppOrigin } from "@/lib/auth/app-origin";
 import { getSessionUser } from "@/lib/auth/session";
-import { SIGNUP_FINISHING_COOKIE } from "@/lib/auth/signup-wizard";
+import { provisionSignupLeadFromCheckout } from "@/lib/actions/signup-leads";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { CHECKOUT_PAYMENT_METHOD_TYPES } from "@/lib/stripe/checkout-branding";
 import { requireStripe } from "@/lib/stripe/client";
 import { isFixedPlan, type FixedPlan } from "@/lib/stripe/plans";
 import { resolvePriceId } from "@/lib/stripe/prices";
@@ -22,6 +24,11 @@ import {
 export type BillingActionResult =
   | { ok: true; url: string }
   | { ok: false; error: string };
+
+function safeCancelPath(path: string | undefined, fallback: string) {
+  if (path?.startsWith("/") && !path.startsWith("//")) return path;
+  return fallback;
+}
 
 function checkoutIntegrationId(flow: string) {
   const alphabet = "abcdefghijklmnopqrstuvwxyz";
@@ -57,7 +64,97 @@ async function requestOrigin() {
   return host ? `${proto}://${host}` : null;
 }
 
-/** Cria uma Checkout Session de subscricao e devolve o URL da Stripe. */
+/**
+ * Checkout do signup por lead (sem sessão Auth).
+ * Cancel → /login/signup?resume=…; success provisiona o aluno.
+ */
+export async function createSignupLeadCheckoutSession(
+  plan: string,
+  resumeToken: string,
+): Promise<BillingActionResult> {
+  try {
+    if (!isFixedPlan(plan)) {
+      return { ok: false, error: "Plano inválido." };
+    }
+    const token = resumeToken.trim();
+    if (!token || token.length < 16) {
+      return { ok: false, error: "Sessão de signup expirada. Recomeça o registo." };
+    }
+
+    const admin = createAdminClient();
+    const { data: lead } = await admin
+      .from("signup_leads")
+      .select("id, email, full_name, resume_token, status")
+      .eq("resume_token", token)
+      .eq("status", "pending_payment")
+      .maybeSingle();
+
+    if (!lead) {
+      return {
+        ok: false,
+        error: "Não encontrámos o teu registo. Recomeça o sign up.",
+      };
+    }
+
+    const stripe = requireStripe();
+    const priceId = await resolvePriceId(plan);
+    const origin = getAppOrigin(await requestOrigin());
+    const cancelPath = `/login/signup?resume=${encodeURIComponent(lead.resume_token)}`;
+
+    await admin
+      .from("signup_leads")
+      .update({
+        selected_plan: plan,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", lead.id);
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer_email: lead.email,
+      client_reference_id: lead.id,
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${origin}/subscrever/sucesso?session_id={CHECKOUT_SESSION_ID}&signup_lead=${encodeURIComponent(lead.resume_token)}`,
+      cancel_url: `${origin}${cancelPath}`,
+      locale: "pt",
+      allow_promotion_codes: true,
+      payment_method_types: [...CHECKOUT_PAYMENT_METHOD_TYPES],
+      integration_identifier: checkoutIntegrationId("signup_lead"),
+      subscription_data: {
+        metadata: {
+          neuma_signup_lead_id: lead.id,
+          neuma_plan: plan,
+        },
+      },
+      metadata: {
+        neuma_signup_lead_id: lead.id,
+        neuma_plan: plan,
+      },
+    });
+
+    if (!session.url) {
+      return { ok: false, error: "Não foi possível abrir o pagamento." };
+    }
+
+    await admin
+      .from("signup_leads")
+      .update({ stripe_checkout_session_id: session.id })
+      .eq("id", lead.id);
+
+    return { ok: true, url: session.url };
+  } catch (error) {
+    console.error("[billing:signup-lead-checkout]", error);
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Não foi possível iniciar o pagamento.",
+    };
+  }
+}
+
+/** Cria Checkout Session hospedada (redirect Stripe) e devolve a url. */
 export async function createCheckoutSession(
   plan: string,
   options?: { cancelPath?: string },
@@ -77,19 +174,7 @@ export async function createCheckoutSession(
     });
 
     const origin = getAppOrigin(await requestOrigin());
-    const cookieStore = await cookies();
-    const signupFinishing =
-      cookieStore.get(SIGNUP_FINISHING_COOKIE)?.value === "1";
-
-    // Voltar atrás na Stripe = escolher plano de novo. Nunca ?cancelado=1
-    // (esse estado é só para subscrição cancelada / atraso prolongado).
-    const cancelPath =
-      options?.cancelPath?.startsWith("/") &&
-      !options.cancelPath.startsWith("//")
-        ? options.cancelPath
-        : signupFinishing
-          ? "/login/signup"
-          : "/subscrever";
+    const cancelPath = safeCancelPath(options?.cancelPath, "/subscrever");
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -100,6 +185,7 @@ export async function createCheckoutSession(
       cancel_url: `${origin}${cancelPath}`,
       locale: "pt",
       allow_promotion_codes: true,
+      payment_method_types: [...CHECKOUT_PAYMENT_METHOD_TYPES],
       integration_identifier: checkoutIntegrationId("plan"),
       subscription_data: {
         metadata: {
@@ -116,7 +202,6 @@ export async function createCheckoutSession(
     if (!session.url) {
       return { ok: false, error: "Não foi possível abrir o pagamento." };
     }
-
     return { ok: true, url: session.url };
   } catch (error) {
     console.error("[billing:checkout]", error);
@@ -133,27 +218,88 @@ export async function createCheckoutSession(
 /**
  * Sincroniza uma Checkout Session logo apos o regresso da Stripe.
  * Nao espera pelo webhook: o aluno precisa de acesso imediato.
+ * Signup por lead: provisiona auth+profile e inicia sessão.
  */
 export async function finalizeCheckoutSession(
   sessionId: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; resumeSignup?: boolean }
+  | { ok: false; error: string }
+> {
   try {
-    const { profile } = await requireStudent();
     const stripe = requireStripe();
 
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
       expand: ["subscription", "invoice"],
     });
 
+    if (session.status !== "complete" && session.payment_status !== "paid") {
+      return { ok: false, error: "O pagamento ainda não foi confirmado." };
+    }
+
+    const leadId = session.metadata?.neuma_signup_lead_id?.trim();
+    if (leadId) {
+      const provisioned = await provisionSignupLeadFromCheckout(session, {
+        establishSession: true,
+      });
+      if (!provisioned.ok) {
+        return { ok: false, error: provisioned.error };
+      }
+
+      const subscriptionId =
+        typeof session.subscription === "string"
+          ? session.subscription
+          : session.subscription?.id;
+
+      if (subscriptionId) {
+        let lastError: unknown = null;
+        for (let attempt = 0; attempt < 4; attempt++) {
+          try {
+            await syncSubscription(subscriptionId, {
+              profileId: provisioned.profileId,
+            });
+            lastError = null;
+            break;
+          } catch (error) {
+            lastError = error;
+            await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+          }
+        }
+        if (lastError) throw lastError;
+      }
+
+      const invoiceId =
+        typeof session.invoice === "string"
+          ? session.invoice
+          : session.invoice?.id;
+      if (invoiceId) {
+        try {
+          await syncInvoice(invoiceId);
+        } catch (error) {
+          console.error("[billing:finalize:invoice]", error);
+        }
+      }
+
+      // Limpar flag OAuth se existir.
+      const admin = createAdminClient();
+      await admin
+        .from("profiles")
+        .update({ signup_incomplete: false })
+        .eq("id", provisioned.profileId);
+
+      revalidatePath("/home");
+      revalidatePath("/login/signup");
+      revalidatePath("/subscrever");
+      return { ok: true, resumeSignup: true };
+    }
+
+    const { profile } = await requireStudent();
+
     if (
       session.client_reference_id &&
       session.client_reference_id !== profile.id
     ) {
       return { ok: false, error: "Esta sessão de pagamento não é tua." };
-    }
-
-    if (session.status !== "complete" && session.payment_status !== "paid") {
-      return { ok: false, error: "O pagamento ainda não foi confirmado." };
     }
 
     const subscriptionId =
@@ -198,6 +344,13 @@ export async function finalizeCheckoutSession(
         console.error("[billing:finalize:one-to-one]", error);
       }
     }
+
+    // OAuth signup incompleto que pagou via createCheckoutSession normal.
+    const admin = createAdminClient();
+    await admin
+      .from("profiles")
+      .update({ signup_incomplete: false })
+      .eq("id", profile.id);
 
     revalidatePath("/home");
     revalidatePath("/settings");
@@ -388,9 +541,11 @@ export async function createCardUpdateSession(): Promise<BillingActionResult> {
       mode: "setup",
       customer: sub.stripe_customer_id,
       currency: "eur",
-      success_url: `${origin}/settings/subscription?cartao=1`,
+      success_url: `${origin}/settings/subscription?cartao=1&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/settings/subscription`,
       locale: "pt",
+      payment_method_types: [...CHECKOUT_PAYMENT_METHOD_TYPES],
+      integration_identifier: checkoutIntegrationId("card"),
       metadata: {
         neuma_profile_id: profile.id,
         neuma_subscription_id: sub.stripe_subscription_id,

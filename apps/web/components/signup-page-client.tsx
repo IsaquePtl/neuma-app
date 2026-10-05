@@ -12,13 +12,24 @@ export function SignupPageClient({
   error,
   oauthFromLogin = false,
   billingEnabled = false,
+  resumeLead = null,
 }: {
   error?: string;
   oauthFromLogin?: boolean;
   /** Só com billing ligado o signup inclui o passo Stripe (plano). */
   billingEnabled?: boolean;
+  resumeLead?: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    age: number;
+    gender: string;
+    resumeToken: string;
+  } | null;
 }) {
-  const [step, setStep] = useState<SignupWizardStep>("identity");
+  const [step, setStep] = useState<SignupWizardStep>(
+    resumeLead ? "plan" : "identity",
+  );
   const instant = step !== "identity";
 
   return (
@@ -49,6 +60,7 @@ export function SignupPageClient({
           error={error}
           oauthFromLogin={oauthFromLogin}
           billingEnabled={billingEnabled}
+          resumeLead={resumeLead}
           onStepChange={setStep}
         />
       </Card>

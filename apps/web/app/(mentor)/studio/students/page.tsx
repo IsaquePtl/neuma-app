@@ -19,6 +19,7 @@ export default async function StudentsPage({
         .from("profiles")
         .select("id, full_name, email, avatar_url, onboarding_completed, created_at")
         .eq("role", "student")
+        .eq("signup_incomplete", false)
         .order("created_at", { ascending: true }),
       supabase.from("paths").select("student_id, status, title"),
       supabase

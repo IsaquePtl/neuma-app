@@ -57,7 +57,7 @@ export function fridayOfWeek(isoDate: string): string {
 }
 
 /**
- * End of a path: Friday of the week that contains (start + months).
+ * End of a path: Friday of the last week inside [start, start + months).
  * Start must be a Monday (caller should normalize).
  */
 export function computePathEndDate(
@@ -65,17 +65,36 @@ export function computePathEndDate(
   months: number,
 ): string | null {
   if (!startMonday || !months || months <= 0) return null;
-  return fridayOfWeek(addMonthsToDate(startMonday, months));
+  return fridayOfWeek(addDaysToDate(addMonthsToDate(startMonday, months), -1));
 }
 
+const WEEKS_PER_MONTH = 52 / 12;
+
+/** Accepts "6 meses", "1 mês", "26 semanas (~6 meses)" or "26 semanas". */
 export function parseMonthsFromDuration(
   value: string | null | undefined,
 ): number | null {
   if (!value) return null;
-  const match = value.trim().match(/^(\d+)/);
-  if (!match) return null;
-  const n = Number(match[1]);
+  const text = value.trim().toLowerCase();
+  const months = text.match(/(\d+)\s*(?:mês|mes)/);
+  if (months) {
+    const n = Number(months[1]);
+    return n > 0 ? n : null;
+  }
+  const weeks = text.match(/(\d+)\s*sem/);
+  if (weeks) {
+    const n = Number(weeks[1]);
+    return n > 0 ? Math.max(1, Math.round(n / WEEKS_PER_MONTH)) : null;
+  }
+  const lead = text.match(/^(\d+)/);
+  if (!lead) return null;
+  const n = Number(lead[1]);
   return n > 0 ? n : null;
+}
+
+/** Rough week count before a start date pins the calendar. */
+export function approxWeeksForMonths(months: number): number {
+  return Math.max(1, Math.round(months * WEEKS_PER_MONTH));
 }
 
 export function parseDurationMonths(

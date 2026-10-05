@@ -78,7 +78,7 @@ export function nodeUsesQuizGate(passRule: NodePassRule | null | undefined) {
   return passRule === "quiz";
 }
 
-/** Video slot / allowance applies only to video check-ins (text and call do not). */
+/** True when the level uses a video check-in (vs text/call) — only for CTA copy/UI. */
 export function nodeUsesVideoCheckInSlot(
   passRule: NodePassRule | null | undefined,
   checkInKind: CheckInKind | string | null | undefined,

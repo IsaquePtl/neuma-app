@@ -46,7 +46,12 @@ import type {
 } from "@/components/library-asset-picker";
 import { cn } from "@/lib/utils";
 import { LIBRARY_PATH } from "@/lib/library-routes";
-import { isPhaseBoundary, nodeKindLabel, phaseKeyLabel } from "@/lib/labels";
+import { nodeKindLabel, phaseKeyLabel } from "@/lib/labels";
+import {
+  normalizePhaseKey,
+  phaseOptions,
+  resolvePhaseCheckpointIds,
+} from "@/lib/nodes/phases";
 import type { NodeKind, PathTemplateStatus } from "@/lib/types/database.types";
 
 type Template = {
@@ -111,6 +116,10 @@ export function PathTemplateComposer({
     ),
   );
   const [editing, setEditing] = useState<string | "new" | null>(null);
+  const phases = useMemo(() => phaseOptions(nodes), [nodes]);
+  const phaseByKey = useMemo(() => new Map(phases.map((p) => [p.key, p])), [phases]);
+  const checkpointIds = useMemo(() => resolvePhaseCheckpointIds(nodes), [nodes]);
+  const phaseKeys = useMemo(() => nodes.map((n) => normalizePhaseKey(n.phase_key)), [nodes]);
   const [metaPending, startMetaTransition] = useTransition();
   const [deletePending, startDeleteTransition] = useTransition();
 
@@ -293,14 +302,33 @@ export function PathTemplateComposer({
           const levelNum = i + 1;
           const isEditing = editing === node.id;
           const period = durationLabel(node.duration_weeks);
+          const key = phaseKeys[i];
+          const isPhaseStart = Boolean(key) && (i === 0 || phaseKeys[i - 1] !== key);
+          const isPhaseCheckpoint = checkpointIds.has(node.id);
+          const phase = key ? phaseByKey.get(key) : undefined;
+          const railInPhase = Boolean(phase?.checkpoint) && !isPhaseCheckpoint;
 
           return (
             <Fragment key={node.id}>
-              {isPhaseBoundary(nodes, i) ? (
+              {isPhaseStart && phase ? (
                 <li className="relative list-none pb-3 pt-1 first:pt-0">
-                  <p className="pl-[4.25rem] text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                    {phaseKeyLabel(node.phase_key)}
-                  </p>
+                  {i > 0 ? (
+                    <span
+                      aria-hidden
+                      className="student-path-rail absolute inset-y-0 left-[2rem] w-px -translate-x-1/2 bg-white/20"
+                    />
+                  ) : null}
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 pl-[5.25rem]">
+                    <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                      {phaseKeyLabel(key)}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground/70">
+                      {phase.count} {phase.count === 1 ? "nível" : "níveis"} ·{" "}
+                      {phase.checkpoint
+                        ? `fecha com «${phase.checkpoint.title}»`
+                        : "sem check-point de fase"}
+                    </p>
+                  </div>
                 </li>
               ) : null}
             <li
@@ -308,12 +336,33 @@ export function PathTemplateComposer({
             >
               <span
                 aria-hidden
-                className="student-path-rail absolute bottom-0 left-[1.7rem] top-14 w-px bg-white/15"
+                className={cn(
+                  "student-path-rail absolute bottom-0 left-[2rem] w-px -translate-x-1/2",
+                  i === nodes.length - 1 && "hidden",
+                  isPhaseCheckpoint
+                    ? "top-[calc(0.125rem+3.5rem+0.25rem)]"
+                    : "top-[calc(0.125rem+3.5rem)]",
+                  railInPhase
+                    ? "bg-[color-mix(in_oklch,color-mix(in_oklch,var(--neuma-blue)_25%,white)_55%,transparent)]"
+                    : "bg-white/20",
+                )}
               />
 
-              <div className="flex flex-col items-center pt-0.5">
-                <span className="student-path-marker relative z-10 grid size-14 shrink-0 place-items-center rounded-full neuma-gradient text-base font-semibold tabular-nums text-white shadow-[0_0_28px_-4px_color-mix(in_oklch,var(--neuma-coral)_45%,transparent)]">
-                  {levelNum}
+              <div className="ml-1 flex w-14 shrink-0 flex-col items-center pt-0.5">
+                <span className="relative z-10 inline-grid size-14 shrink-0 place-items-center rounded-full">
+                  <span
+                    aria-hidden
+                    className="absolute inset-0 rounded-full bg-[var(--neuma-ink)]"
+                  />
+                  <span className="student-path-marker relative grid size-full place-items-center rounded-full neuma-gradient text-base font-semibold tabular-nums text-white shadow-[0_0_28px_-4px_color-mix(in_oklch,var(--neuma-coral)_45%,transparent)]">
+                    {levelNum}
+                  </span>
+                  {isPhaseCheckpoint ? (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute -inset-1 rounded-full border-2 border-[color-mix(in_oklch,color-mix(in_oklch,var(--neuma-blue)_30%,white)_70%,transparent)]"
+                    />
+                  ) : null}
                 </span>
               </div>
 
@@ -324,6 +373,7 @@ export function PathTemplateComposer({
                   categories={categories}
                   topics={topics}
                   assets={assets}
+                  phases={phases}
                   onCancel={() => setEditing(null)}
                 />
               ) : (
@@ -332,7 +382,11 @@ export function PathTemplateComposer({
                     <div className="min-w-0 space-y-1">
                       <p className="inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--neuma-coral)]">
                         <Icon className="size-3" />
-                        {nodeKindLabel[node.kind]}
+                        {isPhaseCheckpoint
+                          ? `Check-point · Fecha a ${phaseKeyLabel(key)}`
+                          : node.kind === "milestone"
+                            ? `${nodeKindLabel.milestone} solto`
+                            : nodeKindLabel[node.kind]}
                         {period ? ` · ${period}` : null}
                       </p>
                       <p className="text-lg font-bold tracking-tight">
@@ -404,6 +458,7 @@ export function PathTemplateComposer({
                 categories={categories}
                 topics={topics}
                 assets={assets}
+                phases={phases}
                 onCancel={() => setEditing(null)}
               />
             </>

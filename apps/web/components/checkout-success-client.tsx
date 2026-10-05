@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { finalizeCheckoutSession } from "@/lib/actions/billing";
+import { setSignupFinishingCookieAction } from "@/lib/actions/signup-finishing";
 import {
   clearSignupFinishingCookie,
+  clearSignupLeadToken,
   clearSignupWizardStep,
   hasSignupFinishingCookie,
   readSignupWizardStep,
-  setSignupFinishingCookie,
   writeSignupWizardStep,
 } from "@/lib/auth/signup-wizard";
 import { Button } from "@/components/ui/button";
@@ -20,70 +21,100 @@ export function CheckoutSuccessClient({
   sessionId,
   oneToOne = false,
   displayName = null,
+  signupLead = false,
 }: {
   sessionId: string | null;
   oneToOne?: boolean;
   displayName?: string | null;
+  /** Checkout veio do signup por lead (sem auth prévia). */
+  signupLead?: boolean;
 }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(Boolean(sessionId));
   const [error, setError] = useState<string | null>(null);
-  const [attempted, setAttempted] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
   /** 1:1 — perfil logo de seguida (como passo 4 do signup), sem ecrã intermédio. */
   const [oneToOneReady, setOneToOneReady] = useState(oneToOne);
 
   useEffect(() => {
-    if (!sessionId || attempted) return;
-    setAttempted(true);
+    if (!sessionId) return;
 
-    startTransition(async () => {
-      const result = await finalizeCheckoutSession(sessionId);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
+    let cancelled = false;
+    setPending(true);
+    setError(null);
 
-      if (oneToOne) {
-        setOneToOneReady(true);
-        return;
-      }
+    void (async () => {
+      try {
+        const result = await finalizeCheckoutSession(sessionId);
+        if (cancelled) return;
 
-      // Signup em curso: após pagamento → definir password (passo 3).
-      const resumeSignup =
-        hasSignupFinishingCookie() || readSignupWizardStep() === "plan";
-      if (resumeSignup) {
-        writeSignupWizardStep("credentials");
-        setSignupFinishingCookie();
-        router.replace("/login/signup");
+        if (!result.ok) {
+          setError(result.error);
+          setPending(false);
+          return;
+        }
+
+        if (oneToOne) {
+          setOneToOneReady(true);
+          setPending(false);
+          return;
+        }
+
+        // Signup em curso: após pagamento → definir password (passo 3).
+        const resumeSignup =
+          signupLead ||
+          result.resumeSignup ||
+          hasSignupFinishingCookie() ||
+          readSignupWizardStep() === "plan";
+
+        if (resumeSignup) {
+          clearSignupLeadToken();
+          writeSignupWizardStep("credentials");
+          // Cookie httpOnly tem de existir antes do middleware ver /login/signup.
+          await setSignupFinishingCookieAction();
+          if (cancelled) return;
+          router.replace("/login/signup");
+          router.refresh();
+          return;
+        }
+
+        clearSignupFinishingCookie();
+        clearSignupWizardStep();
+        router.replace("/home?welcome=1");
         router.refresh();
-        return;
+      } catch (err) {
+        if (cancelled) return;
+        console.error("[checkout-success]", err);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Não foi possível confirmar o pagamento.",
+        );
+        setPending(false);
       }
+    })();
 
-      clearSignupFinishingCookie();
-      clearSignupWizardStep();
-      router.replace("/home?welcome=1");
-      router.refresh();
-    });
-  }, [sessionId, attempted, router, oneToOne]);
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, retryKey, router, oneToOne, signupLead]);
 
   if (oneToOne && oneToOneReady && !error) {
     return (
-      <div className="flex w-full flex-col items-center auth-flow-instant desktop:items-stretch">
-        <Card className="auth-enter-form--instant w-full space-y-6 p-6 sm:p-8">
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">4 de 4 — Perfil</p>
-            <h1 className="font-heading text-xl font-bold tracking-tight">
-              O teu perfil
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {pending
-                ? "A confirmar o pagamento…"
-                : "Pagamento confirmado. Completa o teu perfil para entrares na app."}
-            </p>
-          </div>
-          <SignupProfileStep displayName={displayName} />
-        </Card>
-      </div>
+      <Card className="auth-enter-form--instant w-full space-y-6 p-6 sm:p-8">
+        <div className="space-y-1">
+          <p className="text-sm text-muted-foreground">4 de 4 — Perfil</p>
+          <h1 className="font-heading text-xl font-bold tracking-tight">
+            O teu perfil
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {pending
+              ? "A confirmar o pagamento…"
+              : "Pagamento confirmado. Completa o teu perfil para entrares na app."}
+          </p>
+        </div>
+        <SignupProfileStep displayName={displayName} />
+      </Card>
     );
   }
 
@@ -125,7 +156,7 @@ export function CheckoutSuccessClient({
             disabled={pending}
             onClick={() => {
               setError(null);
-              setAttempted(false);
+              setRetryKey((k) => k + 1);
             }}
           >
             Tentar outra vez

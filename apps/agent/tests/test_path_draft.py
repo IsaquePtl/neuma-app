@@ -31,6 +31,39 @@ def test_parse_nodes_from_rota_kinds():
     assert by_order[6]["kind"] == "milestone"
 
 
+def test_parse_rota_phases_and_checkpoint():
+    md = """
+##### FASE 1: Fundamentos
+* Nível 1 | Conceito — A
+* Nível 2 | Check-point — Solto a meio
+* Nível 3 | Prática — B
+* Nível 4 | Check-point — Fecho
+##### FASE 2: Repertório
+* Nível 5 | Prática — C
+"""
+    nodes = parse_nodes_from_rota(md)
+    assert [n["phase_key"] for n in nodes] == ["1", "1", "1", "1", "2"]
+    assert [n["is_phase_checkpoint"] for n in nodes] == [False, False, False, True, False]
+
+
+def test_apply_phase_layout_rules():
+    from shared.path_draft import apply_phase_layout
+
+    nodes = [
+        {"title": "a1", "kind": "lesson", "phase_key": "fase a"},
+        {"title": "gate", "kind": "milestone", "phase_key": "A", "is_phase_checkpoint": True},
+        {"title": "a2", "kind": "practice", "phase_key": "a"},
+        {"title": "b1", "kind": "lesson", "phase_key": "B"},
+        {"title": "b-solto", "kind": "milestone", "phase_key": "B", "is_phase_checkpoint": False},
+        {"title": "x", "kind": "milestone", "phase_key": None, "is_phase_checkpoint": True},
+        {"title": "a3", "kind": "lesson", "phase_key": "A"},
+    ]
+    out = apply_phase_layout(nodes)
+    assert [n["title"] for n in out] == ["a1", "a2", "a3", "gate", "b1", "b-solto", "x"]
+    assert [n["is_phase_checkpoint"] for n in out] == [False, False, False, True, False, False, False]
+    assert out[0]["phase_key"] == "A"
+
+
 def test_normalize_kind_aliases():
     assert normalize_kind("Conceito") == "lesson"
     assert normalize_kind("Sessão 1:1") == "call"

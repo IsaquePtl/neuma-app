@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import {
   CreditCard,
   Ban,
@@ -13,7 +14,6 @@ import { toast } from "sonner";
 import {
   cancelMySubscription,
   changeMyPlan,
-  createCardUpdateSession,
   previewPlanChange,
   reactivateMySubscription,
 } from "@/lib/actions/billing";
@@ -165,20 +165,11 @@ export function SubscriptionSettingsCard({
 
       <div className="flex flex-col gap-2.5 desktop:flex-row desktop:flex-wrap">
         <Button
-          type="button"
+          render={<Link href="/settings/subscription/cartao" />}
+          nativeButton={false}
           variant="secondary"
           disabled={pending}
           className="h-11 w-full gap-2 rounded-xl text-sm font-medium desktop:h-10 desktop:w-auto desktop:px-4"
-          onClick={() =>
-            run(async () => {
-              const r = await createCardUpdateSession();
-              if (r.ok) {
-                window.location.assign(r.url);
-                return { ok: true };
-              }
-              return r;
-            }, "A abrir actualização do cartão…")
-          }
         >
           <CreditCard className="size-4" />
           Actualizar cartão

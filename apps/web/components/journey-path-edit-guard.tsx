@@ -20,7 +20,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { JourneyEditDirtyProvider } from "@/lib/journey-path/edit-dirty-context";
+import {
+  JourneyEditDirtyProvider,
+  type UnsavedEdits,
+} from "@/lib/journey-path/edit-dirty-context";
 import { registerJourneyEditGuard } from "@/lib/journey-path/edit-guard-store";
 import {
   buildPathSnapshot,
@@ -51,56 +54,42 @@ export function JourneyPathEditGuard({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const [baseline, setBaseline] = useState<PathSnapshot>(() =>
+  const [baseline] = useState<PathSnapshot>(() =>
     buildPathSnapshot(path, nodes, studentId),
   );
   const [draftAcknowledged, setDraftAcknowledged] = useState(false);
   const effectiveIsNewDraft = isNewDraft && !draftAcknowledged;
 
-  const stateRef = useRef({
-    path,
-    nodes,
-    studentId,
-    isNewDraft: effectiveIsNewDraft,
-    baseline,
-  });
-
-  useEffect(() => {
-    stateRef.current = {
-      path,
-      nodes,
-      studentId,
-      isNewDraft: effectiveIsNewDraft,
-      baseline,
-    };
-  }, [path, nodes, studentId, effectiveIsNewDraft, baseline]);
-
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [pendingLeave, setPendingLeave] = useState<PendingLeave | null>(null);
-  const [pending, startTransition] = useTransition();
+  const unsavedRef = useRef<UnsavedEdits | null>(null);
+  const [hasUnsaved, setHasUnsaved] = useState(false);
 
   const currentSnapshot = useMemo(
     () => buildPathSnapshot(path, nodes, studentId),
     [path, nodes, studentId],
   );
 
-  const confirmLeave = useMemo(
-    () => shouldConfirmLeave(baseline, currentSnapshot, effectiveIsNewDraft),
-    [baseline, currentSnapshot, effectiveIsNewDraft],
-  );
+  const draftNeedsDecision =
+    effectiveIsNewDraft &&
+    shouldConfirmLeave(baseline, currentSnapshot, true);
+  const confirmLeave = hasUnsaved || draftNeedsDecision;
+
+  const stateRef = useRef({ confirmLeave });
+  useEffect(() => {
+    stateRef.current = { confirmLeave };
+  }, [confirmLeave]);
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [pendingLeave, setPendingLeave] = useState<PendingLeave | null>(null);
+  const [dialogMode, setDialogMode] = useState<"unsaved" | "draft">("draft");
+  const [pending, startTransition] = useTransition();
 
   const hasChanges = !snapshotsEqual(baseline, currentSnapshot);
   const isEmptyDraft = isEmptyDraftSnapshot(currentSnapshot);
-  const isDirty = confirmLeave;
 
-  const readShouldConfirmLeave = useCallback(() => {
-    const { path, nodes, studentId, isNewDraft, baseline } = stateRef.current;
-    return shouldConfirmLeave(
-      baseline,
-      buildPathSnapshot(path, nodes, studentId),
-      isNewDraft,
-    );
-  }, []);
+  const readShouldConfirmLeave = useCallback(
+    () => stateRef.current.confirmLeave,
+    [],
+  );
 
   const finishLeave = useCallback((proceed: boolean) => {
     setPendingLeave((current) => {
@@ -113,28 +102,23 @@ export function JourneyPathEditGuard({
   const promptLeave = useCallback(
     (href: string) =>
       new Promise<boolean>((resolve) => {
+        setDialogMode(unsavedRef.current ? "unsaved" : "draft");
         setPendingLeave({ href, resolve });
         setDialogOpen(true);
       }),
     [],
   );
 
-  const acknowledgeSave = useCallback(() => {
-    const { path: p, nodes: n, studentId: sid, baseline: base } =
-      stateRef.current;
-    const next = buildPathSnapshot(p, n, sid);
-    const changed = !snapshotsEqual(base, next);
-    setBaseline(next);
+  const reportUnsaved = useCallback((edits: UnsavedEdits | null) => {
+    unsavedRef.current = edits;
+    setHasUnsaved(Boolean(edits));
+  }, []);
+
+  const acknowledgeSaved = useCallback(() => {
+    if (!isNewDraft || draftAcknowledged) return;
     setDraftAcknowledged(true);
-    toast.success(
-      isEmptyDraftSnapshot(next) && !changed
-        ? "Rascunho mantido. As edições nos formulários já ficam gravadas."
-        : "O percurso já está gravado.",
-    );
-    if (isNewDraft) {
-      router.replace(`/studio/journeys/${path.id}/edit`);
-    }
-  }, [isNewDraft, path.id, router]);
+    router.replace(`/studio/journeys/${path.id}/edit`);
+  }, [draftAcknowledged, isNewDraft, path.id, router]);
 
   useEffect(() => {
     registerJourneyEditGuard({
@@ -183,15 +167,23 @@ export function JourneyPathEditGuard({
     router.push(href);
   }
 
-  function onSave() {
-    // Changes are already persisted via per-level / path actions — keep and leave.
-    navigateAway();
+  function onSaveAndLeave() {
+    const edits = unsavedRef.current;
+    if (!edits) {
+      navigateAway();
+      return;
+    }
+    startTransition(async () => {
+      const ok = await edits.save();
+      if (ok) navigateAway();
+      else finishLeave(false);
+    });
   }
 
   function onDiscard() {
     if (!pendingLeave) return;
 
-    if (path.status !== "draft") {
+    if (dialogMode === "unsaved" || path.status !== "draft") {
       navigateAway();
       return;
     }
@@ -216,18 +208,17 @@ export function JourneyPathEditGuard({
     finishLeave(false);
   }
 
-  const description =
-    isEmptyDraft && !hasChanges
+  const unsavedMode = dialogMode === "unsaved";
+  const title = unsavedMode ? "Alterações por guardar" : "Guardar rascunho?";
+  const description = unsavedMode
+    ? "Tens alterações que ainda não foram guardadas. Queres guardá-las antes de sair?"
+    : isEmptyDraft && !hasChanges
       ? "Este rascunho já existe. Queres mantê-lo ou descartá-lo?"
-      : "As edições nos formulários já ficam gravadas. Queres manter o percurso e sair?";
+      : "Queres manter este rascunho ou descartá-lo?";
 
   const dirtyValue = useMemo(
-    () => ({
-      isDirty,
-      save: acknowledgeSave,
-      pending: false,
-    }),
-    [acknowledgeSave, isDirty],
+    () => ({ reportUnsaved, acknowledgeSaved }),
+    [acknowledgeSaved, reportUnsaved],
   );
 
   return (
@@ -242,7 +233,7 @@ export function JourneyPathEditGuard({
       >
         <DialogContent showCloseButton={false} className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Guardar alterações?</DialogTitle>
+            <DialogTitle>{title}</DialogTitle>
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:justify-end">
@@ -260,10 +251,14 @@ export function JourneyPathEditGuard({
               disabled={pending}
               onClick={onDiscard}
             >
-              {pending ? "A descartar…" : "Descartar"}
+              {unsavedMode
+                ? "Sair sem guardar"
+                : pending
+                  ? "A descartar…"
+                  : "Descartar"}
             </Button>
-            <Button type="button" disabled={pending} onClick={onSave}>
-              Manter
+            <Button type="button" disabled={pending} onClick={onSaveAndLeave}>
+              {unsavedMode ? (pending ? "A guardar…" : "Guardar e sair") : "Manter"}
             </Button>
           </DialogFooter>
         </DialogContent>

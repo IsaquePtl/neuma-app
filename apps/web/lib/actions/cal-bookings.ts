@@ -16,6 +16,8 @@ export type EmbedBookingPayload = {
   isReschedule?: boolean;
   /** UID do agendamento anterior (quando Cal cria um novo no reschedule). */
   previousUid?: string | null;
+  attendeeEmail?: string | null;
+  attendeeName?: string | null;
 };
 
 export type EmbedCancelPayload = {
@@ -28,6 +30,37 @@ function revalidateBookingPaths() {
   revalidatePath("/session");
   revalidatePath("/studio");
   revalidatePath("/studio/calendar");
+}
+
+async function resolveStudentId(
+  admin: ReturnType<typeof createAdminClient>,
+  {
+    userId,
+    userRole,
+    attendeeEmail,
+  }: {
+    userId: string;
+    userRole: string | null;
+    attendeeEmail: string | null;
+  },
+): Promise<{ studentId: string | null; attendeeEmail: string | null }> {
+  if (attendeeEmail) {
+    const { data: student } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("role", "student")
+      .ilike("email", attendeeEmail)
+      .maybeSingle();
+    if (student?.id) {
+      return { studentId: student.id, attendeeEmail };
+    }
+  }
+
+  if (userRole === "student") {
+    return { studentId: userId, attendeeEmail };
+  }
+
+  return { studentId: null, attendeeEmail };
 }
 
 /** Persiste marcação vinda do embed Cal (não espera pelo webhook). */
@@ -47,7 +80,7 @@ export async function syncCalBookingFromEmbed(payload: EmbedBookingPayload) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("email, full_name")
+    .select("email, full_name, role")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -56,7 +89,24 @@ export async function syncCalBookingFromEmbed(payload: EmbedBookingPayload) {
   if (statusRaw.includes("PENDING")) status = "pending";
   if (statusRaw.includes("CANCEL")) status = "cancelled";
 
+  const payloadEmail = payload.attendeeEmail?.trim() || null;
+  const payloadName = payload.attendeeName?.trim() || null;
+
   const admin = createAdminClient();
+  const { studentId, attendeeEmail } = await resolveStudentId(admin, {
+    userId: user.id,
+    userRole: profile?.role ?? null,
+    attendeeEmail:
+      payloadEmail ||
+      (profile?.role === "student"
+        ? (profile.email ?? user.email ?? null)
+        : null),
+  });
+
+  const attendeeName =
+    payloadName ||
+    (profile?.role === "student" ? (profile.full_name ?? null) : null);
+
   const { error } = await admin.from("cal_bookings").upsert(
     {
       cal_booking_uid: uid,
@@ -68,9 +118,9 @@ export async function syncCalBookingFromEmbed(payload: EmbedBookingPayload) {
       start_time: startTime,
       end_time: endTime,
       meet_url: payload.meetUrl?.trim() || null,
-      attendee_email: profile?.email ?? user.email ?? null,
-      attendee_name: profile?.full_name ?? null,
-      student_id: user.id,
+      attendee_email: attendeeEmail,
+      attendee_name: attendeeName,
+      student_id: studentId,
       payload: {
         source: "cal_embed",
         synced_at: new Date().toISOString(),
@@ -84,15 +134,16 @@ export async function syncCalBookingFromEmbed(payload: EmbedBookingPayload) {
 
   const previousUid = (payload.previousUid || "").trim();
   if (previousUid && previousUid !== uid) {
-    await admin
+    let q = admin
       .from("cal_bookings")
       .update({
         status: "cancelled",
         trigger_event: "BOOKING_RESCHEDULED",
         updated_at: new Date().toISOString(),
       })
-      .eq("cal_booking_uid", previousUid)
-      .eq("student_id", user.id);
+      .eq("cal_booking_uid", previousUid);
+    if (studentId) q = q.eq("student_id", studentId);
+    await q;
   }
 
   revalidateBookingPaths();
@@ -109,6 +160,12 @@ export async function cancelCalBookingFromEmbed(payload: EmbedCancelPayload) {
   const uid = (payload.uid || "").trim();
   if (!uid) throw new Error("UID em falta");
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
   const admin = createAdminClient();
   const now = new Date().toISOString();
   const cancelPatch = {
@@ -117,13 +174,17 @@ export async function cancelCalBookingFromEmbed(payload: EmbedCancelPayload) {
     updated_at: now,
   };
 
-  // Preferência: UID + aluno
-  let { data: updated, error } = await admin
+  let query = admin
     .from("cal_bookings")
     .update(cancelPatch)
-    .eq("cal_booking_uid", uid)
-    .eq("student_id", user.id)
-    .select("id");
+    .eq("cal_booking_uid", uid);
+
+  // Aluno: só a própria; mentor: qualquer marcação com esse UID.
+  if (profile?.role === "student") {
+    query = query.eq("student_id", user.id);
+  }
+
+  const { data: updated, error } = await query.select("id");
 
   if (error) throw new Error(error.message);
 

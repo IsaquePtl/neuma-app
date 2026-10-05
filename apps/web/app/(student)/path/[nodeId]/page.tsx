@@ -6,7 +6,6 @@ import {
   getCheckInAllowance,
 } from "@/lib/checkins/allowance";
 import { loadStudentNodeActivity } from "@/lib/feedbacks/student";
-import { nodeUsesVideoCheckInSlot } from "@/lib/nodes/pass-rule";
 import {
   loadMyPathWithNodes,
   loadMentorCalUsername,
@@ -14,6 +13,12 @@ import {
 } from "@/lib/students/queries";
 import { StudentNodePlayer } from "@/components/student-node-player";
 import { StudentLevelActivity } from "@/components/student-level-activity";
+import { PhaseReviewBanner } from "@/components/phase-review-checklist";
+import { RecordNodeVisit } from "@/components/record-node-visit";
+import {
+  loadActivePhaseReview,
+  loadPhaseReview,
+} from "@/lib/nodes/phase-review";
 
 export default async function StudentNodePage({
   params,
@@ -74,7 +79,14 @@ export default async function StudentNodePage({
     redirect("/path");
   }
 
-  const videoSlot = nodeUsesVideoCheckInSlot(node.pass_rule, node.check_in_kind);
+  const [phaseCheckpoint, activeReview] = await Promise.all([
+    node.is_phase_checkpoint
+      ? loadPhaseReview(supabase, user!.id, nodes, nodeId)
+      : Promise.resolve(null),
+    loadActivePhaseReview(supabase, user!.id, nodes),
+  ]);
+  const reviewingThisLevel =
+    activeReview?.items.some((i) => i.id === nodeId) ? activeReview : null;
 
   // Mobile: center in menubar-aware viewport (pt-8 = slight lower bias);
   // my-auto collapses when overflowing so scroll still reaches the top.
@@ -87,18 +99,23 @@ export default async function StudentNodePage({
       }
     >
       <div className="my-auto w-full min-w-0 max-w-full space-y-5 pt-8 pb-2 desktop:my-0 desktop:space-y-6 desktop:py-0">
+        {reviewingThisLevel ? (
+          <>
+            <RecordNodeVisit nodeId={nodeId} />
+            <PhaseReviewBanner review={reviewingThisLevel} currentNodeId={nodeId} />
+          </>
+        ) : null}
         <StudentNodePlayer
+          phaseCheckpoint={phaseCheckpoint}
           node={node}
           levelNumber={nodeIndex + 1}
           mentorName={mentor?.full_name}
           calUsername={mentor?.cal_username}
           upcomingBooking={node.kind === "call" ? upcomingBooking : null}
           canBookSessions={canBookSessions}
-          canSubmitCheckIn={!videoSlot || allowance.allowed}
+          canSubmitCheckIn={allowance.allowed}
           checkInBlockedMessage={
-            videoSlot && !allowance.allowed
-              ? checkInBlockedMessage(allowance)
-              : null
+            !allowance.allowed ? checkInBlockedMessage(allowance) : null
           }
         />
         <StudentLevelActivity

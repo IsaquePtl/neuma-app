@@ -144,6 +144,16 @@ export function CheckInForm({
       try {
         await submitCheckIn(fd);
       } catch (err) {
+        // redirect() do server action propaga-se como excepção — não é erro.
+        if (
+          typeof err === "object" &&
+          err !== null &&
+          "digest" in err &&
+          typeof (err as { digest: unknown }).digest === "string" &&
+          (err as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+        ) {
+          throw err;
+        }
         toast.error(
           err instanceof Error ? err.message : "Não foi possível enviar",
         );

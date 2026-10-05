@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { completeCurrentAndActivateNext } from "@/lib/nodes/complete-and-activate";
+import { loadPhaseReview } from "@/lib/nodes/phase-review";
 import {
   nodeUsesQuizGate,
   quizPassScore,
@@ -37,6 +38,8 @@ export type QuizAttemptSummary = {
   created_at: string;
   unlocked?: boolean;
   pass_score?: number;
+  /** Set when the quiz closes a phase: failing sends the student to review it. */
+  phase?: { label: string; reviewCount: number } | null;
 };
 
 function parseOptions(raw: Json): QuizOption[] {
@@ -279,6 +282,14 @@ export async function submitQuizAttempt(
     throw new Error("Este check-point ainda nao tem perguntas");
   }
 
+  const pathNodes = await loadPathNodesForNode(supabase, nodeId);
+  const reviewBefore = await loadPhaseReview(supabase, user.id, pathNodes, nodeId);
+  if (reviewBefore?.reviewRequired && reviewBefore.pendingCount > 0) {
+    throw new Error(
+      `Revê os níveis da ${reviewBefore.phaseLabel} antes de repetir o quiz.`,
+    );
+  }
+
   let correctCount = 0;
   for (const q of questions) {
     if (answers[q.id] && answers[q.id] === q.correct_option_id) {
@@ -339,5 +350,30 @@ export async function submitQuizAttempt(
     ...data,
     unlocked,
     pass_score: node && nodeUsesQuizGate(node.pass_rule) ? threshold : undefined,
+    phase:
+      reviewBefore &&
+      reviewBefore.items.length > 0 &&
+      node?.status === "active" &&
+      nodeUsesQuizGate(node.pass_rule)
+        ? { label: reviewBefore.phaseLabel, reviewCount: reviewBefore.items.length }
+        : null,
   };
+}
+
+async function loadPathNodesForNode(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  nodeId: string,
+) {
+  const { data: node } = await supabase
+    .from("nodes")
+    .select("path_id")
+    .eq("id", nodeId)
+    .maybeSingle();
+  if (!node) return [];
+  const { data } = await supabase
+    .from("nodes")
+    .select("id, title, kind, status, pass_rule, pass_score, phase_key, is_phase_checkpoint")
+    .eq("path_id", node.path_id)
+    .order("order_index", { ascending: true });
+  return data ?? [];
 }

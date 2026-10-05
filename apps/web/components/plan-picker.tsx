@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 
-import { createCheckoutSession } from "@/lib/actions/billing";
+import {
+  createCheckoutSession,
+  createSignupLeadCheckoutSession,
+} from "@/lib/actions/billing";
 import {
   setSignupFinishingCookie,
   writeSignupWizardStep,
@@ -24,40 +27,71 @@ export function PlanPicker({
   subtitle,
   cancelReturnPath,
   notice,
+  signupResumeToken = null,
 }: {
   title?: string;
   subtitle?: string;
-  /** Where Stripe "back" should land (never a cancelado screen). */
+  /** Where cancel na Stripe deve aterrar. */
   cancelReturnPath?: string;
   /** Optional status for lapsed/canceled subscriptions only. */
   notice?: string | null;
+  /** Signup email (lead): checkout sem sessão Auth. */
+  signupResumeToken?: string | null;
 }) {
-  const [pending, startTransition] = useTransition();
-  const [selected, setSelected] = useState<FixedPlan>("quarterly");
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<FixedPlan>("quarterly");
 
-  function onContinue() {
+  // Voltar da Stripe (bfcache / histórico) — repor botão e estado idle.
+  useEffect(() => {
+    const resetCheckoutUi = () => {
+      setPending(false);
+      setError(null);
+    };
+    window.addEventListener("pageshow", resetCheckoutUi);
+    return () => window.removeEventListener("pageshow", resetCheckoutUi);
+  }, []);
+
+  async function onContinue() {
+    if (pending) return;
+
+    const from =
+      cancelReturnPath?.startsWith("/") && !cancelReturnPath.startsWith("//")
+        ? cancelReturnPath
+        : "/subscrever";
+
+    if (from.startsWith("/login/signup")) {
+      setSignupFinishingCookie();
+      writeSignupWizardStep("plan");
+    }
+
+    setPending(true);
     setError(null);
-    startTransition(async () => {
-      // Keep signup resume intact if the mentor backs out of Stripe.
-      if (cancelReturnPath === "/login/signup") {
-        setSignupFinishingCookie();
-        writeSignupWizardStep("plan");
-      }
-      const result = await createCheckoutSession(
-        selected,
-        cancelReturnPath ? { cancelPath: cancelReturnPath } : undefined,
-      );
+
+    try {
+      const result = signupResumeToken
+        ? await createSignupLeadCheckoutSession(selected, signupResumeToken)
+        : await createCheckoutSession(selected, {
+            cancelPath: from,
+          });
       if (!result.ok) {
         setError(result.error);
+        setPending(false);
         return;
       }
       window.location.assign(result.url);
-    });
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Não foi possível iniciar o pagamento.",
+      );
+      setPending(false);
+    }
   }
 
   return (
-    <div className="mx-auto w-full max-w-lg space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <h1 className="font-heading text-2xl font-bold tracking-tight sm:text-3xl">
           {title}
@@ -133,7 +167,9 @@ export function PlanPicker({
                     )}
                     aria-hidden
                   >
-                    {isSelected ? <Check className="size-3" strokeWidth={3} /> : null}
+                    {isSelected ? (
+                      <Check className="size-3" strokeWidth={3} />
+                    ) : null}
                   </span>
                 </div>
               </div>
@@ -142,21 +178,23 @@ export function PlanPicker({
         })}
       </div>
 
-      {error ? (
-        <p className="text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
+      <div className="space-y-2">
+        <Button
+          type="button"
+          size="lg"
+          disabled={pending}
+          onClick={() => void onContinue()}
+          className="h-14 w-full bg-[var(--neuma-orange)] text-base font-semibold text-white hover:bg-[var(--neuma-orange)]/90"
+        >
+          Continuar para pagar
+        </Button>
 
-      <Button
-        type="button"
-        size="lg"
-        disabled={pending}
-        onClick={onContinue}
-        className="h-14 w-full bg-[var(--neuma-orange)] text-base font-semibold text-white hover:bg-[var(--neuma-orange)]/90"
-      >
-        {pending ? "A abrir o pagamento…" : "Continuar para pagar"}
-      </Button>
+        {error ? (
+          <p className="text-center text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
 
       <p className="text-center text-xs text-muted-foreground">
         Pagamento seguro pela Stripe. Podes cancelar a qualquer momento no

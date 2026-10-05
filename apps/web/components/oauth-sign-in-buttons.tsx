@@ -54,7 +54,7 @@ function AppleIcon({ className }: { className?: string }) {
 }
 
 const OAUTH_BUTTON_CLASS =
-  "h-11 flex-1 gap-2 border border-white/12 bg-white/[0.06] text-sm font-medium text-foreground hover:bg-white/12";
+  "h-11 flex-1 border border-white/12 bg-white/[0.06] text-foreground hover:bg-white/12";
 
 export function OAuthSignInButtons({
   intent = "login",
@@ -135,29 +135,32 @@ export function OAuthSignInButtons({
         type="button"
         variant="outline"
         disabled={pending !== null}
+        aria-label={
+          pending === "google" ? "A abrir Google…" : "Continuar com Google"
+        }
         onClick={() => signIn("google")}
         className={cn(
           OAUTH_BUTTON_CLASS,
-          layout === "stack" && "h-12 w-full gap-3 text-base",
+          layout === "stack" && "h-12 w-full",
+          pending === "google" && "opacity-70",
         )}
       >
-        <GoogleIcon className={layout === "row" ? "size-4" : undefined} />
-        {pending === "google" ? "A abrir…" : "Google"}
+        <GoogleIcon />
       </Button>
       <Button
         type="button"
         variant="outline"
         disabled
         aria-disabled="true"
+        aria-label="Apple — em breve"
         title="Em breve"
         className={cn(
           OAUTH_BUTTON_CLASS,
           "cursor-not-allowed opacity-40",
-          layout === "stack" && "h-12 w-full gap-3 text-base",
+          layout === "stack" && "h-12 w-full",
         )}
       >
-        <AppleIcon className={layout === "row" ? "size-4" : undefined} />
-        Apple
+        <AppleIcon />
       </Button>
     </>
   );

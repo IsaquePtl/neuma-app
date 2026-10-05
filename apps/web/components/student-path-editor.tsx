@@ -29,7 +29,13 @@ import {
 import { PathStatusMenu } from "@/components/path-status-menu";
 import { activateNode, deleteNode, moveNode } from "@/lib/actions/nodes";
 import { deletePath } from "@/lib/actions/paths";
-import { formatDate, isPhaseBoundary, phaseKeyLabel } from "@/lib/labels";
+import { formatDate, phaseKeyLabel } from "@/lib/labels";
+import {
+  normalizePhaseKey,
+  phaseOptions,
+  planPhaseAwareMove,
+  resolvePhaseCheckpointIds,
+} from "@/lib/nodes/phases";
 import type { StudentNode, StudentPath } from "@/lib/students/queries";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -54,6 +60,8 @@ export function StudentPathEditor({
   libraryTopics?: PickerTopic[];
   libraryAssets?: PickerAsset[];
 }) {
+  const phases = phaseOptions(nodes);
+  const checkpointIds = resolvePhaseCheckpointIds(nodes);
   return (
     <div className="space-y-4">
       {!embedded ? (
@@ -186,6 +194,7 @@ export function StudentPathEditor({
               categories={libraryCategories}
               topics={libraryTopics}
               assets={libraryAssets}
+              phases={phases}
             />
           </div>
 
@@ -205,12 +214,26 @@ export function StudentPathEditor({
             </Card>
           ) : (
             <ol className="space-y-3">
-              {nodes.map((node, i) => (
+              {nodes.map((node, i) => {
+                const key = normalizePhaseKey(node.phase_key);
+                const phase = key ? phases.find((p) => p.key === key) : undefined;
+                const isPhaseStart =
+                  Boolean(key) && (i === 0 || normalizePhaseKey(nodes[i - 1].phase_key) !== key);
+                const isPhaseCheckpoint = checkpointIds.has(node.id);
+                const canMoveUp = planPhaseAwareMove(nodes, node.id, "up") !== null;
+                const canMoveDown = planPhaseAwareMove(nodes, node.id, "down") !== null;
+                return (
                 <Fragment key={node.id}>
-                  {isPhaseBoundary(nodes, i) ? (
+                  {isPhaseStart ? (
                     <li className="list-none pt-2 first:pt-0">
                       <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                        {phaseKeyLabel(node.phase_key)}
+                        {phaseKeyLabel(key)}
+                        {phase ? (
+                          <span className="ml-2 normal-case tracking-normal text-muted-foreground/70">
+                            {phase.count} {phase.count === 1 ? "nível" : "níveis"} ·{" "}
+                            {phase.checkpoint ? "com check-point de fase" : "sem check-point de fase"}
+                          </span>
+                        ) : null}
                       </p>
                     </li>
                   ) : null}
@@ -225,6 +248,11 @@ export function StudentPathEditor({
                           <p className="font-medium">{node.title}</p>
                           <NodeStatusBadge status={node.status} />
                           <NodeKindBadge kind={node.kind} />
+                          {isPhaseCheckpoint ? (
+                            <span className="rounded-full border border-[var(--neuma-coral)]/40 bg-[var(--neuma-coral)]/10 px-2 py-0.5 text-[11px] text-[var(--neuma-coral)]">
+                              Fecha a {phaseKeyLabel(key)}
+                            </span>
+                          ) : null}
                         </div>
                         {node.description ? (
                           <p className="whitespace-pre-wrap text-sm text-muted-foreground">
@@ -271,7 +299,7 @@ export function StudentPathEditor({
                           type="submit"
                           variant="ghost"
                           size="icon"
-                          disabled={i === 0}
+                          disabled={!canMoveUp}
                           aria-label="Subir"
                         >
                           <ChevronUp className="size-4" />
@@ -285,7 +313,7 @@ export function StudentPathEditor({
                           type="submit"
                           variant="ghost"
                           size="icon"
-                          disabled={i === nodes.length - 1}
+                          disabled={!canMoveDown}
                           aria-label="Descer"
                         >
                           <ChevronDown className="size-4" />
@@ -297,6 +325,7 @@ export function StudentPathEditor({
                         categories={libraryCategories}
                         topics={libraryTopics}
                         assets={libraryAssets}
+                        phases={phases}
                       />
                       <form action={deleteNode}>
                         <input type="hidden" name="id" value={node.id} />
@@ -314,7 +343,8 @@ export function StudentPathEditor({
                   </Card>
                 </li>
                 </Fragment>
-              ))}
+                );
+              })}
             </ol>
           )}
         </>

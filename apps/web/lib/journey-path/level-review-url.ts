@@ -13,3 +13,8 @@ export function mentorLevelReviewHref(
   const qs = params.toString();
   return `/studio/journeys/${pathId}/levels/${nodeId}${qs ? `?${qs}` : ""}`;
 }
+
+/** Full-page mentor quiz preview (same shell as level review / check-in). */
+export function mentorLevelQuizHref(pathId: string, nodeId: string): string {
+  return `/studio/journeys/${pathId}/levels/${nodeId}/quiz`;
+}

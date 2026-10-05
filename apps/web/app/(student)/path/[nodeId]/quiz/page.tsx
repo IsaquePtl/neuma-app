@@ -2,9 +2,11 @@ import { notFound, redirect } from "next/navigation";
 
 import { CheckpointQuizPanel } from "@/components/checkpoint-quiz-panel";
 import { getQuizForStudent } from "@/lib/actions/quiz";
+import { resolveNextLevel } from "@/lib/feedbacks/student-shared";
 import { createClient } from "@/lib/supabase/server";
 import { loadMyPathWithNodes } from "@/lib/students/queries";
 import { nodeUsesQuizGate } from "@/lib/nodes/pass-rule";
+import { loadPhaseReview } from "@/lib/nodes/phase-review";
 
 async function levelNumberForNode(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -54,6 +56,11 @@ export default async function CheckpointQuizPage({
     redirect("/path");
   }
 
+  const review = await loadPhaseReview(supabase, user.id, nodes, nodeId);
+  if (review?.reviewRequired && review.pendingCount > 0) {
+    redirect(`/path/${nodeId}`);
+  }
+
   const [levelNumber, { data: attempts }, { questions }] = await Promise.all([
     levelNumberForNode(supabase, nodeId, path.id),
     supabase
@@ -66,12 +73,15 @@ export default async function CheckpointQuizPage({
     getQuizForStudent(nodeId),
   ]);
 
+  const nextLevel = resolveNextLevel(nodes, nodeId);
+
   return (
     <CheckpointQuizPanel
       nodeId={nodeId}
       nodeTitle={node.title}
       pathTitle={path.title}
       levelNumber={levelNumber ?? nodeIndex + 1}
+      nextLevel={nextLevel}
       initialLastAttempt={attempts?.[0] ?? null}
       questions={questions}
     />

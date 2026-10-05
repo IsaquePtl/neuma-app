@@ -63,8 +63,14 @@ def propose_path_draft(
     Cria um percurso em rascunho HITL (status=draft; mentor activa depois).
     Duração em meses (default 3) → semanas Mon–Fri a partir da próxima segunda.
     Cada nível: duration_weeks (mín. 1). Se omitido, distribui pelas semanas do período.
-    nodes_json: [{title, description, kind, order_index, duration_weeks?, week_number?}].
+    nodes_json: [{title, description, kind, order_index, duration_weeks?, week_number?,
+    phase_key?, is_phase_checkpoint?, node_code?}].
     kind: lesson|practice|call|milestone.
+    Fases: phase_key curto (A, B, C…) agrupa níveis seguidos. Um milestone com
+    is_phase_checkpoint=true fecha a fase (fica sempre no fim dela; se o aluno falhar
+    o quiz, revê os níveis da fase). Milestone sem fase ou com is_phase_checkpoint=false
+    é check-point solto (só repete o quiz). Por omissão, o milestone que termina uma
+    fase fecha-a. Máx. 1 check-point de fase por fase.
     Passa student_id (UUID) quando o aluno já está seleccionado na UI.
     """
     from shared.path_draft import insert_draft_path
@@ -138,6 +144,9 @@ def apply_draft_path_edit(path_id: str, summary: str, changes_json: str) -> str:
     """
     Aplica alterações a um percurso em status=draft (edição directa HITL).
     changes_json: {title?, goal?, description?, update_nodes?: [...], replace_nodes?: [...]}.
+    update_nodes: [{order_index|id, title?, description?, kind?, phase_key?,
+    is_phase_checkpoint?, node_code?}]. A ordem/fases são normalizadas no fim
+    (fases contíguas, check-point de fase no fim da fase).
     Preferir update_nodes com order_index para mudanças pontuais.
     """
     from shared.path_draft import apply_draft_path_changes

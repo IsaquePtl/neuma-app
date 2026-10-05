@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { confirmCheckInNudges } from "@/lib/actions/mentor-agent";
+import { normalizePhaseRows } from "@/lib/nodes/phases";
 
 async function requireMentor() {
   const supabase = await createClient();
@@ -77,6 +78,9 @@ type PathDraftPayload = {
     order_index?: number;
     week_number?: number;
     duration_weeks?: number;
+    phase_key?: string | null;
+    is_phase_checkpoint?: boolean | null;
+    node_code?: string | null;
   }>;
 };
 
@@ -131,8 +135,9 @@ export async function approveProposal(proposalId: string) {
 
     const nodes = Array.isArray(p.nodes) ? p.nodes : [];
     if (nodes.length) {
-      const rows = nodes
+      const sorted = nodes
         .map((n, i) => ({
+          id: String(i),
           path_id: path.id,
           title: n.title,
           description: n.description ?? null,
@@ -146,8 +151,16 @@ export async function approveProposal(proposalId: string) {
               ? n.duration_weeks
               : 1,
           status: "locked" as const,
+          phase_key: n.phase_key ?? null,
+          is_phase_checkpoint: n.is_phase_checkpoint === true,
+          node_code: n.node_code?.trim() || null,
         }))
         .sort((a, b) => a.order_index - b.order_index);
+      const rows = normalizePhaseRows(sorted).map((node, i) => {
+        const row: Omit<typeof node, "id"> & { id?: string } = { ...node };
+        delete row.id;
+        return { ...row, order_index: i + 1 };
+      });
       // First node stays locked until mentor activates path; draft mode.
       const { error: nodeErr } = await supabase.from("nodes").insert(rows);
       if (nodeErr) throw nodeErr;

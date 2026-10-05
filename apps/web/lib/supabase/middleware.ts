@@ -94,14 +94,29 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  // Autenticado a terminar registo (plano / perfil) — cookie definido antes do OAuth ou ao criar conta.
+  // Autenticado a terminar registo (plano / perfil) — cookie ou flag signup_incomplete.
   if (user && path === "/login/signup") {
     const finishing =
       request.cookies.get(SIGNUP_FINISHING_COOKIE)?.value === "1";
     if (!finishing) {
-      const redirectUrl = request.nextUrl.clone();
-      redirectUrl.pathname = "/";
-      return NextResponse.redirect(redirectUrl);
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("signup_incomplete")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profile?.signup_incomplete) {
+        supabaseResponse.cookies.set(SIGNUP_FINISHING_COOKIE, "1", {
+          path: "/",
+          maxAge: 1800,
+          sameSite: "lax",
+          httpOnly: true,
+        });
+      } else {
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.pathname = "/";
+        return NextResponse.redirect(redirectUrl);
+      }
     }
   }
 

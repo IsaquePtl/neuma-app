@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -10,7 +10,9 @@ import {
   type QuizAttemptSummary,
   type QuizOption,
 } from "@/lib/actions/quiz";
+import { FeedbackNextLevelPreview } from "@/components/feedback-next-level-preview";
 import { Button } from "@/components/ui/button";
+import type { NextLevelPreview } from "@/lib/feedbacks/student-shared";
 import { quizScoreTier, type QuizHeadline } from "@/lib/nodes/evaluation";
 import { cn } from "@/lib/utils";
 
@@ -56,17 +58,29 @@ const quizScoreTheme: Record<
   },
 };
 
+const SECONDARY_CTA_CLASS =
+  "h-11 w-full rounded-2xl border border-white/22 bg-white/[0.18] text-sm font-medium text-foreground shadow-none hover:bg-white/[0.24] hover:text-foreground";
+
 function QuizResults({
   result,
-  onClose,
+  levelHref,
+  nextLevel,
+  onRetry,
 }: {
   result: QuizAttemptSummary;
-  onClose: () => void;
+  levelHref: string;
+  nextLevel: NextLevelPreview | null;
+  onRetry: () => void;
 }) {
   const tier = quizScoreTier(result.score, result.pass_score);
   const theme = quizScoreTheme[tier];
   const progressPct =
     result.total > 0 ? Math.round((result.correct_count / result.total) * 100) : 0;
+  const passed =
+    Boolean(result.unlocked) ||
+    (result.pass_score != null && result.score >= result.pass_score);
+  const showNextLevel = Boolean(passed && nextLevel);
+  const failedPhase = !passed && result.phase ? result.phase : null;
 
   return (
     <div className="flex w-full flex-col gap-4">
@@ -118,23 +132,50 @@ function QuizResults({
 
           <p className="text-xs leading-relaxed text-muted-foreground">
             {result.unlocked
-              ? "Nota suficiente — o nível seguinte já está desbloqueado."
-              : result.pass_score != null && result.score < result.pass_score
-                ? `Precisas de ${result.pass_score}% para avançar. Podes repetir o quiz.`
-                : "O mentor valida a passagem de nível. Podes voltar ao nível e continuar o percurso."}
+              ? result.phase
+                ? `Nota suficiente — fechaste a ${result.phase.label}.`
+                : "Nota suficiente — o nível seguinte já está desbloqueado."
+              : failedPhase
+                ? `Precisas de ${result.pass_score}% para fechar a ${failedPhase.label}. Revê os ${failedPhase.reviewCount} níveis da fase e tenta de novo.`
+                : result.pass_score != null && result.score < result.pass_score
+                  ? `Precisas de ${result.pass_score}% para avançar. Podes repetir o quiz já.`
+                  : "O mentor valida a passagem de nível. Podes repetir o quiz quando quiseres."}
           </p>
         </div>
       </div>
 
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={onClose}
-        className="h-8 self-start rounded-xl px-4 text-xs font-medium text-muted-foreground hover:bg-white/[0.06] hover:text-foreground"
-      >
-        Fechar
-      </Button>
+      {showNextLevel && nextLevel ? (
+        <FeedbackNextLevelPreview nextLevel={nextLevel} />
+      ) : passed ? (
+        <Button
+          render={<Link href="/path" />}
+          nativeButton={false}
+          size="lg"
+          className="h-11 w-full rounded-2xl text-sm font-medium"
+        >
+          Ver percurso
+        </Button>
+      ) : failedPhase ? (
+        <Button
+          render={<Link href={levelHref} />}
+          nativeButton={false}
+          size="lg"
+          variant="secondary"
+          className={SECONDARY_CTA_CLASS}
+        >
+          Rever níveis da {failedPhase.label}
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          size="lg"
+          variant="secondary"
+          onClick={onRetry}
+          className={SECONDARY_CTA_CLASS}
+        >
+          Repetir quiz
+        </Button>
+      )}
     </div>
   );
 }
@@ -142,18 +183,20 @@ function QuizResults({
 export function CheckpointQuizForm({
   nodeId,
   levelHref,
+  nextLevel = null,
   questions,
   initialLastAttempt = null,
 }: {
   nodeId: string;
   levelHref: string;
+  nextLevel?: NextLevelPreview | null;
   questions: StudentQuestion[];
   initialLastAttempt?: QuizAttemptSummary | null;
 }) {
-  const router = useRouter();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [index, setIndex] = useState(0);
   const [result, setResult] = useState<QuizAttemptSummary | null>(null);
+  const [lastAttempt, setLastAttempt] = useState(initialLastAttempt);
   const [pending, startTransition] = useTransition();
 
   function goBack() {
@@ -187,11 +230,20 @@ export function CheckpointQuizForm({
   const canAdvance = Boolean(current && answers[current.id]);
   const canSubmit = allAnswered && !pending;
 
+  function retry() {
+    setLastAttempt(result);
+    setAnswers({});
+    setIndex(0);
+    setResult(null);
+  }
+
   if (result) {
     return (
       <QuizResults
         result={result}
-        onClose={() => router.push(levelHref)}
+        levelHref={levelHref}
+        nextLevel={nextLevel}
+        onRetry={retry}
       />
     );
   }
@@ -205,11 +257,10 @@ export function CheckpointQuizForm({
       className="flex w-full flex-col gap-6"
       onSubmit={(e) => e.preventDefault()}
     >
-      {initialLastAttempt ? (
+      {lastAttempt ? (
         <p className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-center text-xs leading-relaxed text-muted-foreground">
-          Última nota: {initialLastAttempt.score}% (
-          {initialLastAttempt.correct_count}/{initialLastAttempt.total}) — podes
-          repetir quando quiseres.
+          Última nota: {lastAttempt.score}% (
+          {lastAttempt.correct_count}/{lastAttempt.total})
         </p>
       ) : null}
 

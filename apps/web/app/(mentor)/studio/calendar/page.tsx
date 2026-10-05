@@ -2,11 +2,14 @@ import { Suspense } from "react";
 import { ActionNeededList } from "@/components/action-needed-list";
 import { CalendarToolbar } from "@/components/calendar-toolbar";
 import { MentorCalendar } from "@/components/mentor-calendar";
+import { MentorCalBookButton } from "@/components/mentor-cal-book-panel";
 import { CreateCalendarEventPanel } from "@/components/create-calendar-event-form";
 import { UpcomingSessionsSection } from "@/components/mentor-dashboard/upcoming-sessions-section";
 import { Button } from "@/components/ui/button";
 import { ScreenLoader } from "@/components/screen-loader";
 import { createClient } from "@/lib/supabase/server";
+import { syncCalBookingsFromApi } from "@/lib/cal-api-sync";
+import { getCalLink, getCalUsername } from "@/lib/cal-config";
 import {
   loadCalendarEvents,
   loadUpcomingSessions,
@@ -47,6 +50,9 @@ export default async function MentorCalendarPage({
       ? monthIndex
       : now.getMonth();
 
+  // Puxa do Cal.com (API) antes de ler a BD — cobre webhooks em falta no localhost.
+  await syncCalBookingsFromApi();
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -77,9 +83,8 @@ export default async function MentorCalendarPage({
     ]);
 
   const calUser =
-    mentorProfile?.cal_username ||
-    process.env.NEXT_PUBLIC_CALCOM_USERNAME ||
-    "";
+    mentorProfile?.cal_username?.trim() || getCalUsername();
+  const calPublicLink = getCalLink(calUser);
 
   const studentOptions = (students ?? []).map((s) => ({
     id: s.id,
@@ -108,23 +113,28 @@ export default async function MentorCalendarPage({
             Calendário
           </h1>
         </div>
-        {calUser ? (
-          <Button
-            render={
-              <a
-                href={`https://app.cal.com/bookings/upcoming`}
-                target="_blank"
-                rel="noopener noreferrer"
-              />
-            }
-            nativeButton={false}
-            variant="secondary"
-            size="sm"
-            className="gap-1.5"
-          >
-            Cal.com
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {calUser ? (
+            <MentorCalBookButton calUser={calUser} />
+          ) : null}
+          {calUser ? (
+            <Button
+              render={
+                <a
+                  href={`https://cal.com/${calPublicLink}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                />
+              }
+              nativeButton={false}
+              variant="secondary"
+              size="sm"
+              className="gap-1.5"
+            >
+              Cal.com
+            </Button>
+          ) : null}
+        </div>
       </header>
 
       <ActionNeededList items={actionNeeded} />

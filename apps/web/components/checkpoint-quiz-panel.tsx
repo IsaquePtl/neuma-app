@@ -5,6 +5,7 @@ import type {
   QuizAttemptSummary,
   QuizOption,
 } from "@/lib/actions/quiz";
+import type { NextLevelPreview } from "@/lib/feedbacks/student-shared";
 import { cn } from "@/lib/utils";
 
 type StudentQuestion = {
@@ -22,6 +23,7 @@ export function CheckpointQuizPanel({
   nodeTitle,
   pathTitle,
   levelNumber,
+  nextLevel = null,
   initialLastAttempt = null,
   questions,
 }: {
@@ -29,6 +31,7 @@ export function CheckpointQuizPanel({
   nodeTitle: string;
   pathTitle?: string | null;
   levelNumber: number;
+  nextLevel?: NextLevelPreview | null;
   initialLastAttempt?: QuizAttemptSummary | null;
   questions: StudentQuestion[];
 }) {
@@ -69,6 +72,7 @@ export function CheckpointQuizPanel({
           <CheckpointQuizForm
             nodeId={nodeId}
             levelHref={levelHref}
+            nextLevel={nextLevel}
             questions={questions}
             initialLastAttempt={initialLastAttempt}
           />

@@ -84,9 +84,8 @@ export default async function NewCheckinPage({
     node.kind,
     node.pass_rule,
   );
-  const videoSlot = checkInKind !== "text";
   const blocked =
-    nodeRequiresCheckIn(node.pass_rule) && videoSlot && !allowance.allowed
+    nodeRequiresCheckIn(node.pass_rule) && !allowance.allowed
       ? checkInBlockedMessage(allowance)
       : !nodeRequiresCheckIn(node.pass_rule)
         ? "Este nível não pede check-in. Marca como visto na página do nível ou espera o feedback do mentor."

@@ -66,6 +66,9 @@ export async function upsertTeoriaMusicalTemplate(
     if (error) throw new Error(error.message);
   }
 
+  const lastOfPhase = new Map<string, string>();
+  for (const node of nodes) lastOfPhase.set(node.phaseKey, node.code);
+
   for (const node of nodes) {
     const quiz =
       node.kind === "milestone" ? teoriaSkeletonQuiz(node.code) : [];
@@ -76,6 +79,8 @@ export async function upsertTeoriaMusicalTemplate(
       order_index: node.orderIndex,
       phase_key: node.phaseKey,
       node_code: node.code,
+      is_phase_checkpoint:
+        node.kind === "milestone" && lastOfPhase.get(node.phaseKey) === node.code,
       pass_rule: node.passRule,
       pass_score: node.passRule === "quiz" ? DEFAULT_QUIZ_PASS_SCORE : null,
       check_in_kind: node.checkInKind,

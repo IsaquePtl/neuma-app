@@ -17,14 +17,15 @@ import {
 import { loadMentorCalUsername, loadMyPathWithNodes } from "@/lib/students/queries";
 import { FirstVisitWelcome } from "@/components/first-visit-welcome";
 import { ActiveLevelFeedbackCta } from "@/components/active-level-feedback-cta";
+import { HomeAwaitingPanel } from "@/components/home-awaiting-panel";
 import { PathPausedCard } from "@/components/path-paused-card";
 import {
   StudentTodoList,
   type StudentTodoItem,
 } from "@/components/student-todo-list";
 import { formatDate, nodeKindLabel } from "@/lib/labels";
-import { PathAwaitingCard } from "@/components/path-awaiting-card";
 import { studentHasOnboardingSubmission } from "@/lib/onboarding/submission";
+import { loadActivePhaseReview } from "@/lib/nodes/phase-review";
 import {
   firstNameFromFullName,
   welcomeGreeting,
@@ -80,6 +81,7 @@ export default async function StudentHomePage() {
     .select("full_name, gender")
     .eq("id", user!.id)
     .single();
+  const fullName = profile?.full_name?.trim() ?? "";
   const studentName =
     firstNameFromFullName(profile?.full_name) ??
     profile?.full_name ??
@@ -128,8 +130,9 @@ export default async function StudentHomePage() {
             {
               key: "onboarding",
               title: "Onboarding",
-              href: "/onboarding",
-              tag: "ONBOARDING",
+              href: "/home?onboarding=1",
+              tag: "NEUMA 1:1",
+              inline: true,
             } satisfies StudentTodoItem,
           ]),
       {
@@ -151,19 +154,17 @@ export default async function StudentHomePage() {
         <Suspense fallback={null}>
           <FirstVisitWelcome />
         </Suspense>
-        <div className={HOME_VIEWPORT}>
-          <div className="neuma-enter-up shrink-0 space-y-1">
-            <h1 className="font-heading text-[1.75rem] leading-tight tracking-tight sm:text-3xl">
-              <span className="font-normal">{greeting}, </span>
-              <span className="font-bold">{studentName}</span>
-            </h1>
-          </div>
-
-          <div className="neuma-enter-up neuma-enter-delay-1 min-w-0 space-y-4">
-            {hasOnboarding ? <PathAwaitingCard /> : null}
-            <StudentTodoList items={awaitingTodos} />
-          </div>
-        </div>
+        <Suspense fallback={null}>
+          <HomeAwaitingPanel
+            greeting={greeting}
+            studentName={studentName}
+            hasOnboarding={hasOnboarding}
+            todos={awaitingTodos}
+            studentId={user!.id}
+            initialName={fullName}
+            initialEmail={user?.email ?? ""}
+          />
+        </Suspense>
       </>
     );
   }
@@ -193,10 +194,16 @@ export default async function StudentHomePage() {
 
     if (activeQuiz) {
       const week = weekNumberLabel(activeQuiz.week_number);
+      const review = await loadActivePhaseReview(supabase, user!.id, nodes);
+      const reviewPending = review && review.pendingCount > 0 ? review : null;
       todos.push({
         key: `quiz:${activeQuiz.id}`,
-        title: `Fazer o check-point da semana ${week}`,
-        href: `/path/${activeQuiz.id}/quiz`,
+        title: reviewPending
+          ? `Rever a ${reviewPending.phaseLabel} (${reviewPending.items.length - reviewPending.pendingCount}/${reviewPending.items.length})`
+          : `Fazer o check-point da semana ${week}`,
+        href: reviewPending
+          ? `/path/${activeQuiz.id}`
+          : `/path/${activeQuiz.id}/quiz`,
         tag: todoTagLabel(`quiz:${activeQuiz.id}`),
       });
     }
@@ -292,7 +299,7 @@ export default async function StudentHomePage() {
                     ) : (
                       <Video className="size-3" />
                     )}
-                    {activeNode ? nodeKindLabel[activeNode.kind] : "Aula"}
+                    {activeNode ? nodeKindLabel[activeNode.kind] : "Percurso"}
                     {activeNode?.week_number
                       ? ` · Sem. ${activeNode.week_number}`
                       : null}
@@ -303,6 +310,11 @@ export default async function StudentHomePage() {
                   {activeNode?.title ?? path.title}
                 </p>
 
+                {!activeNode && nodes.length > 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    O primeiro nível desbloqueia em breve.
+                  </p>
+                ) : null}
                 {activeNode?.due_date ? (
                   <p className="inline-flex items-center gap-1 text-sm text-muted-foreground">
                     <CalendarClock className="size-3.5" />

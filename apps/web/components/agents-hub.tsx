@@ -821,8 +821,8 @@ export function AgentsHub({
     <div
       className={cn(
         "relative flex w-full flex-col overflow-hidden overscroll-none",
-        /* Altura = ecrã − header − main pt − menubar (igual a .neuma-mobile-viewport). */
-        "h-[calc(100lvh-4rem-env(safe-area-inset-top,0px)-1rem-6.5rem-8px)]",
+        /* Altura = ecrã − header − main pt (menubar flutuante sobrepõe). */
+        "h-[calc(100lvh-4rem-env(safe-area-inset-top,0px)-1rem)]",
         /* Desktop: main pt-10 + pb-14. */
         "desktop:h-[calc(100dvh-6rem)]",
       )}

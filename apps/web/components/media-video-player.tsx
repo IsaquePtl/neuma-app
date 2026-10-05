@@ -26,9 +26,6 @@ function formatTime(seconds: number): string {
   return `${minutes}:${secs.toString().padStart(2, "0")}`;
 }
 
-const timelineInputClass =
-  "absolute inset-0 z-10 h-full w-full cursor-pointer appearance-none bg-transparent opacity-0 [&::-webkit-slider-thumb]:size-0 [&::-webkit-slider-thumb]:appearance-none [&::-moz-range-thumb]:size-0 [&::-moz-range-thumb]:border-0";
-
 const volumeRangeClass =
   "h-1 w-14 shrink-0 cursor-pointer appearance-none rounded-full bg-white/20 accent-[var(--neuma-coral)] sm:w-16 [&::-webkit-slider-thumb]:size-2.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--neuma-coral)] [&::-moz-range-thumb]:size-2.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-[var(--neuma-coral)]";
 
@@ -76,6 +73,7 @@ function NativeVideoPlayer({
   const [isTimelineHovered, setIsTimelineHovered] = useState(false);
   const [isTimelinePointerActive, setIsTimelinePointerActive] = useState(false);
   const [volumeSliderPinned, setVolumeSliderPinned] = useState(false);
+  const scrubbingRef = useRef(false);
 
   const clearHideControlsTimeout = useCallback(() => {
     if (hideControlsTimeoutRef.current !== null) {
@@ -261,6 +259,21 @@ function NativeVideoPlayer({
     [duration],
   );
 
+  const seekFromClientX = useCallback(
+    (clientX: number) => {
+      const el = timelineRef.current;
+      if (!el || duration <= 0) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const percent = Math.max(
+        0,
+        Math.min(100, ((clientX - rect.left) / rect.width) * 100),
+      );
+      handleSeek(percent);
+    },
+    [duration, handleSeek],
+  );
+
   const toggleFullscreen = useCallback(async () => {
     const container = containerRef.current;
     const video = videoRef.current;
@@ -291,45 +304,108 @@ function NativeVideoPlayer({
     hoverPercent !== null &&
     hoverPercent > progress + 0.5;
 
-  const handleTimelineMouseMove = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      if (!isFinePointer || !timelineRef.current) return;
+  const handleTimelineMouseEnter = useCallback(() => {
+    setIsTimelineHovered(true);
+  }, []);
 
+  const handleTimelineMouseLeave = useCallback(() => {
+    if (scrubbingRef.current) return;
+    setIsTimelineHovered(false);
+    setHoverPercent(null);
+  }, []);
+
+  const endTimelineScrub = useCallback(
+    (target: HTMLElement, pointerId: number) => {
+      if (!scrubbingRef.current) return;
+      scrubbingRef.current = false;
+      setIsSeeking(false);
+      setIsTimelinePointerActive(false);
+      try {
+        target.releasePointerCapture(pointerId);
+      } catch {
+        // already released
+      }
+      if (isPlaying) scheduleHideControls();
+    },
+    [isPlaying, scheduleHideControls],
+  );
+
+  const handleTimelinePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      scrubbingRef.current = true;
+      setIsSeeking(true);
+      setIsTimelinePointerActive(true);
+      setIsTimelineHovered(true);
+      showControls();
+      clearHideControlsTimeout();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      seekFromClientX(event.clientX);
+    },
+    [clearHideControlsTimeout, seekFromClientX, showControls],
+  );
+
+  const handleTimelinePointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (scrubbingRef.current) {
+        event.preventDefault();
+        seekFromClientX(event.clientX);
+        return;
+      }
+      if (!isFinePointer || !timelineRef.current) return;
       const rect = timelineRef.current.getBoundingClientRect();
       if (rect.width <= 0) return;
-
       const percent = Math.max(
         0,
         Math.min(100, ((event.clientX - rect.left) / rect.width) * 100),
       );
       setHoverPercent(percent);
     },
-    [isFinePointer],
+    [isFinePointer, seekFromClientX],
   );
 
-  const handleTimelineMouseEnter = useCallback(() => {
-    setIsTimelineHovered(true);
-  }, []);
+  const handleTimelinePointerUp = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      endTimelineScrub(event.currentTarget, event.pointerId);
+    },
+    [endTimelineScrub],
+  );
 
-  const handleTimelineMouseLeave = useCallback(() => {
-    setIsTimelineHovered(false);
-    setHoverPercent(null);
-  }, []);
-
-  const handleTimelinePointerDown = useCallback(() => {
-    setIsTimelinePointerActive(true);
-  }, []);
-
-  const handleTimelinePointerUp = useCallback(() => {
-    setIsTimelinePointerActive(false);
-  }, []);
+  const handleTimelineKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (duration <= 0) return;
+      const step = event.shiftKey ? 10 : 5;
+      if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+        event.preventDefault();
+        handleSeek(Math.min(100, progress + step));
+        return;
+      }
+      if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+        event.preventDefault();
+        handleSeek(Math.max(0, progress - step));
+        return;
+      }
+      if (event.key === "Home") {
+        event.preventDefault();
+        handleSeek(0);
+        return;
+      }
+      if (event.key === "End") {
+        event.preventDefault();
+        handleSeek(100);
+      }
+    },
+    [duration, handleSeek, progress],
+  );
 
   const handleContainerKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.key !== " " && event.key !== "k" && event.key !== "K") return;
 
       const target = event.target as HTMLElement;
-      if (target.closest('input[type="range"]')) return;
+      if (target.closest('[role="slider"]')) return;
 
       event.preventDefault();
       void togglePlay();
@@ -368,22 +444,6 @@ function NativeVideoPlayer({
   const handleVolumeMouseLeave = useCallback(() => {
     setVolumeSliderPinned(false);
   }, []);
-
-  useEffect(() => {
-    if (!isTimelinePointerActive) return;
-
-    const releaseTimelinePointer = () => {
-      setIsTimelinePointerActive(false);
-    };
-
-    window.addEventListener("pointerup", releaseTimelinePointer);
-    window.addEventListener("pointercancel", releaseTimelinePointer);
-
-    return () => {
-      window.removeEventListener("pointerup", releaseTimelinePointer);
-      window.removeEventListener("pointercancel", releaseTimelinePointer);
-    };
-  }, [isTimelinePointerActive]);
 
   return (
     <div
@@ -435,7 +495,7 @@ function NativeVideoPlayer({
       {isPlaying ? (
         <div
           className={cn(
-            "absolute inset-x-0 bottom-1 z-20 bg-gradient-to-t from-black/75 via-black/45 to-transparent pt-8 transition-opacity duration-200",
+            "absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/75 via-black/45 to-transparent pt-8 transition-opacity duration-200",
             showPlayingControls
               ? "opacity-100"
               : "pointer-events-none opacity-0",
@@ -535,24 +595,31 @@ function NativeVideoPlayer({
           <div className="px-4 py-1.5 sm:py-0 sm:pb-2">
             <div
               ref={timelineRef}
-              className="relative -my-1 overflow-visible py-3.5 sm:py-2.5"
+              role="slider"
+              tabIndex={0}
+              aria-label="Linha do tempo"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(progress)}
+              aria-valuetext={`${formatTime(currentTime)} de ${formatTime(duration)}`}
+              className="relative touch-none overflow-visible py-3.5 outline-none focus-visible:ring-2 focus-visible:ring-white/35 sm:py-2.5"
               onMouseEnter={handleTimelineMouseEnter}
-              onMouseMove={handleTimelineMouseMove}
               onMouseLeave={handleTimelineMouseLeave}
               onPointerDown={handleTimelinePointerDown}
+              onPointerMove={handleTimelinePointerMove}
               onPointerUp={handleTimelinePointerUp}
               onPointerCancel={handleTimelinePointerUp}
+              onKeyDown={handleTimelineKeyDown}
             >
+              {/* Track: height grows for hover/scrub — never scaleY (that stretched the thumb). */}
               <div
                 className={cn(
-                  "pointer-events-none relative h-1 origin-center transition-transform duration-200 ease-out",
-                  isTimelineZoomed && "scale-x-[1.02] scale-y-[2.75] sm:scale-y-[2.25]",
+                  "pointer-events-none relative flex items-center transition-[height] duration-200 ease-out",
+                  isTimelineZoomed ? "h-2.5" : "h-1",
                 )}
+                aria-hidden
               >
-                <div
-                  className="absolute inset-0 overflow-hidden rounded-full bg-white/25"
-                  aria-hidden
-                >
+                <div className="relative h-full w-full overflow-hidden rounded-full bg-white/25">
                   {showHoverPreview && hoverPercent !== null ? (
                     <div
                       className="absolute inset-y-0 bg-white/20"
@@ -567,46 +634,25 @@ function NativeVideoPlayer({
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-
-                <div
-                  className="absolute top-1/2 z-[1] size-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/25 bg-[var(--neuma-coral)] shadow-[0_0_0_1px_rgba(0,0,0,0.15)] sm:size-1.5"
-                  style={{ left: `${progress}%` }}
-                  aria-hidden
-                />
-
-                {showHoverPreview && hoverPercent !== null ? (
-                  <div
-                    className="absolute top-1/2 z-[2] h-3 w-px -translate-x-1/2 -translate-y-1/2 bg-white/45"
-                    style={{ left: `${hoverPercent}%` }}
-                    aria-hidden
-                  />
-                ) : null}
               </div>
 
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={0.1}
-                value={progress}
-                onChange={(event) => {
-                  setIsSeeking(true);
-                  handleSeek(Number(event.target.value));
-                }}
-                onMouseDown={() => setIsSeeking(true)}
-                onTouchStart={() => setIsSeeking(true)}
-                onMouseUp={() => {
-                  setIsSeeking(false);
-                  setIsTimelinePointerActive(false);
-                }}
-                onTouchEnd={() => {
-                  setIsSeeking(false);
-                  setIsTimelinePointerActive(false);
-                }}
-                className={cn(timelineInputClass, "outline-none focus:outline-none")}
-                aria-label="Linha do tempo"
-                aria-valuetext={`${formatTime(currentTime)} de ${formatTime(duration)}`}
+              {/* Thumb sits outside the track so it stays a perfect circle on every screen. */}
+              <div
+                className={cn(
+                  "pointer-events-none absolute top-1/2 z-[1] aspect-square shrink-0 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/30 bg-[var(--neuma-coral)] shadow-[0_0_0_1px_rgba(0,0,0,0.2)]",
+                  isTimelineZoomed ? "size-3.5" : "size-3",
+                )}
+                style={{ left: `${progress}%` }}
+                aria-hidden
               />
+
+              {showHoverPreview && hoverPercent !== null ? (
+                <div
+                  className="pointer-events-none absolute top-1/2 z-[2] h-3.5 w-px -translate-x-1/2 -translate-y-1/2 bg-white/45"
+                  style={{ left: `${hoverPercent}%` }}
+                  aria-hidden
+                />
+              ) : null}
             </div>
           </div>
         </div>

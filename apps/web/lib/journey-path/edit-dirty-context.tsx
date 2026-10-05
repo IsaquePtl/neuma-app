@@ -2,12 +2,21 @@
 
 import { createContext, useContext } from "react";
 
+export type UnsavedEdits = {
+  /** Persists every pending edit; resolves false when validation or the request fails. */
+  save: () => Promise<boolean>;
+};
+
 export type JourneyEditDirtyContextValue = {
-  /** True when leave-guard would prompt (session changes or unsaved new draft). */
-  isDirty: boolean;
-  /** Acknowledge persisted changes / keep draft — clears dirty without discarding. */
-  save: () => void;
-  pending: boolean;
+  /** Composer reports local edits that are not persisted yet (null when clean). */
+  reportUnsaved: (edits: UnsavedEdits | null) => void;
+  /** Called after an explicit save so a new draft stops prompting keep/discard. */
+  acknowledgeSaved: () => void;
+};
+
+const noop: JourneyEditDirtyContextValue = {
+  reportUnsaved: () => {},
+  acknowledgeSaved: () => {},
 };
 
 const JourneyEditDirtyContext =
@@ -28,13 +37,5 @@ export function JourneyEditDirtyProvider({
 }
 
 export function useJourneyEditDirty(): JourneyEditDirtyContextValue {
-  const value = useContext(JourneyEditDirtyContext);
-  if (!value) {
-    return {
-      isDirty: false,
-      save: () => {},
-      pending: false,
-    };
-  }
-  return value;
+  return useContext(JourneyEditDirtyContext) ?? noop;
 }

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
 import type Stripe from "stripe";
 
+import { provisionSignupLeadFromCheckout } from "@/lib/actions/signup-leads";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe/client";
 import { fulfillOneToOneCheckout } from "@/lib/stripe/one-to-one";
@@ -136,6 +137,21 @@ export async function POST(request: NextRequest) {
           break;
         }
 
+        let leadProfileId: string | null = null;
+        if (session.metadata?.neuma_signup_lead_id) {
+          const provisioned = await provisionSignupLeadFromCheckout(session, {
+            establishSession: false,
+          });
+          if (provisioned.ok) {
+            leadProfileId = provisioned.profileId;
+          } else {
+            console.error(
+              "[stripe:webhook] signup lead provision failed:",
+              provisioned.error,
+            );
+          }
+        }
+
         const subscriptionId =
           typeof session.subscription === "string"
             ? session.subscription
@@ -144,8 +160,11 @@ export async function POST(request: NextRequest) {
           await syncSubscription(subscriptionId, {
             eventAt,
             profileId:
+              leadProfileId ??
               session.metadata?.neuma_profile_id ??
-              session.client_reference_id ??
+              (session.metadata?.neuma_signup_lead_id
+                ? null
+                : session.client_reference_id) ??
               null,
           });
         }

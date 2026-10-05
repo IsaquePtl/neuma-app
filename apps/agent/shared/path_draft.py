@@ -25,6 +25,9 @@ _LEVEL_LINE = re.compile(
     r"(?im)^\s*\*?\s*\*?\s*N[ií]vel\s+(\d+)\s*\|\s*([^|\n]+?)\s+[—\-–]\s+(.+?)\s*\*?\s*$"
 )
 
+# ##### FASE 1: Fundamentos  |  **Fase A — Base**
+_PHASE_LINE = re.compile(r"(?im)^\s*#*\s*\*{0,2}\s*fase\s+([A-Za-z0-9]{1,8})\b")
+
 _KIND_ALIASES: dict[str, str] = {
     "conceito": "lesson",
     "lesson": "lesson",
@@ -151,6 +154,8 @@ class DraftNode(BaseModel):
     order_index: int = 1
     week_number: int | None = None
     duration_weeks: int | None = None
+    phase_key: str | None = None
+    is_phase_checkpoint: bool | None = None
 
 
 class DraftPathPlan(BaseModel):
@@ -171,11 +176,78 @@ def normalize_kind(raw: str) -> str:
     return "practice"
 
 
+def normalize_phase_key(raw: Any) -> str | None:
+    """Same rules as the web app (`lib/nodes/phases.ts`): «Fase a» → «A»."""
+    value = re.sub(r"(?i)^fase\s+", "", str(raw or "").strip()).strip()
+    return value.upper() or None
+
+
+def apply_phase_layout(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Mirror of the web app's planPhaseLayout:
+    phases contiguous, at most one checkpoint per phase, checkpoint last,
+    only milestones with a phase can be checkpoints.
+    Default: a milestone that is the last level of its phase closes it,
+    unless `is_phase_checkpoint` is explicitly False.
+    """
+    for n in nodes:
+        n["phase_key"] = normalize_phase_key(n.get("phase_key"))
+
+    last_by_key: dict[str, dict[str, Any]] = {}
+    for n in nodes:
+        if n["phase_key"]:
+            last_by_key[n["phase_key"]] = n
+
+    chosen: dict[str, int] = {}
+    for i, n in enumerate(nodes):
+        key = n["phase_key"]
+        if key and n.get("kind") == "milestone" and n.get("is_phase_checkpoint") is True:
+            chosen[key] = i
+    for key, last in last_by_key.items():
+        if key in chosen:
+            continue
+        if last.get("kind") == "milestone" and last.get("is_phase_checkpoint") is not False:
+            chosen[key] = nodes.index(last)
+    gate_idx = set(chosen.values())
+
+    segments: list[dict[str, Any]] = []
+    by_key: dict[str, dict[str, Any]] = {}
+    for i, n in enumerate(nodes):
+        n["is_phase_checkpoint"] = i in gate_idx
+        key = n["phase_key"]
+        if not key:
+            segments.append({"nodes": [n], "gate": None})
+            continue
+        seg = by_key.get(key)
+        if seg is None:
+            seg = {"nodes": [], "gate": None}
+            by_key[key] = seg
+            segments.append(seg)
+        if i in gate_idx:
+            seg["gate"] = n
+        else:
+            seg["nodes"].append(n)
+
+    out: list[dict[str, Any]] = []
+    for seg in segments:
+        out.extend(seg["nodes"])
+        if seg["gate"] is not None:
+            out.append(seg["gate"])
+    return out
+
+
 def parse_nodes_from_rota(markdown: str) -> list[dict[str, Any]]:
     """Extract levels from ROTA DE TRANSFORMAÇÃO markdown when present."""
     nodes: list[dict[str, Any]] = []
     seen: set[int] = set()
-    for m in _LEVEL_LINE.finditer(markdown or ""):
+    text = markdown or ""
+    phase_marks = [(m.start(), normalize_phase_key(m.group(1))) for m in _PHASE_LINE.finditer(text)]
+    for m in _LEVEL_LINE.finditer(text):
+        phase_key = None
+        for pos, key in phase_marks:
+            if pos > m.start():
+                break
+            phase_key = key
         order = int(m.group(1))
         if order in seen:
             continue
@@ -191,9 +263,11 @@ def parse_nodes_from_rota(markdown: str) -> list[dict[str, Any]]:
                 "kind": normalize_kind(kind_raw),
                 "order_index": order,
                 "week_number": None,
+                "phase_key": phase_key,
             }
         )
     nodes.sort(key=lambda n: n["order_index"])
+    nodes = apply_phase_layout(nodes)
     # Re-index densely if gaps
     for i, n in enumerate(nodes, start=1):
         n["order_index"] = i
@@ -227,6 +301,10 @@ def structure_nodes_with_llm(*, brief_markdown: str, student_name: str) -> Draft
                 content=(
                     "Monta um percurso Neuma em rascunho a partir do brief. "
                     "~12–16 níveis (lesson|practice|call|milestone). "
+                    "Agrupa os níveis em fases (phase_key curto: A, B, C…). "
+                    "Uma fase pode terminar num milestone com is_phase_checkpoint=true "
+                    "(check-point que fecha a fase: se o aluno falhar, revê os níveis da fase). "
+                    "Milestones a meio de uma fase são check-points soltos (is_phase_checkpoint=false). "
                     "Cada nível tem duration_weeks (mínimo 1 semana Mon–Sex). "
                     "A soma das semanas deve caber num período de ~3–4 meses "
                     "(~12–16 semanas). Níveis sem conteúdo detalhado — só título + kind + duration_weeks. "
@@ -253,6 +331,8 @@ def structure_nodes_with_llm(*, brief_markdown: str, student_name: str) -> Draft
                 order_index=n.order_index or i,
                 week_number=n.week_number,
                 duration_weeks=n.duration_weeks if n.duration_weeks and n.duration_weeks >= 1 else None,
+                phase_key=normalize_phase_key(n.phase_key),
+                is_phase_checkpoint=n.is_phase_checkpoint,
             )
         )
     if not nodes:
@@ -301,12 +381,69 @@ def _normalize_nodes(raw_nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "content_body": n.get("content_body") or None,
                 "resource_url": n.get("resource_url") or None,
                 "due_date": n.get("due_date") or None,
+                "phase_key": n.get("phase_key"),
+                "is_phase_checkpoint": (
+                    n["is_phase_checkpoint"]
+                    if isinstance(n.get("is_phase_checkpoint"), bool)
+                    else None
+                ),
+                "node_code": (str(n.get("node_code") or "").strip()[:20] or None),
             }
         )
     out.sort(key=lambda x: x["order_index"])
+    out = apply_phase_layout(out)
     for i, n in enumerate(out, start=1):
         n["order_index"] = i
     return out
+
+
+def _phase_columns(n: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "phase_key": n.get("phase_key"),
+        "is_phase_checkpoint": bool(n.get("is_phase_checkpoint")),
+        "node_code": n.get("node_code"),
+    }
+
+
+def relayout_path_phases(
+    sb: Any,
+    path_id: str,
+    prefer_checkpoints: set[str] | None = None,
+) -> None:
+    """Re-apply the phase rules to a stored path (after point edits)."""
+    existing = (
+        sb.table("nodes")
+        .select("id, kind, phase_key, is_phase_checkpoint, order_index")
+        .eq("path_id", path_id)
+        .order("order_index")
+        .execute()
+    ).data or []
+    if not existing:
+        return
+    before = {n["id"]: bool(n.get("is_phase_checkpoint")) for n in existing}
+    draft = [dict(n) for n in existing]
+    for pid in prefer_checkpoints or set():
+        target = next((n for n in draft if n["id"] == pid), None)
+        if not target:
+            continue
+        key = normalize_phase_key(target.get("phase_key"))
+        for n in draft:
+            if key and normalize_phase_key(n.get("phase_key")) == key:
+                n["is_phase_checkpoint"] = False
+        target["is_phase_checkpoint"] = True
+    planned = apply_phase_layout(draft)
+    # Clear before set: one checkpoint per phase is a unique index.
+    for want in (False, True):
+        for n in planned:
+            if n["is_phase_checkpoint"] == want and before[n["id"]] != want:
+                sb.table("nodes").update({"is_phase_checkpoint": want}).eq("id", n["id"]).execute()
+    for n in planned:
+        orig = next(e for e in existing if e["id"] == n["id"])
+        if orig.get("phase_key") != n["phase_key"]:
+            sb.table("nodes").update({"phase_key": n["phase_key"]}).eq("id", n["id"]).execute()
+    ids = [n["id"] for n in planned]
+    if ids != [n["id"] for n in existing]:
+        sb.rpc("reorder_path_nodes", {"p_path_id": path_id, "p_ids": ids}).execute()
 
 
 def insert_draft_path(
@@ -386,6 +523,7 @@ def insert_draft_path(
                     start_monday, week_number + duration_weeks - 1
                 ),
                 "status": "locked",
+                **_phase_columns(n),
             }
         )
     node_res = sb.table("nodes").insert(rows).execute()
@@ -528,6 +666,7 @@ def apply_draft_path_changes(
                 "resource_url": n.get("resource_url"),
                 "due_date": n.get("due_date"),
                 "status": "locked",
+                **_phase_columns(n),
             }
             for n in clean
         ]
@@ -535,12 +674,14 @@ def apply_draft_path_changes(
     elif isinstance(changes.get("update_nodes"), list):
         existing = (
             sb.table("nodes")
-            .select("id, title, description, kind, order_index")
+            .select("id, title, description, kind, order_index, is_phase_checkpoint")
             .eq("path_id", pid)
             .execute()
         ).data or []
         by_order = {n.get("order_index"): n for n in existing}
         by_id = {n.get("id"): n for n in existing}
+        phases_touched = False
+        prefer: set[str] = set()
         for u in changes["update_nodes"]:
             if not isinstance(u, dict):
                 continue
@@ -558,8 +699,27 @@ def apply_draft_path_changes(
                 node_patch["description"] = u.get("description")
             if isinstance(u.get("kind"), str):
                 node_patch["kind"] = normalize_kind(u["kind"])
+            if "phase_key" in u:
+                node_patch["phase_key"] = normalize_phase_key(u.get("phase_key"))
+            if isinstance(u.get("node_code"), str):
+                node_patch["node_code"] = u["node_code"].strip()[:20] or None
+            if u.get("is_phase_checkpoint") is True or (
+                "is_phase_checkpoint" not in u and target.get("is_phase_checkpoint")
+            ):
+                prefer.add(target["id"])
+            # Checkpoint shape constraint: clear first, relayout re-flags if valid.
+            if (
+                u.get("is_phase_checkpoint") is False
+                or "phase_key" in u
+                or node_patch.get("kind") not in (None, "milestone")
+            ):
+                node_patch["is_phase_checkpoint"] = False
+            if {"phase_key", "is_phase_checkpoint", "kind"} & set(u):
+                phases_touched = True
             if node_patch:
                 sb.table("nodes").update(node_patch).eq("id", target["id"]).execute()
+        if phases_touched:
+            relayout_path_phases(sb, pid, prefer)
 
     refreshed = (
         sb.table("paths")

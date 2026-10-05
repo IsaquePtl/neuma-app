@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -25,9 +25,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { WeekStepper } from "@/components/week-stepper";
 import { nodeKindHint, nodeKindLabel } from "@/lib/labels";
 import { NodeGateFields } from "@/components/node-gate-fields";
+import { PhaseFields } from "@/components/phase-fields";
+import type { PhaseOption } from "@/lib/nodes/phases";
 import { defaultPassRule } from "@/lib/nodes/pass-rule";
+import { MAX_LEVEL_WEEKS, plannedWeeks } from "@/lib/nodes/week-budget";
 import type { NodeKind, NodePassRule, NodeStatus } from "@/lib/types/database.types";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +51,7 @@ export type NodeEditorData = {
   check_in_kind?: string | null;
   phase_key?: string | null;
   node_code?: string | null;
+  is_phase_checkpoint?: boolean | null;
 };
 
 function normalizeKind(kind: NodeKind): NodeKind {
@@ -61,6 +66,34 @@ function allowsContent(kind: NodeKind) {
     kind === "milestone"
   );
 }
+
+/** Named fields only; controls inside `[data-dirty-ignore]` (e.g. the quiz editor) save on their own. */
+function serializeForm(form: HTMLFormElement): string {
+  const parts: string[] = [];
+  for (const el of Array.from(form.elements)) {
+    if (
+      !(
+        el instanceof HTMLInputElement ||
+        el instanceof HTMLSelectElement ||
+        el instanceof HTMLTextAreaElement
+      )
+    ) {
+      continue;
+    }
+    if (!el.name || el.disabled || el.closest("[data-dirty-ignore]")) continue;
+    if (
+      el instanceof HTMLInputElement &&
+      (el.type === "checkbox" || el.type === "radio")
+    ) {
+      if (el.checked) parts.push(`${el.name}=${el.value}`);
+      continue;
+    }
+    parts.push(`${el.name}=${el.value}`);
+  }
+  return parts.join("\n");
+}
+
+export type NodeEditorSaveHandle = { current: (() => Promise<boolean>) | null };
 
 const glassInputClass =
   "border-white/10 bg-black/20 focus-visible:border-white/20 focus-visible:ring-white/10";
@@ -77,6 +110,12 @@ export function NodeEditorForm({
   idPrefix = "",
   onSuccess,
   className,
+  phases = [],
+  onDirtyChange,
+  saveHandleRef,
+  weeksMax,
+  hideWeeks = false,
+  defaultWeeks,
 }: {
   pathId: string;
   node?: NodeEditorData;
@@ -87,40 +126,120 @@ export function NodeEditorForm({
   idPrefix?: string;
   onSuccess?: () => void;
   className?: string;
+  phases?: PhaseOption[];
+  onDirtyChange?: (dirty: boolean) => void;
+  saveHandleRef?: NodeEditorSaveHandle;
+  /** Most weeks this level may take (its own + free); omit when the path has no calendar. */
+  weeksMax?: number;
+  /** The weeks are edited elsewhere (level card); the form leaves them untouched. */
+  hideWeeks?: boolean;
+  /** Suggested weeks for a new level (e.g. free block size from the calendar). */
+  defaultWeeks?: number;
 }) {
-  const [pending, startTransition] = useTransition();
-  const [kind, setKind] = useState<NodeKind>(
-    normalizeKind(node?.kind ?? "practice"),
-  );
-  const [passRule, setPassRule] = useState<NodePassRule>(
-    node?.pass_rule ?? defaultPassRule(normalizeKind(node?.kind ?? "practice")),
-  );
-  const [title, setTitle] = useState(node?.title ?? "");
-  const [resourceUrl, setResourceUrl] = useState(node?.resource_url ?? "");
-  const [contentBody, setContentBody] = useState(node?.content_body ?? "");
+  const [pending, setPending] = useState(false);
+  const [initial] = useState(() => {
+    const k = normalizeKind(node?.kind ?? "practice");
+    const suggested =
+      !node && defaultWeeks != null && defaultWeeks >= 1
+        ? Math.min(defaultWeeks, weeksMax ?? MAX_LEVEL_WEEKS)
+        : null;
+    return {
+      kind: k,
+      passRule: node?.pass_rule ?? defaultPassRule(k),
+      title: node?.title ?? "",
+      resourceUrl: node?.resource_url ?? "",
+      contentBody: node?.content_body ?? "",
+      weeks: suggested ?? plannedWeeks(node?.duration_weeks),
+    };
+  });
+  const [weeks, setWeeks] = useState(initial.weeks);
+  const weeksCap = Math.max(1, weeksMax ?? MAX_LEVEL_WEEKS);
+  const [kind, setKind] = useState<NodeKind>(initial.kind);
+  const [passRule, setPassRule] = useState<NodePassRule>(initial.passRule);
+  const [title, setTitle] = useState(initial.title);
+  const [resourceUrl, setResourceUrl] = useState(initial.resourceUrl);
+  const [contentBody, setContentBody] = useState(initial.contentBody);
   const [pickedAssetId, setPickedAssetId] = useState("");
+  const [fieldsDirty, setFieldsDirty] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const initialFieldsRef = useRef<string | null>(null);
   const isEdit = Boolean(node);
+  const noRoom = !isEdit && !hideWeeks && weeksMax != null && weeksMax < 1;
+
+  const dirty =
+    fieldsDirty ||
+    kind !== initial.kind ||
+    passRule !== initial.passRule ||
+    title !== initial.title ||
+    resourceUrl !== initial.resourceUrl ||
+    contentBody !== initial.contentBody ||
+    (!hideWeeks && weeks !== initial.weeks) ||
+    pickedAssetId !== "";
+
+  useEffect(() => {
+    if (formRef.current) initialFieldsRef.current = serializeForm(formRef.current);
+  }, []);
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
+
+  function recheckFields() {
+    // Wait a frame so state-driven hidden inputs (phase, gate fields) are committed.
+    requestAnimationFrame(() => {
+      const form = formRef.current;
+      if (!form || initialFieldsRef.current == null) return;
+      setFieldsDirty(serializeForm(form) !== initialFieldsRef.current);
+    });
+  }
 
   const fieldId = (name: string) =>
     idPrefix ? `${idPrefix}-${name}` : `node-${name}`;
 
-  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
+  async function persist(): Promise<boolean> {
+    const form = formRef.current;
+    if (!form || pending) return false;
+    if (noRoom) {
+      toast.error("Já não há semanas livres no percurso");
+      return false;
+    }
+    if (!form.reportValidity()) return false;
+    const fd = new FormData(form);
     fd.set("kind", kind);
     fd.set("title", title);
     fd.set("resource_url", allowsContent(kind) ? resourceUrl : "");
     fd.set("content_body", allowsContent(kind) ? contentBody : "");
-    startTransition(async () => {
-      try {
-        if (isEdit) await updateNode(fd);
-        else await createNode(fd);
-        toast.success(isEdit ? "Bloco atualizado" : "Bloco adicionado");
-        onSuccess?.();
-      } catch {
-        toast.error("Nao foi possivel guardar o bloco");
-      }
-    });
+    setPending(true);
+    try {
+      if (isEdit) await updateNode(fd);
+      else await createNode(fd);
+      toast.success(isEdit ? "Bloco atualizado" : "Bloco adicionado");
+      onSuccess?.();
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      toast.error(
+        /semana/.test(message) ? message : "Não foi possível guardar o bloco",
+      );
+      return false;
+    } finally {
+      setPending(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!saveHandleRef) return;
+    saveHandleRef.current = persist;
+    return () => {
+      saveHandleRef.current = null;
+    };
+  });
+
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    void persist();
   }
 
   const inputClass = inline ? glassInputClass : undefined;
@@ -130,7 +249,9 @@ export function NodeEditorForm({
 
   return (
     <form
+      ref={formRef}
       onSubmit={onSubmit}
+      onChange={recheckFields}
       className={cn(inline ? "space-y-3" : "space-y-4", className)}
     >
       <input type="hidden" name="path_id" value={pathId} />
@@ -168,27 +289,27 @@ export function NodeEditorForm({
         idPrefix={idPrefix}
       />
 
-      <div className={cn("grid grid-cols-2 gap-3")}>
-        <div className={cn("space-y-2", inline && "space-y-1.5")}>
-          <Label htmlFor={fieldId("phase")}>Fase</Label>
-          <Input
-            id={fieldId("phase")}
-            name="phase_key"
-            defaultValue={node?.phase_key ?? ""}
-            placeholder="A"
-            className={inputClass}
-          />
-        </div>
-        <div className={cn("space-y-2", inline && "space-y-1.5")}>
-          <Label htmlFor={fieldId("code")}>Código</Label>
-          <Input
-            id={fieldId("code")}
-            name="node_code"
-            defaultValue={node?.node_code ?? ""}
-            placeholder="A1"
-            className={inputClass}
-          />
-        </div>
+      <PhaseFields
+        kind={kind}
+        phases={phases}
+        nodeId={node?.id}
+        initialPhaseKey={node?.phase_key}
+        initialIsCheckpoint={Boolean(node?.is_phase_checkpoint)}
+        selectClass={selectClass}
+        inputClass={inputClass}
+        idPrefix={idPrefix}
+        inline={inline}
+      />
+
+      <div className={cn("space-y-2", inline && "space-y-1.5")}>
+        <Label htmlFor={fieldId("code")}>Código</Label>
+        <Input
+          id={fieldId("code")}
+          name="node_code"
+          defaultValue={node?.node_code ?? ""}
+          placeholder="A1"
+          className={inputClass}
+        />
       </div>
 
       <div className={cn("space-y-2", inline && "space-y-1.5")}>
@@ -290,7 +411,9 @@ export function NodeEditorForm({
       ) : null}
 
       {(passRule === "quiz" || kind === "milestone") && isEdit && node ? (
-        <NodeQuizEditor nodeId={node.id} passRule={passRule} />
+        <div data-dirty-ignore>
+          <NodeQuizEditor nodeId={node.id} passRule={passRule} />
+        </div>
       ) : null}
 
       {passRule === "quiz" && !isEdit ? (
@@ -299,36 +422,34 @@ export function NodeEditorForm({
         </p>
       ) : null}
 
-      <div className={cn("space-y-2", inline && "space-y-1.5")}>
-        <Label htmlFor={fieldId("weeks")}>Duração do nível</Label>
-        <div className="flex h-10 overflow-hidden rounded-lg border border-input bg-transparent">
-          <Input
-            id={fieldId("weeks")}
-            name="duration_weeks"
-            type="number"
-            min={1}
-            max={52}
-            step={1}
-            defaultValue={
-              node?.duration_weeks && node.duration_weeks >= 1
-                ? node.duration_weeks
-                : 1
-            }
-            required
-            className={cn(
-              "h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0",
-              inputClass,
-            )}
-          />
-          <span className="flex items-center border-l border-input px-3 text-sm text-muted-foreground">
-            semanas
-          </span>
+      {hideWeeks ? null : (
+        <div className={cn("space-y-2", inline && "space-y-1.5")}>
+          <Label>Semanas deste nível</Label>
+          {noRoom ? (
+            <p className="rounded-lg border border-[var(--neuma-coral)]/30 bg-[var(--neuma-coral)]/10 px-3 py-2 text-sm text-foreground">
+              Já não há semanas livres no percurso. Tira semanas a outro nível
+              ou aumenta a duração do percurso para criar um novo.
+            </p>
+          ) : (
+            <>
+              <WeekStepper
+                name="duration_weeks"
+                label="Semanas deste nível"
+                value={weeks}
+                onChange={setWeeks}
+                max={weeksCap}
+                maxReachedHint="Sem semanas livres no percurso"
+              />
+              <p className="text-xs text-muted-foreground">
+                {weeksMax != null
+                  ? `Podes dar até ${weeksCap === 1 ? "1 semana" : `${weeksCap} semanas`} a este nível. `
+                  : null}
+                A semana de início e a data limite calculam-se sozinhas.
+              </p>
+            </>
+          )}
         </div>
-        <p className="text-xs text-muted-foreground">
-          Mínimo 1 semana (segunda a sexta). A semana de início e a data limite
-          calculam-se automaticamente no percurso.
-        </p>
-      </div>
+      )}
 
       {isEdit && (node?.week_number || node?.due_date) ? (
         <p className="text-xs text-muted-foreground">
@@ -358,7 +479,7 @@ export function NodeEditorForm({
         <div className="pt-1">
           <Button
             type="submit"
-            disabled={pending}
+            disabled={pending || noRoom}
             className="h-11 w-full gap-2 py-3 text-base"
           >
             {pending ? "A guardar..." : isEdit ? "Guardar" : "Criar nível"}
@@ -366,7 +487,7 @@ export function NodeEditorForm({
         </div>
       ) : (
         <DialogFooter>
-          <Button type="submit" disabled={pending} className="w-full sm:w-auto">
+          <Button type="submit" disabled={pending || noRoom} className="w-full sm:w-auto">
             {pending ? "A guardar..." : isEdit ? "Guardar" : "Criar nível"}
           </Button>
         </DialogFooter>
@@ -381,16 +502,32 @@ export function NodeDialog({
   categories = [],
   topics = [],
   assets = [],
+  phases = [],
+  weeksMax,
+  defaultWeeks,
+  open: openProp,
+  onOpenChange,
 }: {
   pathId: string;
   node?: NodeEditorData;
   categories?: PickerCategory[];
   topics?: PickerTopic[];
   assets?: PickerAsset[];
+  phases?: PhaseOption[];
+  weeksMax?: number;
+  defaultWeeks?: number;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const isEdit = Boolean(node);
+  const controlled = openProp !== undefined;
+  const open = controlled ? openProp : uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    if (!controlled) setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  };
 
   return (
     <Dialog
@@ -435,6 +572,9 @@ export function NodeDialog({
           categories={categories}
           topics={topics}
           assets={assets}
+          phases={phases}
+          weeksMax={weeksMax}
+          defaultWeeks={defaultWeeks}
           onSuccess={() => setOpen(false)}
         />
       </DialogContent>

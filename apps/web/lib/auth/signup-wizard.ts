@@ -6,6 +6,20 @@ export type SignupWizardStep =
 
 export const SIGNUP_WIZARD_STEP_KEY = "neuma-signup-step";
 export const SIGNUP_FINISHING_COOKIE = "neuma-signup-finishing";
+export const SIGNUP_LEAD_TOKEN_KEY = "neuma-signup-lead-token";
+
+export function readSignupLeadToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.sessionStorage.getItem(SIGNUP_LEAD_TOKEN_KEY);
+}
+
+export function writeSignupLeadToken(token: string) {
+  window.sessionStorage.setItem(SIGNUP_LEAD_TOKEN_KEY, token);
+}
+
+export function clearSignupLeadToken() {
+  window.sessionStorage.removeItem(SIGNUP_LEAD_TOKEN_KEY);
+}
 
 const VALID_STEPS: readonly SignupWizardStep[] = [
   "identity",

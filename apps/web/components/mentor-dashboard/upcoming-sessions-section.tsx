@@ -39,8 +39,7 @@ export function UpcomingSessionsSection({
       </div>
       {visible.length === 0 ? (
         <Card className="p-6 text-sm text-muted-foreground">
-          Sem marcações futuras ingeridas. Quando o webhook do Cal.com receber
-          bookings, aparecem aqui.
+          Sem marcações futuras. Agenda acima ou espera pelo sync do Cal.com.
         </Card>
       ) : (
         <Card className="overflow-hidden p-0">
