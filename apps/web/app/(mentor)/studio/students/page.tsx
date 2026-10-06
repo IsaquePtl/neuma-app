@@ -58,7 +58,8 @@ export default async function StudentsPage({
     })) ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="neuma-mobile-scroll-fade relative w-full min-w-0">
+    <div className="w-full shrink-0 space-y-6">
       {removed === "1" ? (
         <FlashToast message="Aluno removido com sucesso." />
       ) : null}
@@ -78,6 +79,11 @@ export default async function StudentsPage({
       ) : (
         <StudentsList students={studentRows} />
       )}
+    </div>
+      <div
+        aria-hidden
+        className="h-[calc(7rem+env(safe-area-inset-bottom,0px))] desktop:hidden"
+      />
     </div>
   );
 }

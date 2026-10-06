@@ -127,7 +127,7 @@ export function SignupWizard({
       // Retoma por email (?resume=) — sem sessão Auth.
       if (resumeLead && billingEnabled) {
         writeSignupLeadToken(resumeLead.resumeToken);
-        setSignupFinishingCookie();
+        if (!hasSignupFinishingCookie()) setSignupFinishingCookie();
         writeSignupWizardStep("plan");
         if (!cancelled) {
           setLeadToken(resumeLead.resumeToken);

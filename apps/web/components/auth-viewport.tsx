@@ -25,6 +25,8 @@ export function AuthViewport({
     const GAP = 16;
 
     const update = () => {
+      if (document.documentElement.classList.contains("oauth-leaving")) return;
+
       const active = document.activeElement as HTMLElement | null;
       const isField =
         active &&

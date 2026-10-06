@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 import type { Database } from "@/lib/types/database.types";
+import { googleLoginShouldFinishSignup } from "@/lib/auth/signup-complete";
 import { SIGNUP_FINISHING_COOKIE } from "@/lib/auth/signup-wizard";
 import { isOneToOneInvitePath } from "@/lib/one-to-one/invite-path";
 
@@ -19,6 +20,10 @@ const PUBLIC_PATHS = [
   "/api/stripe/webhook",
   "/subscrever",
   "/subscrever/sucesso",
+  "/privacidade",
+  "/termos",
+  "/robots.txt",
+  "/sitemap.xml",
 ];
 
 /** Pós-signup: autenticado pode ficar; anónimo é redireccionado para login. */
@@ -75,6 +80,7 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/api/tally/") ||
     (path.startsWith("/login/") && !isPostSignup) ||
     path.startsWith("/auth/") ||
+    path.startsWith("/.well-known/") ||
     path.startsWith("/1-1/") ||
     isOneToOneInvitePath(path);
 
@@ -96,6 +102,26 @@ export async function updateSession(request: NextRequest) {
 
   // Autenticado a terminar registo (plano / perfil) — cookie ou flag signup_incomplete.
   if (user && path === "/login/signup") {
+    const { data: signupProfile } = await supabase
+      .from("profiles")
+      .select(
+        "role, age, gender, signup_incomplete, onboarding_completed, created_at",
+      )
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (signupProfile && !googleLoginShouldFinishSignup(signupProfile)) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/";
+      redirectUrl.search = "";
+      const response = NextResponse.redirect(redirectUrl);
+      response.cookies.set(SIGNUP_FINISHING_COOKIE, "", {
+        path: "/",
+        maxAge: 0,
+      });
+      return response;
+    }
+
     const finishing =
       request.cookies.get(SIGNUP_FINISHING_COOKIE)?.value === "1";
     if (!finishing) {

@@ -88,17 +88,14 @@ export default async function StudentNodePage({
   const reviewingThisLevel =
     activeReview?.items.some((i) => i.id === nodeId) ? activeReview : null;
 
-  // Mobile: center in menubar-aware viewport (pt-8 = slight lower bias);
-  // my-auto collapses when overflowing so scroll still reaches the top.
-  // Desktop: top-aligned flow.
   return (
     <div
       className={
-        "neuma-mobile-viewport flex w-full min-w-0 flex-col overflow-y-auto overscroll-contain pb-5 " +
-        "desktop:h-auto desktop:min-h-0 desktop:overflow-visible desktop:pb-4"
+        "neuma-mobile-viewport neuma-mobile-scroll-fade relative flex w-full min-w-0 flex-col [justify-content:safe_center] overflow-y-auto pb-0 " +
+        "desktop:h-auto desktop:min-h-0 desktop:justify-start desktop:overflow-visible desktop:pb-4"
       }
     >
-      <div className="my-auto w-full min-w-0 max-w-full space-y-5 pt-8 pb-2 desktop:my-0 desktop:space-y-6 desktop:py-0">
+      <div className="w-full min-w-0 max-w-full shrink-0 space-y-5 desktop:space-y-6">
         {reviewingThisLevel ? (
           <>
             <RecordNodeVisit nodeId={nodeId} />
@@ -133,6 +130,10 @@ export default async function StudentNodePage({
           }
         />
       </div>
+      <div
+        aria-hidden
+        className="h-[calc(5.5rem+env(safe-area-inset-bottom,0px))] shrink-0 desktop:hidden"
+      />
     </div>
   );
 }

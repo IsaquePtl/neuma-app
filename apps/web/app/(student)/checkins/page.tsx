@@ -65,9 +65,9 @@ function kindLabel(
   return checkInKindLabel[checkInKind];
 }
 
-/** Scroll natural (como Feedbacks) — lista longa, sem viewport fixo. */
 const CHECKINS_VIEWPORT =
-  "w-full min-w-0 space-y-6 desktop:mx-auto desktop:max-w-3xl";
+  "neuma-mobile-viewport neuma-mobile-scroll-fade relative flex w-full min-w-0 flex-col [justify-content:safe_center] overflow-y-auto pb-0 " +
+  "desktop:mx-auto desktop:h-auto desktop:min-h-0 desktop:max-w-3xl desktop:justify-start desktop:overflow-visible desktop:pb-4";
 
 export default async function StudentCheckinsPage() {
   const supabase = await createClient();
@@ -90,6 +90,7 @@ export default async function StudentCheckinsPage() {
 
   return (
     <div className={CHECKINS_VIEWPORT}>
+      <div className="w-full shrink-0 space-y-6">
       <header className="space-y-1">
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
           Histórico
@@ -188,6 +189,11 @@ export default async function StudentCheckinsPage() {
           })}
         </div>
       )}
+      </div>
+      <div
+        aria-hidden
+        className="h-[calc(5.5rem+env(safe-area-inset-bottom,0px))] shrink-0 desktop:hidden"
+      />
     </div>
   );
 }

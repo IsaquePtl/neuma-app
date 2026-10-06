@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { getBrowserAppOrigin } from "@/lib/auth/app-origin";
 import {
@@ -13,6 +13,12 @@ import {
   setSignupFinishingCookie,
   writeSignupWizardStep,
 } from "@/lib/auth/signup-wizard";
+import {
+  OAUTH_SHEET_CHANNEL,
+  OAUTH_SHEET_WINDOW,
+  prefersOauthSheet,
+  safeOauthNext,
+} from "@/lib/auth/oauth-sheet";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -56,6 +62,117 @@ function AppleIcon({ className }: { className?: string }) {
 const OAUTH_BUTTON_CLASS =
   "h-11 flex-1 border border-white/12 bg-white/[0.06] text-foreground hover:bg-white/12";
 
+/**
+ * No iPad/iOS o toque no Google faz o visualViewport (barra do Safari) deslocar
+ * o documento para cima. A parede é absolute, por isso vai atrás e deixa de
+ * cobrir o ecrã. Travamos o tamanho em px e anulamos esse offset.
+ */
+let oauthLockBaseTop = 0;
+let oauthLockBaseLeft = 0;
+let oauthLockFrame = 0;
+let oauthLockListening = false;
+
+function lockBox(el: HTMLElement, width: number, height: number) {
+  el.style.width = `${width}px`;
+  el.style.height = `${height}px`;
+  el.style.minWidth = `${width}px`;
+  el.style.minHeight = `${height}px`;
+  el.style.maxWidth = `${width}px`;
+  el.style.maxHeight = `${height}px`;
+}
+
+function freezePaintedBox(el: HTMLElement) {
+  if (el.dataset.frozen === "1") return;
+  const cs = getComputedStyle(el);
+  if (cs.display === "none") return;
+  el.dataset.frozen = "1";
+  el.style.top = cs.top;
+  el.style.left = cs.left;
+  el.style.right = "auto";
+  el.style.bottom = "auto";
+  el.style.width = cs.width;
+  el.style.height = cs.height;
+  el.style.maxWidth = cs.width;
+  el.style.maxHeight = cs.height;
+  el.style.transform = cs.transform;
+}
+
+function holdAuthViewport() {
+  const vv = window.visualViewport;
+  const dy = Math.round((vv?.offsetTop ?? 0) - oauthLockBaseTop);
+  const dx = Math.round((vv?.offsetLeft ?? 0) - oauthLockBaseLeft);
+  document.body.style.transform =
+    dx || dy ? `translate3d(${dx}px, ${dy}px, 0)` : "";
+  if (window.scrollX !== 0 || window.scrollY !== 0) {
+    window.scrollTo(0, 0);
+  }
+}
+
+function freezeAuthBackground() {
+  const root = document.documentElement;
+  if (!root.classList.contains("oauth-leaving")) {
+    const vv = window.visualViewport;
+    oauthLockBaseTop = vv?.offsetTop ?? 0;
+    oauthLockBaseLeft = vv?.offsetLeft ?? 0;
+    const width = Math.round(vv?.width || root.clientWidth);
+    const height = Math.round(vv?.height || root.clientHeight);
+    lockBox(root, width, height);
+    lockBox(document.body, width, height);
+    document.querySelectorAll<HTMLElement>(".neuma-bg").forEach((bg) => {
+      freezePaintedBox(bg);
+      bg.querySelectorAll<HTMLElement>("*").forEach(freezePaintedBox);
+    });
+    root.classList.add("oauth-leaving");
+  }
+
+  holdAuthViewport();
+
+  if (!oauthLockListening) {
+    oauthLockListening = true;
+    window.visualViewport?.addEventListener("scroll", holdAuthViewport);
+    window.visualViewport?.addEventListener("resize", holdAuthViewport);
+    window.addEventListener("scroll", holdAuthViewport, { passive: true });
+    const tick = () => {
+      holdAuthViewport();
+      oauthLockFrame = requestAnimationFrame(tick);
+    };
+    oauthLockFrame = requestAnimationFrame(tick);
+  }
+}
+
+function releaseAuthBackground() {
+  cancelAnimationFrame(oauthLockFrame);
+  oauthLockFrame = 0;
+  if (oauthLockListening) {
+    oauthLockListening = false;
+    window.visualViewport?.removeEventListener("scroll", holdAuthViewport);
+    window.visualViewport?.removeEventListener("resize", holdAuthViewport);
+    window.removeEventListener("scroll", holdAuthViewport);
+  }
+  document.documentElement.classList.remove("oauth-leaving");
+  for (const el of [document.documentElement, document.body]) {
+    el.style.width = "";
+    el.style.height = "";
+    el.style.minWidth = "";
+    el.style.minHeight = "";
+    el.style.maxWidth = "";
+    el.style.maxHeight = "";
+  }
+  document.body.style.transform = "";
+  document.querySelectorAll<HTMLElement>("[data-frozen='1']").forEach((el) => {
+    delete el.dataset.frozen;
+    el.style.top = "";
+    el.style.left = "";
+    el.style.right = "";
+    el.style.bottom = "";
+    el.style.width = "";
+    el.style.height = "";
+    el.style.maxWidth = "";
+    el.style.maxHeight = "";
+    el.style.transform = "";
+  });
+}
+
 export function OAuthSignInButtons({
   intent = "login",
   nextPath = "/",
@@ -78,20 +195,92 @@ export function OAuthSignInButtons({
 } = {}) {
   const [pending, setPending] = useState<OAuthProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const navigating = useRef(false);
+  const sheetWatch = useRef<number | null>(null);
+  const sheetChannel = useRef<BroadcastChannel | null>(null);
+
+  function stopSheetWatch() {
+    if (sheetWatch.current != null) {
+      window.clearInterval(sheetWatch.current);
+      sheetWatch.current = null;
+    }
+    sheetChannel.current?.close();
+    sheetChannel.current = null;
+  }
+
+  useEffect(() => stopSheetWatch, []);
+
+  // No telemóvel e no iPad, voltar do Google restaura a página com o botão
+  // ainda desativado. Sem isto, o toque deixa de chegar ao botão.
+  useEffect(() => {
+    function onPageShow(event: PageTransitionEvent) {
+      if (event.persisted) {
+        navigating.current = false;
+        setPending(null);
+        releaseAuthBackground();
+      }
+    }
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
+
+  function failSignIn(sheet: Window | null, message: string) {
+    navigating.current = false;
+    setPending(null);
+    releaseAuthBackground();
+    sheet?.close();
+    setError(message);
+  }
+
+  function watchOauthSheet(sheet: Window, fallbackNext: string) {
+    stopSheetWatch();
+    let settled = false;
+    const channel = new BroadcastChannel(OAUTH_SHEET_CHANNEL);
+    sheetChannel.current = channel;
+
+    const succeed = (next: string) => {
+      if (settled) return;
+      settled = true;
+      stopSheetWatch();
+      window.location.assign(next);
+    };
+
+    channel.onmessage = (event) => {
+      const payload = event.data as { next?: unknown } | null;
+      const next = safeOauthNext(payload?.next) ?? fallbackNext;
+      succeed(next);
+    };
+
+    let closing = false;
+    sheetWatch.current = window.setInterval(() => {
+      if (settled || closing || !sheet.closed) return;
+      closing = true;
+      window.setTimeout(async () => {
+        if (settled) return;
+        const { data } = await createClient().auth.getSession();
+        if (data.session) {
+          succeed(fallbackNext);
+          return;
+        }
+        settled = true;
+        stopSheetWatch();
+        navigating.current = false;
+        setPending(null);
+        releaseAuthBackground();
+      }, 400);
+    }, 400);
+  }
 
   async function signIn(provider: OAuthProvider) {
-    setPending(provider);
     setError(null);
 
     if (intent === "signup") {
       if (!getSignupDraft) {
-        setPending(null);
         setError("Preenche o formulário antes de continuar.");
         return;
       }
       const draft = getSignupDraft();
       if (!draft) {
-        setPending(null);
         setError("Preenche nome, idade e sexo antes de continuar com Google.");
         return;
       }
@@ -101,8 +290,20 @@ export function OAuthSignInButtons({
       onBeforeRedirect?.();
     }
 
+    // No telemóvel e no iPad a folha tem de abrir já no toque, antes do await.
+    // Um URL externo faz o iOS mostrar a aba por cima da app, em vez de
+    // substituir o ecrã. No desktop continua na mesma janela.
+    const useSheet = prefersOauthSheet();
+    const sheet = useSheet
+      ? window.open("https://accounts.google.com/", OAUTH_SHEET_WINDOW)
+      : null;
+
+    navigating.current = true;
+    setPending(provider);
+    if (!sheet) freezeAuthBackground();
+
     const supabase = createClient();
-    const redirectTo = `${getBrowserAppOrigin()}/auth/callback?intent=${intent}&next=${encodeURIComponent(nextPath)}`;
+    const redirectTo = `${getBrowserAppOrigin()}/auth/callback?intent=${intent}&next=${encodeURIComponent(nextPath)}${sheet ? "&sheet=1" : ""}`;
 
     const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
       provider,
@@ -117,13 +318,16 @@ export function OAuthSignInButtons({
     });
 
     if (oauthError || !data?.url) {
-      setPending(null);
-      setError("Não foi possível iniciar sessão. Tenta outra opção.");
+      failSignIn(sheet, "Não foi possível iniciar sessão. Tenta outra opção.");
       return;
     }
 
-    // iOS/Android PWA: redirect na mesma janela mantém regresso ao mesmo origin
-    // (não há API web para OAuth 100% in-app sem browser chrome no iPhone).
+    if (sheet) {
+      sheet.location.replace(data.url);
+      watchOauthSheet(sheet, nextPath);
+      return;
+    }
+
     requestAnimationFrame(() => {
       window.location.assign(data.url);
     });
@@ -138,6 +342,12 @@ export function OAuthSignInButtons({
         aria-label={
           pending === "google" ? "A abrir Google…" : "Continuar com Google"
         }
+        onPointerDown={() => {
+          if (!prefersOauthSheet()) freezeAuthBackground();
+        }}
+        onPointerCancel={() => {
+          if (!navigating.current) releaseAuthBackground();
+        }}
         onClick={() => signIn("google")}
         className={cn(
           OAUTH_BUTTON_CLASS,

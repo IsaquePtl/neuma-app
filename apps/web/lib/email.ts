@@ -38,8 +38,10 @@ export async function sendEmail({ to, subject, html }: SendEmailArgs) {
 export function appUrl(path: string) {
   const base =
     process.env.NEXT_PUBLIC_SITE_URL ??
-    (process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : "http://localhost:3001");
+    (process.env.VERCEL_ENV === "production"
+      ? "https://www.comunidadeneuma.com"
+      : process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "http://localhost:3001");
   return `${base.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
 }

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
+import { playableVideoUrl } from "@/lib/storage/playable-video";
 import {
   resolveTallyAnswers,
   TallyAnswerList,
@@ -56,7 +57,10 @@ export default async function CheckInDetailPage({
   const answers = tally
     ? resolveTallyAnswers(tally.answers, tally.payload)
     : [];
-  const videoUrl = checkIn.video_url || tally?.video_url || null;
+  const [videoUrl, feedbackVideoUrl] = await Promise.all([
+    playableVideoUrl(checkIn.video_url || tally?.video_url || null),
+    playableVideoUrl(feedback?.video_url),
+  ]);
   const { nodes } = await loadMyPathWithNodes(user!.id);
 
   const nextLevel =
@@ -107,7 +111,7 @@ export default async function CheckInDetailPage({
             subtitle={`Feedback do check-in · ${formatDateTime(checkIn.created_at)}`}
           />
           <StudentFeedbackCardBody
-            videoUrl={feedback.video_url}
+            videoUrl={feedbackVideoUrl}
             nextSteps={
               feedback.next_steps ? (
                 <FeedbackNextStepsCard nextSteps={feedback.next_steps} />
