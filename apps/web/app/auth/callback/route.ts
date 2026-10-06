@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { redirectUrlForRequest } from "@/lib/auth/app-origin";
 import { ensureDefaultMentorForStudent } from "@/lib/auth/default-mentor";
-import { isStudentSignupIncomplete } from "@/lib/auth/signup-complete";
+import { googleLoginShouldFinishSignup } from "@/lib/auth/signup-complete";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/types/database.types";
 import { SIGNUP_FINISHING_COOKIE } from "@/lib/auth/signup-wizard";
@@ -46,19 +46,30 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const next = safeNextPath(searchParams.get("next"));
   const intent = searchParams.get("intent") === "signup" ? "signup" : "login";
+  const sheet = searchParams.get("sheet") === "1";
+
+  function authRedirect(
+    pathname: string,
+    cookies: PendingCookie[] = [],
+    options?: { signupFinishing?: boolean },
+  ) {
+    const target = sheet
+      ? `/auth/sheet-return?next=${encodeURIComponent(pathname)}`
+      : pathname;
+    if (cookies.length === 0 && !options?.signupFinishing) {
+      return NextResponse.redirect(redirectUrlForRequest(request, target));
+    }
+    return redirectWithCookies(request, target, cookies, options);
+  }
 
   if (!code) {
-    return NextResponse.redirect(
-      redirectUrlForRequest(request, "/login?error=auth"),
-    );
+    return authRedirect("/login?error=auth");
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anonKey) {
-    return NextResponse.redirect(
-      redirectUrlForRequest(request, "/login?error=auth"),
-    );
+    return authRedirect("/login?error=auth");
   }
 
   const pendingCookies: PendingCookie[] = [];
@@ -87,13 +98,10 @@ export async function GET(request: NextRequest) {
     ({ data, error } = await supabase.auth.exchangeCodeForSession(code));
   } catch (err) {
     console.error("[auth.callback] exchangeCodeForSession falhou:", err);
-    return NextResponse.redirect(
-      redirectUrlForRequest(
-        request,
-        `/login?error=${encodeURIComponent(
-          "Não foi possível contactar o servidor de autenticação. Verifica a rede e tenta outra vez.",
-        )}`,
-      ),
+    return authRedirect(
+      `/login?error=${encodeURIComponent(
+        "Não foi possível contactar o servidor de autenticação. Verifica a rede e tenta outra vez.",
+      )}`,
     );
   }
   if (error || !data.user) {
@@ -102,15 +110,12 @@ export async function GET(request: NextRequest) {
       /fetch failed|network|ENOTFOUND|ECONNREFUSED/i.test(
         error?.message ?? "",
       );
-    return NextResponse.redirect(
-      redirectUrlForRequest(
-        request,
-        `/login?error=${encodeURIComponent(
-          networkish
-            ? "Não foi possível contactar o servidor de autenticação. Verifica a rede e tenta outra vez."
-            : "Falha no login. Tenta outra vez.",
-        )}`,
-      ),
+    return authRedirect(
+      `/login?error=${encodeURIComponent(
+        networkish
+          ? "Não foi possível contactar o servidor de autenticação. Verifica a rede e tenta outra vez."
+          : "Falha no login. Tenta outra vez.",
+      )}`,
     );
   }
 
@@ -124,6 +129,9 @@ export async function GET(request: NextRequest) {
       role: string | null;
       age: number | null;
       gender: string | null;
+      signup_incomplete: boolean;
+      onboarding_completed: boolean;
+      created_at: string;
     };
 
     let profileRow: ProfileRow | null = null;
@@ -132,7 +140,9 @@ export async function GET(request: NextRequest) {
       const admin = createAdminClient();
       const { data: byId } = await admin
         .from("profiles")
-        .select("id, role, age, gender")
+        .select(
+          "id, role, age, gender, signup_incomplete, onboarding_completed, created_at",
+        )
         .eq("id", userId)
         .maybeSingle();
       profileRow = byId ?? null;
@@ -150,8 +160,7 @@ export async function GET(request: NextRequest) {
           } catch {
             // ignore
           }
-          return redirectWithCookies(
-            request,
+          return authRedirect(
             `/login?error=${encodeURIComponent(
               "Já tens conta com este email. Usa email e password, ou entra com Google se criaste conta assim.",
             )}`,
@@ -162,22 +171,21 @@ export async function GET(request: NextRequest) {
     } catch {
       const { data: byId } = await supabase
         .from("profiles")
-        .select("id, role, age, gender")
+        .select(
+          "id, role, age, gender, signup_incomplete, onboarding_completed, created_at",
+        )
         .eq("id", userId)
         .maybeSingle();
       profileRow = byId ?? null;
     }
 
-    if (!profileRow || isStudentSignupIncomplete(profileRow)) {
+    if (googleLoginShouldFinishSignup(profileRow)) {
       if (profileRow?.role === "student" || !profileRow) {
         await ensureDefaultMentorForStudent(userId);
       }
-      return redirectWithCookies(
-        request,
-        "/login/signup?oauth=1",
-        pendingCookies,
-        { signupFinishing: true },
-      );
+      return authRedirect("/login/signup?oauth=1", pendingCookies, {
+        signupFinishing: true,
+      });
     }
   }
 
@@ -218,7 +226,7 @@ export async function GET(request: NextRequest) {
           : "/home"
         : next;
 
-  return redirectWithCookies(request, destination, pendingCookies, {
+  return authRedirect(destination, pendingCookies, {
     signupFinishing: intent === "signup",
   });
 }

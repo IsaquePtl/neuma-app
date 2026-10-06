@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { playableVideoUrl } from "@/lib/storage/playable-video";
 import type {
   JourneyCheckIn,
   JourneyLevelFeedback,
@@ -127,43 +128,51 @@ export async function loadJourneyPathPageData(
 
   const mappedNodes: StudentNode[] = (nodes ?? []).map(mapNode);
 
-  const journeyCheckIns: JourneyCheckIn[] = (checkIns ?? [])
-    .filter(
-      (c): c is typeof c & { node_id: string } =>
-        typeof c.node_id === "string" && nodeIds.has(c.node_id),
-    )
-    .map((c) => {
-      const feedback = Array.isArray(c.feedback) ? c.feedback[0] : c.feedback;
-      return {
-        id: c.id,
-        node_id: c.node_id,
-        status: c.status,
-        kind: c.kind,
-        created_at: c.created_at,
-        notes: c.notes,
-        video_url: c.video_url,
-        feedback: feedback
-          ? {
-              notes: feedback.notes,
-              next_steps: feedback.next_steps,
-              video_url: feedback.video_url,
-              approved: feedback.approved,
-            }
-          : null,
-        draft: draftByCheckIn.get(c.id) ?? null,
-      };
-    });
+  const journeyCheckIns: JourneyCheckIn[] = await Promise.all(
+    (checkIns ?? [])
+      .filter(
+        (c): c is typeof c & { node_id: string } =>
+          typeof c.node_id === "string" && nodeIds.has(c.node_id),
+      )
+      .map(async (c) => {
+        const feedback = Array.isArray(c.feedback) ? c.feedback[0] : c.feedback;
+        const [videoUrl, feedbackVideoUrl] = await Promise.all([
+          playableVideoUrl(c.video_url),
+          playableVideoUrl(feedback?.video_url),
+        ]);
+        return {
+          id: c.id,
+          node_id: c.node_id,
+          status: c.status,
+          kind: c.kind,
+          created_at: c.created_at,
+          notes: c.notes,
+          video_url: videoUrl,
+          feedback: feedback
+            ? {
+                notes: feedback.notes,
+                next_steps: feedback.next_steps,
+                video_url: feedbackVideoUrl,
+                approved: feedback.approved,
+              }
+            : null,
+          draft: draftByCheckIn.get(c.id) ?? null,
+        };
+      }),
+  );
 
-  const mappedLevelFeedbacks: JourneyLevelFeedback[] = (levelFeedbacks ?? [])
-    .filter((f) => nodeIds.has(f.node_id))
-    .map((f) => ({
-      id: f.id,
-      node_id: f.node_id,
-      notes: f.notes,
-      video_url: f.video_url,
-      file_url: f.file_url,
-      created_at: f.created_at,
-    }));
+  const mappedLevelFeedbacks: JourneyLevelFeedback[] = await Promise.all(
+    (levelFeedbacks ?? [])
+      .filter((f) => nodeIds.has(f.node_id))
+      .map(async (f) => ({
+        id: f.id,
+        node_id: f.node_id,
+        notes: f.notes,
+        video_url: await playableVideoUrl(f.video_url),
+        file_url: await playableVideoUrl(f.file_url),
+        created_at: f.created_at,
+      })),
+  );
 
   const displayName =
     student?.full_name ??

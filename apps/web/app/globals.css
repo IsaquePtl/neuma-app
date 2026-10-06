@@ -439,7 +439,7 @@ cal-modal-box::backdrop {
   top: -3%;
   left: -16%;
   width: min(158vw, 62rem);
-  height: min(54vh, 26rem);
+  height: min(54lvh, 26rem);
   background-size: contain;
   background-position: left top;
   --auth-enter-opacity: 0.02;
@@ -450,7 +450,7 @@ cal-modal-box::backdrop {
   right: -22%;
   bottom: -14%;
   width: min(212vw, 78rem);
-  height: min(54vh, 30rem);
+  height: min(54lvh, 30rem);
   background-size: contain;
   background-position: right bottom;
   --auth-enter-opacity: 0.02;
@@ -484,7 +484,7 @@ cal-modal-box::backdrop {
     top: -4%;
     left: -18%;
     width: min(84vw, 66rem);
-    height: min(48vh, 24rem);
+    height: min(48lvh, 24rem);
     --auth-enter-opacity: 0.018;
     opacity: 0.018;
   }
@@ -492,7 +492,7 @@ cal-modal-box::backdrop {
     right: -26%;
     bottom: -18%;
     width: min(104vw, 84rem);
-    height: min(48vh, 26rem);
+    height: min(48lvh, 26rem);
     --auth-enter-opacity: 0.018;
     opacity: 0.018;
   }
@@ -508,7 +508,7 @@ body:not(:has(.auth-shell)) > .neuma-bg .neuma-bg-neuma--top {
   top: -22%;
   left: -34%;
   width: min(240vw, 110rem);
-  height: min(88vh, 56rem);
+  height: min(88lvh, 56rem);
   transform: scale(0.85);
   transform-origin: left top;
   --auth-enter-opacity: 0.008;
@@ -519,7 +519,7 @@ body:not(:has(.auth-shell)) > .neuma-bg .neuma-bg-neuma--bottom {
   right: -38%;
   bottom: -28%;
   width: min(280vw, 128rem);
-  height: min(92vh, 62rem);
+  height: min(92lvh, 62rem);
   transform: scale(0.85);
   transform-origin: right bottom;
   --auth-enter-opacity: 0.008;
@@ -532,7 +532,7 @@ body:not(:has(.auth-shell)) > .neuma-bg .neuma-bg-neuma--bottom {
     top: -2%;
     left: -8%;
     width: min(128vw, 100rem);
-    height: min(74vh, 44rem);
+    height: min(74lvh, 44rem);
     transform: none;
     background-size: contain;
     background-position: left top;
@@ -546,7 +546,7 @@ body:not(:has(.auth-shell)) > .neuma-bg .neuma-bg-neuma--bottom {
     right: -10%;
     bottom: -16%;
     width: min(148vw, 116rem);
-    height: min(74vh, 46rem);
+    height: min(74lvh, 46rem);
     transform: none;
     background-size: contain;
     background-position: right bottom;
@@ -662,7 +662,7 @@ body:has(.auth-shell) .neuma-bg::before {
     top: -2%;
     left: -10%;
     width: min(98vw, 80rem);
-    height: min(56vh, 30rem);
+    height: min(56lvh, 30rem);
     transform: none;
     background-size: contain;
     background-position: left top;
@@ -676,7 +676,7 @@ body:has(.auth-shell) .neuma-bg::before {
     right: -14%;
     bottom: -10%;
     width: min(124vw, 100rem);
-    height: min(58vh, 34rem);
+    height: min(58lvh, 34rem);
     transform: none;
     background-size: contain;
     background-position: right bottom;
@@ -714,6 +714,43 @@ body:has(.auth-shell) .neuma-bg::before {
   overscroll-behavior: contain;
   scroll-padding-bottom: 45vh;
   background: transparent;
+}
+
+/* Login/signup: o toque no Google não pode fazer scroll nem reescalar o fundo. */
+body:has(.auth-shell) .neuma-ui {
+  overflow: hidden;
+  scroll-padding-bottom: 0;
+}
+
+html.oauth-leaving,
+html.oauth-leaving body,
+html.oauth-leaving .neuma-ui,
+html.oauth-leaving .auth-shell,
+html.oauth-leaving .auth-shell-panel--form {
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+  overflow-anchor: none;
+}
+
+/* O iOS desloca o documento; o JS repõe com translate no body. Sem transição. */
+html.oauth-leaving body {
+  top: 0 !important;
+  left: 0 !important;
+  margin: 0 !important;
+}
+
+html.oauth-leaving .neuma-bg,
+html.oauth-leaving .neuma-bg-photo,
+html.oauth-leaving .neuma-bg-neuma,
+html.oauth-leaving .auth-shell-panel--form,
+html.oauth-leaving .auth-shell-panel--form * {
+  transition: none !important;
+  animation: none !important;
+}
+html.oauth-leaving .auth-shell-panel--visual,
+html.oauth-leaving .auth-shell-visual-wordmark {
+  animation: none !important;
+  transition: none !important;
 }
 
 /* barra fina de gradiente no topo de superficies premium (desactivada) */
@@ -826,6 +863,56 @@ body:has(.auth-shell) .neuma-bg::before {
     padding-top: 0;
     -webkit-mask-image: none;
     mask-image: none;
+  }
+}
+
+/*
+ * Só iPad com sidebar: faixa vazia no topo — só o fundo.
+ * A sidebar fica fixed por baixo da faixa. O scroll passa para a coluna
+ * (não para .neuma-ui), com uma máscara presa ao ecrã: acima da linha
+ * da sidebar não há conteúdo, e o que sobe desvanece antes de lá chegar.
+ * !important ganha a top-0 / h-dvh da sidebar.
+ */
+@media (min-width: 850px) and (max-width: 1500px),
+  (min-width: 850px) and (min-height: 700px) and (pointer: coarse) {
+  body:has(.neuma-tablet-scroll) .neuma-ui {
+    overflow: hidden;
+  }
+
+  .neuma-tablet-top-sidebar {
+    top: calc(env(safe-area-inset-top, 0px) + 1.75rem) !important;
+    height: calc(100dvh - env(safe-area-inset-top, 0px) - 1.75rem) !important;
+  }
+
+  .neuma-tablet-top-main {
+    margin-top: calc(env(safe-area-inset-top, 0px) + 1.75rem) !important;
+  }
+
+  .neuma-tablet-scroll {
+    --neuma-tablet-gap: calc(env(safe-area-inset-top, 0px) + 1.75rem);
+    --neuma-tablet-fade: 1.75rem;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent var(--neuma-tablet-gap),
+      #000 calc(var(--neuma-tablet-gap) + var(--neuma-tablet-fade))
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent var(--neuma-tablet-gap),
+      #000 calc(var(--neuma-tablet-gap) + var(--neuma-tablet-fade))
+    );
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
   }
 }
 

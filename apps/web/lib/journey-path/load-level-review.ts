@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { playableVideoUrl } from "@/lib/storage/playable-video";
 import { mentorLevelReviewHref } from "@/lib/journey-path/level-review-url";
 import { loadJourneyPathPageData } from "@/lib/journey-path/load-journey-path";
 import type { StudentNode } from "@/lib/students/queries";
@@ -96,15 +97,23 @@ async function loadCheckInDetail(
 
   const { resolveTallyAnswers } = await import("@/components/tally-answers");
 
+  const [videoUrl, feedbackVideoUrl, tallyVideoUrl] = await Promise.all([
+    playableVideoUrl(checkIn.video_url),
+    playableVideoUrl(feedback?.video_url),
+    playableVideoUrl(tally?.video_url),
+  ]);
+
   return {
     id: checkIn.id,
     status: checkIn.status,
     kind: checkIn.kind,
-    video_url: checkIn.video_url,
+    video_url: videoUrl,
     notes: checkIn.notes,
     ai_summary: checkIn.ai_summary,
     created_at: checkIn.created_at,
-    feedback: feedback ?? null,
+    feedback: feedback
+      ? { ...feedback, video_url: feedbackVideoUrl }
+      : null,
     draft: draft
       ? {
           id: draft.id,
@@ -115,7 +124,7 @@ async function loadCheckInDetail(
     tallyAnswers: tally
       ? resolveTallyAnswers(tally.answers, tally.payload)
       : [],
-    tallyVideoUrl: tally?.video_url ?? null,
+    tallyVideoUrl,
   };
 }
 

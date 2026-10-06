@@ -299,7 +299,8 @@ export async function submitQuizAttempt(
   const total = questions.length;
   const score = Math.round((correctCount / total) * 100);
 
-  const { data, error } = await supabase
+  const admin = createAdminClient();
+  const { data, error } = await admin
     .from("node_quiz_attempts")
     .insert({
       node_id: nodeId,

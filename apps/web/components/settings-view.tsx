@@ -231,6 +231,7 @@ export function SettingsView({
     <div
       className={cn(
         "neuma-mobile-viewport flex w-full flex-col gap-3 overflow-hidden overscroll-none pt-0.5",
+        "pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]",
         "desktop:h-auto desktop:min-h-0 desktop:flex-none desktop:gap-8 desktop:overflow-visible desktop:pb-4",
       )}
     >

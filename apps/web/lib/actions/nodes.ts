@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { deletePrivateR2Urls } from "@/lib/storage/r2";
+import { listPrivateVideoUrlsForNodes } from "@/lib/storage/private-video-urls";
 import {
   parseCheckInKind,
   parsePassRule,
@@ -208,9 +210,10 @@ export async function updateNode(formData: FormData) {
       .select("id", { count: "exact", head: true })
       .eq("node_id", id);
     if (!count) {
-      throw new Error(
-        "Adiciona pelo menos uma pergunta antes de usar o gate Quiz.",
-      );
+      return {
+        ok: false as const,
+        error: "Adiciona pelo menos uma pergunta antes de usar o gate Quiz.",
+      };
     }
   }
   const { phaseKey, isPhaseCheckpoint } = parsePhaseFields(formData, kind);
@@ -251,7 +254,10 @@ export async function deleteNode(formData: FormData) {
   const supabase = await mentorClient();
   const id = formData.get("id") as string;
   const pathId = formData.get("path_id") as string;
-  await supabase.from("nodes").delete().eq("id", id);
+  const privateVideos = await listPrivateVideoUrlsForNodes(supabase, [id]);
+  const { error } = await supabase.from("nodes").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+  await deletePrivateR2Urls(privateVideos);
   await applyPathPhaseLayout(supabase, pathId);
   await resegmentPathLevels(supabase, pathId);
   await revalidateAfterNodeChange(supabase, pathId);

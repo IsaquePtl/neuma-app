@@ -19,7 +19,8 @@ export default async function StudioDashboard() {
     ]);
 
   return (
-    <div className="space-y-8">
+    <div className="neuma-mobile-scroll-fade relative w-full min-w-0">
+      <div className="w-full shrink-0 space-y-8">
       <header className="neuma-enter-up space-y-1">
         <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
           Dashboard diário
@@ -44,6 +45,11 @@ export default async function StudioDashboard() {
           limit={5}
         />
       </div>
+      </div>
+      <div
+        aria-hidden
+        className="h-[calc(7rem+env(safe-area-inset-bottom,0px))] desktop:hidden"
+      />
     </div>
   );
 }

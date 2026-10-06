@@ -1,6 +1,8 @@
 import "server-only";
 
 import {
+  DeleteObjectCommand,
+  GetObjectCommand,
   PutObjectCommand,
   S3Client,
   type PutObjectCommandInput,
@@ -119,6 +121,61 @@ export async function uploadToR2(
   }
 
   return getPublicUrl(key);
+}
+
+export function keyFromPublicUrl(url: string): string | null {
+  if (!isR2PublicUrl(url)) return null;
+  const base = getR2Config().publicUrl.replace(/\/$/, "");
+  const raw = url.slice(base.length + 1).split("?")[0];
+  if (!raw) return null;
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+/** Presigned GET (default 10 min). The bucket can stay private. */
+export async function createPresignedGetUrl(
+  key: string,
+  expiresInSeconds = 60 * 10,
+): Promise<string> {
+  const cfg = getR2Config();
+  const command = new GetObjectCommand({ Bucket: cfg.bucketName, Key: key });
+  return getSignedUrl(getR2Client(), command, { expiresIn: expiresInSeconds });
+}
+
+export async function deleteR2Object(key: string): Promise<void> {
+  const cfg = getR2Config();
+  await getR2Client().send(
+    new DeleteObjectCommand({ Bucket: cfg.bucketName, Key: key }),
+  );
+}
+
+/** Removes check-in and mentor-feedback objects. Other keys are left alone. */
+export async function deletePrivateR2Urls(
+  urls: Array<string | null | undefined>,
+): Promise<void> {
+  const keys = new Set<string>();
+  for (const url of urls) {
+    if (!url) continue;
+    const key = keyFromPublicUrl(url);
+    if (!key) continue;
+    if (!key.startsWith("check-ins/") && !key.startsWith("mentor-feedback/")) {
+      continue;
+    }
+    keys.add(key);
+  }
+
+  await Promise.all(
+    [...keys].map(async (key) => {
+      try {
+        await deleteR2Object(key);
+      } catch (err) {
+        console.error("[r2] delete failed", key, err);
+      }
+    }),
+  );
 }
 
 /** Presigned PUT URL for direct browser upload (default 15 min). */

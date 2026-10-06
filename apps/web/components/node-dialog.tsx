@@ -213,16 +213,17 @@ export function NodeEditorForm({
     fd.set("content_body", allowsContent(kind) ? contentBody : "");
     setPending(true);
     try {
-      if (isEdit) await updateNode(fd);
-      else await createNode(fd);
+      const result = isEdit ? await updateNode(fd) : await createNode(fd);
+      if (result && "ok" in result && !result.ok) {
+        toast.error(result.error);
+        return false;
+      }
       toast.success(isEdit ? "Bloco atualizado" : "Bloco adicionado");
       onSuccess?.();
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
-      toast.error(
-        /semana/.test(message) ? message : "Não foi possível guardar o bloco",
-      );
+      toast.error(message || "Não foi possível guardar o bloco");
       return false;
     } finally {
       setPending(false);

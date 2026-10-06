@@ -4,6 +4,7 @@ import {
   resolveTallyAnswers,
 } from "@/components/tally-answers";
 import type { createClient } from "@/lib/supabase/server";
+import { playableVideoUrl } from "@/lib/storage/playable-video";
 import type { StudentNode } from "@/lib/students/queries";
 import {
   getStudentAccessibleNodeIds,
@@ -280,45 +281,59 @@ export async function loadStudentNodeActivity(
   );
 
   return {
-    checkIns: (checkIns ?? []).map((checkIn) => {
-      const feedback = Array.isArray(checkIn.feedback)
-        ? checkIn.feedback[0]
-        : checkIn.feedback;
-      const tallyRows = checkIn.tally_submissions;
-      const tally = Array.isArray(tallyRows)
-        ? tallyRows[0]
-        : tallyRows ?? null;
-      const submissionVideoUrl =
-        checkIn.video_url || tally?.video_url || null;
-      const hasFeedback = hasVisibleCheckInFeedback(feedback);
+    checkIns: await Promise.all(
+      (checkIns ?? []).map(async (checkIn) => {
+        const feedback = Array.isArray(checkIn.feedback)
+          ? checkIn.feedback[0]
+          : checkIn.feedback;
+        const tallyRows = checkIn.tally_submissions;
+        const tally = Array.isArray(tallyRows)
+          ? tallyRows[0]
+          : tallyRows ?? null;
+        const submissionVideoUrl =
+          checkIn.video_url || tally?.video_url || null;
+        const hasFeedback = hasVisibleCheckInFeedback(feedback);
+        const [videoUrl, signedSubmission, feedbackVideoUrl] =
+          await Promise.all([
+            playableVideoUrl(checkIn.video_url),
+            playableVideoUrl(submissionVideoUrl),
+            playableVideoUrl(feedback?.video_url),
+          ]);
 
-      return {
-        id: checkIn.id,
-        status: checkIn.status,
-        kind: checkIn.kind,
-        created_at: checkIn.created_at,
-        video_url: checkIn.video_url,
-        notes: checkIn.notes,
-        submissionVideoUrl,
-        tallyAnswers: tally
-          ? resolveTallyAnswers(tally.answers, tally.payload)
-          : [],
-        feedback: feedback ?? null,
-        viewed: hasFeedback
-          ? viewedKeys.has(viewKey("check_in", checkIn.id))
-          : true,
-      };
-    }),
-    levelFeedbacks: (levelFeedbacks ?? [])
-      .filter(hasVisibleLevelFeedback)
-      .map((feedback) => ({
-        id: feedback.id,
-        notes: feedback.notes,
-        video_url: feedback.video_url,
-        file_url: feedback.file_url ?? null,
-        created_at: feedback.created_at,
-        viewed: viewedKeys.has(viewKey("level", feedback.id)),
-      })),
+        return {
+          id: checkIn.id,
+          status: checkIn.status,
+          kind: checkIn.kind,
+          created_at: checkIn.created_at,
+          video_url: videoUrl,
+          notes: checkIn.notes,
+          submissionVideoUrl: signedSubmission,
+          tallyAnswers: tally
+            ? resolveTallyAnswers(tally.answers, tally.payload)
+            : [],
+          feedback: feedback
+            ? { ...feedback, video_url: feedbackVideoUrl }
+            : null,
+          viewed: hasFeedback
+            ? viewedKeys.has(viewKey("check_in", checkIn.id))
+            : true,
+        };
+      }),
+    ),
+    levelFeedbacks: await Promise.all(
+      (levelFeedbacks ?? [])
+        .filter(hasVisibleLevelFeedback)
+        .map(async (feedback) => ({
+          id: feedback.id,
+          notes: feedback.notes,
+          video_url: await playableVideoUrl(feedback.video_url),
+          file_url: feedback.file_url
+            ? await playableVideoUrl(feedback.file_url)
+            : null,
+          created_at: feedback.created_at,
+          viewed: viewedKeys.has(viewKey("level", feedback.id)),
+        })),
+    ),
   };
 }
 

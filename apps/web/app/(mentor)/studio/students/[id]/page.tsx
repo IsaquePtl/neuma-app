@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { playableVideoUrl } from "@/lib/storage/playable-video";
 
 import { OneToOneCourtesyCard } from "@/components/one-to-one-courtesy-card";
 import { StudentPanorama } from "@/components/student-panorama";
@@ -105,24 +106,26 @@ export default async function StudentDetailPage({
 
   const mappedNodes: StudentNode[] = (nodes ?? []).map(mapNode);
 
-  const mappedCheckIns: StudentCheckIn[] = (checkIns ?? []).map((c) => {
-    const node = Array.isArray(c.node) ? c.node[0] : c.node;
-    const feedback = Array.isArray(c.feedback) ? c.feedback[0] : c.feedback;
-    return {
-      id: c.id,
-      status: c.status,
-      kind: c.kind,
-      created_at: c.created_at,
-      notes: c.notes,
-      video_url: c.video_url,
-      ai_summary: c.ai_summary,
-      node_title: node?.title ?? null,
-      feedback_approved: feedback?.approved ?? null,
-      feedback_notes: feedback?.notes ?? null,
-      feedback_next_steps: feedback?.next_steps ?? null,
-      has_draft: draftCheckIns.has(c.id),
-    };
-  });
+  const mappedCheckIns: StudentCheckIn[] = await Promise.all(
+    (checkIns ?? []).map(async (c) => {
+      const node = Array.isArray(c.node) ? c.node[0] : c.node;
+      const feedback = Array.isArray(c.feedback) ? c.feedback[0] : c.feedback;
+      return {
+        id: c.id,
+        status: c.status,
+        kind: c.kind,
+        created_at: c.created_at,
+        notes: c.notes,
+        video_url: await playableVideoUrl(c.video_url),
+        ai_summary: c.ai_summary,
+        node_title: node?.title ?? null,
+        feedback_approved: feedback?.approved ?? null,
+        feedback_notes: feedback?.notes ?? null,
+        feedback_next_steps: feedback?.next_steps ?? null,
+        has_draft: draftCheckIns.has(c.id),
+      };
+    }),
+  );
 
   const tallyBlocks: StudentFormBlock[] = (tallyRows ?? []).map((row) => {
     const answers = resolveTallyAnswers(row.answers, row.payload);

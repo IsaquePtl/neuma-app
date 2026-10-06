@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 
 import { Toaster } from "@/components/ui/sonner";
@@ -69,12 +70,9 @@ export default function RootLayout({
       className={`dark ${nataSans.variable} ${geistMono.variable} antialiased`}
     >
       <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html:
-              "try{var t=localStorage.getItem('neuma-bg-theme');if(t==='neon'||t==='crepusculo')document.documentElement.setAttribute('data-neuma-bg',t)}catch(e){}",
-          }}
-        />
+        <Script id="neuma-bg-theme" strategy="beforeInteractive">
+          {`try{var t=localStorage.getItem('neuma-bg-theme');if(t==='neon'||t==='crepusculo')document.documentElement.setAttribute('data-neuma-bg',t)}catch(e){}`}
+        </Script>
         {/* Primeiro paint imediato — evita flash preto antes do CSS/JS */}
         <style
           dangerouslySetInnerHTML={{
@@ -123,20 +121,21 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://tally.so" />
 
         {/* Ajuda o Google a escolher o ícone/branding e o snippet na SERP */}
-        <script
+        <Script
+          id="neuma-org-jsonld"
           type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "Organization",
-              name: "Comunidade Neuma",
-              url: "https://www.comunidadeneuma.com/",
-              logo: "https://www.comunidadeneuma.com/brand/app-icon.browser.png",
-              description:
-                "Plataforma e mentoria musical focada em expressão, autonomia e consciência musical. Evolui sem horários fixos através de um percurso personalizado e acompanhamento 1:1.",
-            }),
-          }}
-        />
+          strategy="beforeInteractive"
+        >
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Organization",
+            name: "Comunidade Neuma",
+            url: "https://www.comunidadeneuma.com/",
+            logo: "https://www.comunidadeneuma.com/brand/app-icon.browser.png",
+            description:
+              "Plataforma e mentoria musical focada em expressão, autonomia e consciência musical. Evolui sem horários fixos através de um percurso personalizado e acompanhamento 1:1.",
+          })}
+        </Script>
       </head>
       <body>
         {/* Parede: camada atrás, nunca scroll / teclado */}

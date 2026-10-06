@@ -237,6 +237,11 @@ function shellBackHref(
 }
 
 function getAppScrollEl(): HTMLElement | null {
+  const tablet = document.querySelector<HTMLElement>(".neuma-tablet-scroll");
+  if (tablet) {
+    const overflowY = window.getComputedStyle(tablet).overflowY;
+    if (overflowY === "auto" || overflowY === "scroll") return tablet;
+  }
   return document.querySelector("[data-neuma-ui]");
 }
 
@@ -519,7 +524,7 @@ export function AppShell({
     <div className="relative flex min-h-full flex-1 flex-col desktop:flex-row">
       <aside
         className={cn(
-          "neuma-enter fixed left-0 top-0 z-30 hidden h-dvh p-3 transition-[width] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] desktop:block",
+          "neuma-enter neuma-tablet-top-sidebar fixed left-0 top-0 z-30 hidden h-dvh p-3 transition-[width] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] desktop:block",
           sidebarCollapsed ? "w-[5.625rem]" : "w-64",
         )}
       >
@@ -723,7 +728,7 @@ export function AppShell({
 
       <div
         className={cn(
-          "flex min-w-0 flex-1 flex-col transition-[padding] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]",
+          "neuma-tablet-scroll flex min-w-0 flex-1 flex-col transition-[padding] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]",
           sidebarCollapsed ? "desktop:pl-[5.625rem]" : "desktop:pl-64",
         )}
       >
@@ -777,7 +782,7 @@ export function AppShell({
           aria-hidden
         />
 
-        <main className="neuma-enter neuma-enter-delay-1 flex w-full min-w-0 flex-1 flex-col px-4 pt-4 pb-0 desktop:px-10 desktop:pb-14 desktop:pt-10">
+        <main className="neuma-enter neuma-enter-delay-1 neuma-tablet-top-main flex w-full min-w-0 flex-1 flex-col px-4 pt-4 pb-0 desktop:px-10 desktop:pb-14 desktop:pt-10">
           {navPending ? (
             <ScreenLoader />
           ) : (

@@ -38,8 +38,14 @@ export function MobileKeyboardAvoidance() {
     let t1 = 0;
     let t2 = 0;
 
-    const ui = () =>
-      document.querySelector<HTMLElement>("[data-neuma-ui]");
+    const ui = () => {
+      const tablet = document.querySelector<HTMLElement>(".neuma-tablet-scroll");
+      if (tablet) {
+        const overflowY = window.getComputedStyle(tablet).overflowY;
+        if (overflowY === "auto" || overflowY === "scroll") return tablet;
+      }
+      return document.querySelector<HTMLElement>("[data-neuma-ui]");
+    };
 
     const ensure = () => {
       cancelAnimationFrame(raf);

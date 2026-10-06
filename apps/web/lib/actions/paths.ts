@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 import { purgeAgentShellsForPathTitles } from "@/lib/actions/agent-library";
+import { deletePrivateR2Urls } from "@/lib/storage/r2";
+import { listPrivateVideoUrlsForNodes } from "@/lib/storage/private-video-urls";
 import { resegmentPath } from "@/lib/nodes/schedule-server";
 import { resolvePathSchedule } from "@/lib/path-period";
 import type { PathStatus } from "@/lib/types/database.types";
@@ -125,10 +127,15 @@ export async function deletePath(formData: FormData) {
 
   const { data: nodes } = await supabase
     .from("nodes")
-    .select("title")
+    .select("id, title")
     .eq("path_id", id);
+  const privateVideos = await listPrivateVideoUrlsForNodes(
+    supabase,
+    (nodes ?? []).map((node) => node.id),
+  );
 
-  await supabase.from("paths").delete().eq("id", id);
+  const { error } = await supabase.from("paths").delete().eq("id", id);
+  if (!error) await deletePrivateR2Urls(privateVideos);
   await purgeAgentShellsForPathTitles((nodes ?? []).map((n) => n.title));
 
   if (studentId) {
