@@ -42,7 +42,9 @@ export function VideoField({
         setError(presigned.error);
         return;
       }
-      const publicUrl = await uploadToR2Presigned(file, presigned);
+      const publicUrl = await uploadToR2Presigned(file, presigned, {
+        kind: "check-in",
+      });
       setUrl(publicUrl);
       setMode("link");
     } catch (e) {

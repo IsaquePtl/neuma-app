@@ -13,6 +13,12 @@ import {
   type PutObjectCommandInput,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { R2_MULTIPART_PART_BYTES } from "@/lib/uploads/video-limits";
+
+export {
+  R2_MULTIPART_PART_BYTES,
+  R2_MULTIPART_THRESHOLD_BYTES,
+} from "@/lib/uploads/video-limits";
 
 type R2Config = {
   accessKeyId: string;
@@ -197,15 +203,6 @@ export async function createPresignedPutUrl(
   });
   return getSignedUrl(getR2Client(), command, { expiresIn: expiresInSeconds });
 }
-
-/**
- * Multipart (S3): ficheiros grandes / fiáveis.
- * Partes 5 MiB–5 GiB; na app usamos 32 MiB. Single PUT S3 aguenta até 5 GiB,
- * mas a API REST da CF corta a 300 MB — e multipart aguenta falhas melhor.
- */
-export const R2_MULTIPART_PART_BYTES = 32 * 1024 * 1024;
-/** Acima disto o browser usa multipart em vez de um único PUT. */
-export const R2_MULTIPART_THRESHOLD_BYTES = 100 * 1024 * 1024;
 
 export async function createMultipartUpload(
   key: string,

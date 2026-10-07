@@ -84,7 +84,9 @@ export function CheckInForm({
         toast.error(presigned.error);
         return;
       }
-      const url = await uploadToR2Presigned(file, presigned);
+      const url = await uploadToR2Presigned(file, presigned, {
+        kind: "check-in",
+      });
       setVideoUrl(url);
     } catch (e) {
       setFileLabel(null);

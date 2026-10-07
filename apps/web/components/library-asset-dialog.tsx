@@ -169,7 +169,10 @@ export function LibraryAssetDialog({
         toast.error(presigned.error);
         return;
       }
-      const publicUrl = await uploadToR2Presigned(file, presigned);
+      const publicUrl = await uploadToR2Presigned(file, presigned, {
+        kind: "library",
+        categoryId,
+      });
       setUrl(publicUrl);
       setStoragePath(presigned.key);
       setFileLabel(file.name);

@@ -208,7 +208,9 @@ function useMentorFeedbackForm({
         toast.error(presigned.error);
         return;
       }
-      const url = await uploadToR2Presigned(file, presigned);
+      const url = await uploadToR2Presigned(file, presigned, {
+        kind: "mentor-feedback",
+      });
       setVideoUrl(url);
       setVideoFileLabel(file.name);
     } catch (err) {
