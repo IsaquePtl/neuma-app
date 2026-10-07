@@ -1,10 +1,15 @@
 import "server-only";
 
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   PutObjectCommand,
+  UploadPartCommand,
   S3Client,
+  type CompletedPart,
   type PutObjectCommandInput,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -191,4 +196,86 @@ export async function createPresignedPutUrl(
     ContentType: contentType,
   });
   return getSignedUrl(getR2Client(), command, { expiresIn: expiresInSeconds });
+}
+
+/**
+ * Multipart (S3): ficheiros grandes / fiáveis.
+ * Partes 5 MiB–5 GiB; na app usamos 32 MiB. Single PUT S3 aguenta até 5 GiB,
+ * mas a API REST da CF corta a 300 MB — e multipart aguenta falhas melhor.
+ */
+export const R2_MULTIPART_PART_BYTES = 32 * 1024 * 1024;
+/** Acima disto o browser usa multipart em vez de um único PUT. */
+export const R2_MULTIPART_THRESHOLD_BYTES = 100 * 1024 * 1024;
+
+export async function createMultipartUpload(
+  key: string,
+  contentType: string,
+): Promise<{ uploadId: string }> {
+  const cfg = getR2Config();
+  const out = await getR2Client().send(
+    new CreateMultipartUploadCommand({
+      Bucket: cfg.bucketName,
+      Key: key,
+      ContentType: contentType,
+    }),
+  );
+  if (!out.UploadId) throw new Error("R2 não devolveu uploadId");
+  return { uploadId: out.UploadId };
+}
+
+export async function createPresignedUploadPartUrl(
+  key: string,
+  uploadId: string,
+  partNumber: number,
+  expiresInSeconds = 60 * 60 * 2,
+): Promise<string> {
+  const cfg = getR2Config();
+  const command = new UploadPartCommand({
+    Bucket: cfg.bucketName,
+    Key: key,
+    UploadId: uploadId,
+    PartNumber: partNumber,
+  });
+  return getSignedUrl(getR2Client(), command, { expiresIn: expiresInSeconds });
+}
+
+export async function completeMultipartUpload(
+  key: string,
+  uploadId: string,
+  parts: CompletedPart[],
+): Promise<void> {
+  const cfg = getR2Config();
+  await getR2Client().send(
+    new CompleteMultipartUploadCommand({
+      Bucket: cfg.bucketName,
+      Key: key,
+      UploadId: uploadId,
+      MultipartUpload: {
+        Parts: [...parts].sort(
+          (a, b) => (a.PartNumber ?? 0) - (b.PartNumber ?? 0),
+        ),
+      },
+    }),
+  );
+}
+
+export async function abortMultipartUpload(
+  key: string,
+  uploadId: string,
+): Promise<void> {
+  const cfg = getR2Config();
+  await getR2Client().send(
+    new AbortMultipartUploadCommand({
+      Bucket: cfg.bucketName,
+      Key: key,
+      UploadId: uploadId,
+    }),
+  );
+}
+
+export function multipartPartCount(
+  size: number,
+  partBytes = R2_MULTIPART_PART_BYTES,
+): number {
+  return Math.max(1, Math.ceil(size / partBytes));
 }

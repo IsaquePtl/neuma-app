@@ -4,7 +4,11 @@ import { useState } from "react";
 import { Upload, Link2 } from "lucide-react";
 
 import { getCheckInVideoUploadUrl } from "@/lib/actions/r2-uploads";
-import { uploadViaPresignedPut } from "@/lib/uploads/presigned-client";
+import { uploadToR2Presigned } from "@/lib/uploads/presigned-client";
+import {
+  MAX_VIDEO_BYTES,
+  videoTooLargeMessage,
+} from "@/lib/uploads/video-limits";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -23,6 +27,10 @@ export function VideoField({
   async function onFile(file: File | null) {
     if (!file) return;
     setError(null);
+    if (file.size > MAX_VIDEO_BYTES) {
+      setError(videoTooLargeMessage());
+      return;
+    }
     setUploading(true);
     try {
       const presigned = await getCheckInVideoUploadUrl({
@@ -30,7 +38,11 @@ export function VideoField({
         contentType: file.type,
         size: file.size,
       });
-      const publicUrl = await uploadViaPresignedPut(file, presigned);
+      if (!presigned.ok) {
+        setError(presigned.error);
+        return;
+      }
+      const publicUrl = await uploadToR2Presigned(file, presigned);
       setUrl(publicUrl);
       setMode("link");
     } catch (e) {
