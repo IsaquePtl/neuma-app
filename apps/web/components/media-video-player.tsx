@@ -31,14 +31,18 @@ const volumeRangeClass =
 
 const CONTROLS_HIDE_DELAY_MS = 3000;
 
+const chromeBtnClass =
+  "grid size-8 shrink-0 place-items-center rounded-lg text-white outline-none hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/40";
+
 /**
  * Native `<video>` with custom controls.
  *
- * Mobile volume (iOS silent switch): video starts muted so browsers allow
- * programmatic play after tap. The first user gesture (center play or play
- * button) sets muted=false before play(), which routes audio through the
- * media volume channel on iOS Safari — independent of the ringer/silent switch.
- * Uses playsInline to avoid forced fullscreen on iPhone.
+ * Play/pause: only the center coral button (and the chrome play/pause).
+ * Click/touch on the rest of the surface only reveals the menu for 3s —
+ * it never toggles playback. Menu returns on tap or when the video ends.
+ *
+ * Mobile volume (iOS silent switch): video starts muted; first play gesture
+ * unmute before play(). playsInline avoids forced fullscreen on iPhone.
  */
 function NativeVideoPlayer({
   url,
@@ -56,7 +60,6 @@ function NativeVideoPlayer({
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
-  const volumeControlRef = useRef<HTMLDivElement>(null);
   const hideControlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -72,7 +75,6 @@ function NativeVideoPlayer({
   const [isFinePointer, setIsFinePointer] = useState(false);
   const [isTimelineHovered, setIsTimelineHovered] = useState(false);
   const [isTimelinePointerActive, setIsTimelinePointerActive] = useState(false);
-  const [volumeSliderPinned, setVolumeSliderPinned] = useState(false);
   const scrubbingRef = useRef(false);
 
   const clearHideControlsTimeout = useCallback(() => {
@@ -86,15 +88,15 @@ function NativeVideoPlayer({
     clearHideControlsTimeout();
     hideControlsTimeoutRef.current = setTimeout(() => {
       setControlsVisible(false);
-      setVolumeSliderPinned(false);
       hideControlsTimeoutRef.current = null;
     }, CONTROLS_HIDE_DELAY_MS);
   }, [clearHideControlsTimeout]);
 
-  const showControls = useCallback(() => {
+  /** Reveal chrome and (re)start the 3s auto-hide while playing. */
+  const revealControls = useCallback(() => {
     setControlsVisible(true);
-    clearHideControlsTimeout();
-  }, [clearHideControlsTimeout]);
+    scheduleHideControls();
+  }, [scheduleHideControls]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -106,20 +108,13 @@ function NativeVideoPlayer({
     };
     const onPlay = () => {
       setIsPlaying(true);
+      // After play, show chrome briefly then hide — surface taps reopen it.
       setControlsVisible(true);
-      // Mobile/touch: hide after the play gesture. Desktop keeps controls
-      // until pointer leaves the player region.
-      if (
-        typeof window !== "undefined" &&
-        window.matchMedia("(hover: none)").matches
-      ) {
-        clearHideControlsTimeout();
-        hideControlsTimeoutRef.current = setTimeout(() => {
-          setControlsVisible(false);
-          setVolumeSliderPinned(false);
-          hideControlsTimeoutRef.current = null;
-        }, CONTROLS_HIDE_DELAY_MS);
-      }
+      clearHideControlsTimeout();
+      hideControlsTimeoutRef.current = setTimeout(() => {
+        setControlsVisible(false);
+        hideControlsTimeoutRef.current = null;
+      }, CONTROLS_HIDE_DELAY_MS);
     };
     const onPause = () => {
       setIsPlaying(false);
@@ -184,6 +179,10 @@ function NativeVideoPlayer({
     }
   }, []);
 
+  const pauseVideo = useCallback(() => {
+    videoRef.current?.pause();
+  }, []);
+
   const togglePlay = useCallback(async () => {
     const video = videoRef.current;
     if (!video) return;
@@ -195,25 +194,20 @@ function NativeVideoPlayer({
     }
   }, [playWithSound]);
 
-  const handleSurfaceToggle = useCallback(async () => {
-    await togglePlay();
-  }, [togglePlay]);
-
-  const handleMouseEnter = useCallback(() => {
-    if (!isPlaying) return;
-    showControls();
-  }, [isPlaying, showControls]);
-
-  const handleMouseLeave = useCallback(() => {
-    if (!isPlaying) return;
-    scheduleHideControls();
-  }, [isPlaying, scheduleHideControls]);
-
-  const handleTouchStart = useCallback(() => {
-    if (!isPlaying) return;
-    showControls();
-    scheduleHideControls();
-  }, [isPlaying, scheduleHideControls, showControls]);
+  /** Surface tap/click: never pause — only show the menu for 3s. */
+  const handleSurfaceActivate = useCallback(
+    (event: React.SyntheticEvent) => {
+      event.preventDefault();
+      if (!isPlaying) return;
+      if (controlsVisible) {
+        // Already open: restart the 3s timer.
+        scheduleHideControls();
+        return;
+      }
+      revealControls();
+    },
+    [controlsVisible, isPlaying, revealControls, scheduleHideControls],
+  );
 
   const toggleMute = useCallback(() => {
     const video = videoRef.current;
@@ -296,7 +290,7 @@ function NativeVideoPlayer({
   }, []);
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-  const showPlayingControls = isPlaying && controlsVisible;
+  const showChrome = controlsVisible;
   const isTimelineZoomed =
     isTimelineHovered || isTimelinePointerActive || isSeeking;
   const showHoverPreview =
@@ -339,12 +333,12 @@ function NativeVideoPlayer({
       setIsSeeking(true);
       setIsTimelinePointerActive(true);
       setIsTimelineHovered(true);
-      showControls();
+      setControlsVisible(true);
       clearHideControlsTimeout();
       event.currentTarget.setPointerCapture(event.pointerId);
       seekFromClientX(event.clientX);
     },
-    [clearHideControlsTimeout, seekFromClientX, showControls],
+    [clearHideControlsTimeout, seekFromClientX],
   );
 
   const handleTimelinePointerMove = useCallback(
@@ -413,38 +407,6 @@ function NativeVideoPlayer({
     [togglePlay],
   );
 
-  const handleVolumeButtonClick = useCallback(() => {
-    toggleMute();
-  }, [toggleMute]);
-
-  const handleVolumeButtonKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLButtonElement>) => {
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setVolumeSliderPinned(true);
-        handleVolumeChange(Math.min(1, volume + 0.05));
-        return;
-      }
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setVolumeSliderPinned(true);
-        handleVolumeChange(Math.max(0, volume - 0.05));
-        return;
-      }
-
-      if (event.key === "m" || event.key === "M") {
-        event.preventDefault();
-        toggleMute();
-      }
-    },
-    [handleVolumeChange, toggleMute, volume],
-  );
-
-  const handleVolumeMouseLeave = useCallback(() => {
-    setVolumeSliderPinned(false);
-  }, []);
-
   return (
     <div
       ref={containerRef}
@@ -452,9 +414,6 @@ function NativeVideoPlayer({
         frameClassName ?? playerFrameClass,
         isPortrait ? "aspect-[9/16]" : "aspect-video",
       )}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      onTouchStart={handleTouchStart}
       onKeyDown={handleContainerKeyDown}
     >
       <video
@@ -465,58 +424,86 @@ function NativeVideoPlayer({
         preload="metadata"
         tabIndex={-1}
         onLoadedMetadata={onLoadedMetadata}
-        className="absolute inset-0 size-full object-contain outline-none"
+        onClick={(event) => event.preventDefault()}
+        className="pointer-events-none absolute inset-0 size-full object-contain outline-none"
         aria-label={title ?? "Vídeo"}
       >
         <track kind="captions" />
       </video>
 
-      {!isPlaying ? (
-        <button
-          type="button"
-          onClick={playWithSound}
-          className="absolute inset-0 z-10 flex size-full items-center justify-center rounded-xl bg-black/40 transition-opacity outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-          aria-label="Reproduzir vídeo"
-        >
-          <span className="grid size-14 place-items-center rounded-full bg-[var(--neuma-coral)] text-white transition-transform hover:scale-105">
-            <Play className="ml-0.5 size-7 fill-current" />
-          </span>
-        </button>
-      ) : (
+      {/* Surface: reveal menu only — never toggles playback. */}
+      {isPlaying ? (
         <button
           type="button"
           tabIndex={-1}
-          onClick={handleSurfaceToggle}
-          className="absolute inset-0 z-10 size-full cursor-pointer border-0 bg-transparent p-0 outline-none focus:outline-none"
-          aria-label="Pausar vídeo"
+          onClick={handleSurfaceActivate}
+          onTouchEnd={(event) => {
+            // Touch: avoid 300ms quirks; don't let it also fire as pause.
+            event.preventDefault();
+            handleSurfaceActivate(event);
+          }}
+          className="absolute inset-0 z-10 size-full cursor-pointer border-0 bg-transparent p-0 outline-none"
+          aria-label="Mostrar controlos do vídeo"
         />
-      )}
+      ) : null}
 
-      {isPlaying ? (
+      {/* Center play / pause — the only surface control that pauses. */}
+      {!isPlaying ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            void playWithSound();
+          }}
+          className="absolute inset-0 z-30 flex size-full items-center justify-center rounded-xl bg-black/40 outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+          aria-label="Reproduzir vídeo"
+        >
+          <span className="grid size-14 place-items-center rounded-full bg-[var(--neuma-coral)] text-white">
+            <Play className="ml-0.5 size-7 fill-current" />
+          </span>
+        </button>
+      ) : showChrome ? (
+        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              pauseVideo();
+            }}
+            onTouchEnd={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              pauseVideo();
+            }}
+            className="pointer-events-auto grid size-14 place-items-center rounded-full bg-[var(--neuma-coral)] text-white outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+            aria-label="Pausar vídeo"
+          >
+            <Pause className="size-7 fill-current" />
+          </button>
+        </div>
+      ) : null}
+
+      {/* Bottom chrome: play/pause, timeline, fullscreen (+ volume on desktop). */}
+      {showChrome ? (
         <div
-          className={cn(
-            "absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/75 via-black/45 to-transparent pt-8 transition-opacity duration-200",
-            showPlayingControls
-              ? "opacity-100"
-              : "pointer-events-none opacity-0",
-          )}
+          className="absolute inset-x-0 bottom-0 z-40 bg-gradient-to-t from-black/75 via-black/45 to-transparent pt-8"
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
-          onTouchStart={(event) => {
-            event.stopPropagation();
-            showControls();
-            scheduleHideControls();
-          }}
+          onTouchStart={(event) => event.stopPropagation()}
           onKeyDown={(event) => event.stopPropagation()}
         >
           <div className="flex items-center gap-1.5 px-2 pb-1.5 sm:gap-2 sm:px-3">
             <button
               type="button"
-              onClick={togglePlay}
-              className="grid size-8 shrink-0 place-items-center rounded-lg text-white transition-colors hover:bg-white/10"
-              aria-label="Pausar"
+              onClick={() => void togglePlay()}
+              className={chromeBtnClass}
+              aria-label={isPlaying ? "Pausar" : "Reproduzir"}
             >
-              <Pause className="size-4" />
+              {isPlaying ? (
+                <Pause className="size-4" />
+              ) : (
+                <Play className="size-4 fill-current" />
+              )}
             </button>
 
             <span className="shrink-0 tabular-nums text-[10px] text-white/70 sm:text-xs">
@@ -526,24 +513,17 @@ function NativeVideoPlayer({
             <div className="flex-1" />
 
             <div
-              ref={volumeControlRef}
               role="group"
               aria-label="Controlo de volume"
-              className={cn(
-                "group/volume hidden shrink-0 items-center gap-1 rounded-lg transition-colors hover:bg-white/10 focus-within:bg-white/10 sm:flex",
-                volumeSliderPinned && "bg-white/10",
-              )}
-              onMouseLeave={handleVolumeMouseLeave}
+              className="group/volume hidden shrink-0 items-center gap-1 rounded-lg hover:bg-white/10 focus-within:bg-white/10 sm:flex"
             >
               <button
                 type="button"
-                onClick={handleVolumeButtonClick}
-                onKeyDown={handleVolumeButtonKeyDown}
-                className="grid size-8 shrink-0 place-items-center rounded-lg text-white"
+                onClick={toggleMute}
+                className={chromeBtnClass}
                 aria-label={
                   muted || volume === 0 ? "Ativar som" : "Silenciar"
                 }
-                aria-expanded={volumeSliderPinned}
               >
                 {muted || volume === 0 ? (
                   <VolumeX className="size-4" />
@@ -551,14 +531,7 @@ function NativeVideoPlayer({
                   <Volume2 className="size-4" />
                 )}
               </button>
-              <div
-                className={cn(
-                  "max-w-0 overflow-hidden opacity-0 transition-[max-width,opacity] duration-200 ease-out",
-                  "group-hover/volume:max-w-16 group-hover/volume:opacity-100",
-                  "group-focus-within/volume:max-w-16 group-focus-within/volume:opacity-100",
-                  volumeSliderPinned && "max-w-16 opacity-100",
-                )}
-              >
+              <div className="max-w-0 overflow-hidden opacity-0 group-hover/volume:max-w-16 group-hover/volume:opacity-100 group-focus-within/volume:max-w-16 group-focus-within/volume:opacity-100">
                 <input
                   type="range"
                   min={0}
@@ -568,7 +541,6 @@ function NativeVideoPlayer({
                   onChange={(event) =>
                     handleVolumeChange(Number(event.target.value) / 100)
                   }
-                  onFocus={() => setVolumeSliderPinned(true)}
                   className={volumeRangeClass}
                   aria-label="Volume"
                   aria-valuetext={`${Math.round((muted ? 0 : volume) * 100)} por cento`}
@@ -578,8 +550,8 @@ function NativeVideoPlayer({
 
             <button
               type="button"
-              onClick={toggleFullscreen}
-              className="grid size-8 shrink-0 place-items-center rounded-lg text-white transition-colors hover:bg-white/10"
+              onClick={() => void toggleFullscreen()}
+              className={chromeBtnClass}
               aria-label={
                 isFullscreen ? "Sair de ecrã inteiro" : "Ecrã inteiro"
               }
@@ -611,10 +583,9 @@ function NativeVideoPlayer({
               onPointerCancel={handleTimelinePointerUp}
               onKeyDown={handleTimelineKeyDown}
             >
-              {/* Track: height grows for hover/scrub — never scaleY (that stretched the thumb). */}
               <div
                 className={cn(
-                  "pointer-events-none relative flex items-center transition-[height] duration-200 ease-out",
+                  "pointer-events-none relative flex items-center",
                   isTimelineZoomed ? "h-2.5" : "h-1",
                 )}
                 aria-hidden
@@ -636,7 +607,6 @@ function NativeVideoPlayer({
                 </div>
               </div>
 
-              {/* Thumb sits outside the track so it stays a perfect circle on every screen. */}
               <div
                 className={cn(
                   "pointer-events-none absolute top-1/2 z-[1] aspect-square shrink-0 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/30 bg-[var(--neuma-coral)] shadow-[0_0_0_1px_rgba(0,0,0,0.2)]",
