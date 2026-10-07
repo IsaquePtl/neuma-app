@@ -3,12 +3,12 @@
  * directo ao bucket — o Next não recebe o ficheiro.
  *
  * Check-ins / feedback: 500 MB (telemóvel, redes móveis).
- * Biblioteca (mentor): 2 GB (aulas longas em MOV).
+ * Biblioteca (mentor): 5 GB (aulas longas em MOV; R2 multipart até ~5 TiB).
  */
 export const MAX_VIDEO_MB = 500;
 export const MAX_VIDEO_BYTES = MAX_VIDEO_MB * 1024 * 1024;
 
-export const MAX_LIBRARY_FILE_MB = 2048;
+export const MAX_LIBRARY_FILE_MB = 5120;
 export const MAX_LIBRARY_FILE_BYTES = MAX_LIBRARY_FILE_MB * 1024 * 1024;
 
 /**
