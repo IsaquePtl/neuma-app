@@ -37,7 +37,7 @@ function formatTime(seconds: number): string {
 const volumeRangeClass =
   "h-1 w-14 shrink-0 cursor-pointer appearance-none rounded-full bg-white/20 accent-[var(--neuma-coral)] sm:w-16 [&::-webkit-slider-thumb]:size-2.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--neuma-coral)] [&::-moz-range-thumb]:size-2.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-[var(--neuma-coral)]";
 
-const CONTROLS_HIDE_DELAY_MS = 3000;
+const CONTROLS_HIDE_DELAY_MS = 2500;
 
 const chromeBtnClass =
   "grid size-8 shrink-0 place-items-center rounded-lg text-white outline-none hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/40";
@@ -45,9 +45,10 @@ const chromeBtnClass =
 /**
  * Native `<video>` with custom controls.
  *
- * Play/pause: only the center coral button (and the chrome play/pause).
- * Click/touch on the rest of the surface only reveals the menu for 3s —
- * it never toggles playback. Menu returns on tap or when the video ends.
+ * Before the first play: cover (if any), black shade, and only the center
+ * play button — no timeline. After that, chrome shows on hover (desktop)
+ * or after play/pause, and hides after 2.5s. A click or tap anywhere on
+ * the picture toggles play. The timeline and the other controls do not.
  *
  * Mobile volume (iOS silent switch): video starts muted; first play gesture
  * unmute before play(). playsInline avoids forced fullscreen on iPhone.
@@ -55,12 +56,14 @@ const chromeBtnClass =
 function NativeVideoPlayer({
   url,
   title,
+  poster,
   isPortrait,
   frameClassName,
   onLoadedMetadata,
 }: {
   url: string;
   title?: string;
+  poster?: string | null;
   isPortrait: boolean;
   frameClassName?: string;
   onLoadedMetadata: (event: React.SyntheticEvent<HTMLVideoElement>) => void;
@@ -72,7 +75,8 @@ function NativeVideoPlayer({
     null,
   );
   const [isPlaying, setIsPlaying] = useState(false);
-  const [controlsVisible, setControlsVisible] = useState(true);
+  const [hasStarted, setHasStarted] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
@@ -88,6 +92,8 @@ function NativeVideoPlayer({
   const scrubbingRef = useRef(false);
   const isSeekingRef = useRef(false);
   const playRequestRef = useRef<Promise<void> | null>(null);
+  const hasStartedRef = useRef(false);
+  const isPlayingRef = useRef(false);
 
   useEffect(() => {
     isSeekingRef.current = isSeeking;
@@ -108,11 +114,16 @@ function NativeVideoPlayer({
     }, CONTROLS_HIDE_DELAY_MS);
   }, [clearHideControlsTimeout]);
 
-  /** Reveal chrome and (re)start the 3s auto-hide while playing. */
+  /** Reveal chrome. While playing, hide again after 2.5s. */
   const revealControls = useCallback(() => {
     setControlsVisible(true);
-    scheduleHideControls();
+    if (isPlayingRef.current) scheduleHideControls();
   }, [scheduleHideControls]);
+
+  const revealControlsFromHover = useCallback(() => {
+    if (!isFinePointer || !hasStartedRef.current) return;
+    revealControls();
+  }, [isFinePointer, revealControls]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -141,8 +152,10 @@ function NativeVideoPlayer({
     };
     const onPlay = () => {
       setPlayError(null);
+      hasStartedRef.current = true;
+      isPlayingRef.current = true;
+      setHasStarted(true);
       setIsPlaying(true);
-      // After play, show chrome briefly then hide — surface taps reopen it.
       setControlsVisible(true);
       clearHideControlsTimeout();
       hideControlsTimeoutRef.current = setTimeout(() => {
@@ -151,12 +164,14 @@ function NativeVideoPlayer({
       }, CONTROLS_HIDE_DELAY_MS);
     };
     const onPause = () => {
+      isPlayingRef.current = false;
       setIsPlaying(false);
       setIsBuffering(false);
       clearHideControlsTimeout();
       setControlsVisible(true);
     };
     const onEnded = () => {
+      isPlayingRef.current = false;
       setIsPlaying(false);
       setIsBuffering(false);
       clearHideControlsTimeout();
@@ -277,19 +292,13 @@ function NativeVideoPlayer({
     }
   }, [playWithSound]);
 
-  /** Surface tap/click: never pause — only show the menu for 3s. */
+  /** The picture itself is play/pause. Controls sit above this layer. */
   const handleSurfaceActivate = useCallback(
     (event: React.SyntheticEvent) => {
       event.preventDefault();
-      if (!isPlaying) return;
-      if (controlsVisible) {
-        // Already open: restart the 3s timer.
-        scheduleHideControls();
-        return;
-      }
-      revealControls();
+      void togglePlay();
     },
-    [controlsVisible, isPlaying, revealControls, scheduleHideControls],
+    [togglePlay],
   );
 
   const toggleMute = useCallback(() => {
@@ -516,10 +525,13 @@ function NativeVideoPlayer({
         isPortrait ? "aspect-[9/16]" : "aspect-video",
       )}
       onKeyDown={handleContainerKeyDown}
+      onMouseEnter={revealControlsFromHover}
+      onMouseMove={revealControlsFromHover}
     >
       <video
         ref={videoRef}
         src={url}
+        poster={poster ?? undefined}
         playsInline
         muted
         preload="metadata"
@@ -532,8 +544,16 @@ function NativeVideoPlayer({
         <track kind="captions" />
       </video>
 
-      {/* Surface: reveal menu only — never toggles playback. */}
-      {isPlaying ? (
+      {poster && !hasStarted ? (
+        <img
+          src={poster}
+          alt=""
+          className="pointer-events-none absolute inset-0 z-[5] size-full object-cover"
+        />
+      ) : null}
+
+      {/* Whole picture is play/pause. Chrome and the center button sit above. */}
+      {!playError ? (
         <button
           type="button"
           tabIndex={-1}
@@ -544,7 +564,8 @@ function NativeVideoPlayer({
             handleSurfaceActivate(event);
           }}
           className="absolute inset-0 z-10 size-full cursor-pointer border-0 bg-transparent p-0 outline-none"
-          aria-label="Mostrar controlos do vídeo"
+          aria-hidden={!isPlaying || showChrome ? true : undefined}
+          aria-label={isPlaying ? "Pausar vídeo" : "Reproduzir vídeo"}
         />
       ) : null}
 
@@ -556,7 +577,7 @@ function NativeVideoPlayer({
         />
       ) : null}
 
-      {/* Center play / pause — large hit box (≥80px), same toggle as chrome. */}
+      {/* Center play / pause. Hit box is larger than the circle, especially on touch. */}
       {playError ? (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 rounded-xl bg-black/70 px-4 text-center">
           <p className="max-w-xs text-sm text-white/90">{playError}</p>
@@ -596,10 +617,10 @@ function NativeVideoPlayer({
           }}
           onPointerDown={(event) => event.stopPropagation()}
           onTouchStart={(event) => event.stopPropagation()}
-          className="absolute top-1/2 left-1/2 z-30 flex size-20 -translate-x-1/2 -translate-y-1/2 touch-manipulation items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+          className="absolute top-1/2 left-1/2 z-30 flex size-44 -translate-x-1/2 -translate-y-1/2 touch-manipulation items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-white/40 sm:size-28"
           aria-label={isPlaying ? "Pausar vídeo" : "Reproduzir vídeo"}
         >
-          <span className="grid size-14 place-items-center rounded-full bg-[var(--neuma-coral)] text-white shadow-lg">
+          <span className="grid size-14 place-items-center rounded-full bg-[color-mix(in_srgb,var(--neuma-coral)_82%,transparent)] text-white shadow-lg">
             {isBuffering ? (
               <Loader2 className="size-7 animate-spin" aria-hidden />
             ) : isPlaying ? (
@@ -611,8 +632,8 @@ function NativeVideoPlayer({
         </button>
       ) : null}
 
-      {/* Bottom chrome: play/pause, timeline, fullscreen (+ volume on desktop). */}
-      {showChrome ? (
+      {/* Bottom chrome only after the video has started. */}
+      {hasStarted && showChrome ? (
         <div
           className="absolute inset-x-0 bottom-0 z-40 bg-gradient-to-t from-black/75 via-black/45 to-transparent pt-8"
           onClick={(event) => event.stopPropagation()}
@@ -620,20 +641,7 @@ function NativeVideoPlayer({
           onTouchStart={(event) => event.stopPropagation()}
           onKeyDown={(event) => event.stopPropagation()}
         >
-          <div className="flex items-center gap-1.5 px-2 pb-1.5 sm:gap-2 sm:px-3">
-            <button
-              type="button"
-              onClick={() => void togglePlay()}
-              className={chromeBtnClass}
-              aria-label={isPlaying ? "Pausar" : "Reproduzir"}
-            >
-              {isPlaying ? (
-                <Pause className="size-4" />
-              ) : (
-                <Play className="size-4 fill-current" />
-              )}
-            </button>
-
+          <div className="-mb-1 flex items-center gap-1.5 px-2 sm:gap-2 sm:px-3">
             <span className="shrink-0 tabular-nums text-[10px] text-white/70 sm:text-xs">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
@@ -692,7 +700,7 @@ function NativeVideoPlayer({
             </button>
           </div>
 
-          <div className="px-4 py-1.5 sm:py-0 sm:pb-2">
+          <div className="px-4 pb-1.5 sm:pb-2">
             <div
               ref={timelineRef}
               role="slider"
@@ -712,13 +720,15 @@ function NativeVideoPlayer({
               onKeyDown={handleTimelineKeyDown}
             >
               <div
-                className={cn(
-                  "pointer-events-none relative flex items-center",
-                  isTimelineZoomed ? "h-2.5" : "h-1",
-                )}
+                className="pointer-events-none relative flex h-2.5 items-center"
                 aria-hidden
               >
-                <div className="relative h-full w-full overflow-hidden rounded-full bg-white/25">
+                <div
+                  className={cn(
+                    "relative w-full overflow-hidden rounded-full bg-white/25 transition-[height] duration-150 ease-out",
+                    isTimelineZoomed ? "h-2.5" : "h-1",
+                  )}
+                >
                   {showHoverPreview && hoverPercent !== null ? (
                     <div
                       className="absolute inset-y-0 bg-white/20"
@@ -737,7 +747,7 @@ function NativeVideoPlayer({
 
               <div
                 className={cn(
-                  "pointer-events-none absolute top-1/2 z-[1] aspect-square shrink-0 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/30 bg-[var(--neuma-coral)] shadow-[0_0_0_1px_rgba(0,0,0,0.2)]",
+                  "pointer-events-none absolute top-1/2 z-[1] aspect-square shrink-0 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/30 bg-[var(--neuma-coral)] shadow-[0_0_0_1px_rgba(0,0,0,0.2)] transition-[width,height] duration-150 ease-out",
                   isTimelineZoomed ? "size-3.5" : "size-3",
                 )}
                 style={{ left: `${progress}%` }}
@@ -765,6 +775,7 @@ export type VideoOrientation = "portrait" | "landscape";
 export function MediaVideoPlayer({
   url,
   title,
+  poster,
   className,
   fallbackLabel = "Abrir vídeo",
   size = "compact",
@@ -772,6 +783,7 @@ export function MediaVideoPlayer({
 }: {
   url: string | null | undefined;
   title?: string;
+  poster?: string | null;
   className?: string;
   fallbackLabel?: string;
   /**
@@ -834,6 +846,7 @@ export function MediaVideoPlayer({
         key={url}
         url={url}
         title={title}
+        poster={poster}
         isPortrait={isPortrait}
         frameClassName={isFull ? playerFrameFullClass : undefined}
         onLoadedMetadata={handleLoadedMetadata}

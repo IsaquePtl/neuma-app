@@ -29,6 +29,8 @@ export default async function MentorLevelReviewPage({
       node={data.node}
       levelNumber={data.levelNumber}
       nodeCheckIns={data.nodeCheckIns}
+      nodeFeedbacks={data.nodeFeedbacks}
+      bestQuizScore={data.bestQuizScore}
       checkInDetail={data.checkInDetail}
       selectedCheckInId={data.selectedCheckInId}
       activeTab={activeTab}

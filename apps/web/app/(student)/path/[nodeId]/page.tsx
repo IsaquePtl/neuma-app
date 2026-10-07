@@ -110,8 +110,8 @@ export default async function StudentNodePage({
   return (
     <div
       className={
-        "neuma-mobile-viewport neuma-mobile-scroll-fade relative flex w-full min-w-0 flex-col [justify-content:safe_center] overflow-y-auto pb-0 " +
-        "desktop:h-auto desktop:min-h-0 desktop:justify-start desktop:overflow-visible desktop:pb-4"
+        "neuma-mobile-viewport neuma-mobile-scroll-fade relative flex w-full min-w-0 max-w-full flex-col [justify-content:safe_center] overflow-x-clip overflow-y-auto pb-0 " +
+        "desktop:h-auto desktop:min-h-0 desktop:justify-start desktop:overflow-x-clip desktop:overflow-y-visible desktop:pb-4"
       }
     >
       <div className="w-full min-w-0 max-w-full shrink-0 space-y-5 desktop:space-y-6">

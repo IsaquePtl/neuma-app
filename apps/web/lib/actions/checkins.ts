@@ -10,7 +10,7 @@ import { buildCheckInKey, uploadToR2 } from "@/lib/storage/r2";
 import { appUrl, sendEmail } from "@/lib/email";
 import { generateCheckInDraft } from "@/lib/ai/draft-feedback";
 import { assertCanSubmitCheckIn } from "@/lib/checkins/allowance";
-import { nodeRequiresCheckIn } from "@/lib/nodes/pass-rule";
+import { effectivePassRule, nodeRequiresCheckIn } from "@/lib/nodes/pass-rule";
 import { levelCheckInsHref } from "@/lib/feedbacks/student-shared";
 import type { CheckInKind } from "@/lib/types/database.types";
 import {
@@ -134,10 +134,13 @@ export async function submitCheckIn(formData: FormData) {
   if (nodeId) {
     const { data: node } = await supabase
       .from("nodes")
-      .select("pass_rule")
+      .select("kind, pass_rule")
       .eq("id", nodeId)
       .maybeSingle();
-    if (node && !nodeRequiresCheckIn(node.pass_rule)) {
+    if (
+      node &&
+      !nodeRequiresCheckIn(effectivePassRule(node.kind, node.pass_rule))
+    ) {
       throw new Error("Este nível não pede check-in.");
     }
     // 1 check-in por nível (qualquer kind); novo só com prolongar / revisão.

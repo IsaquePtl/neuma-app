@@ -13,7 +13,10 @@ import {
 } from "@/components/mentor-feedback-panel";
 import { CheckInStatusBadge } from "@/components/status-badges";
 import { TallyAnswerList } from "@/components/tally-answers";
-import type { JourneyCheckIn } from "@/components/journey-path-composer";
+import type {
+  JourneyCheckIn,
+  JourneyLevelFeedback,
+} from "@/components/journey-path-composer";
 import type { CheckInDetail } from "@/lib/journey-path/load-level-review";
 import {
   mentorLevelReviewHref,
@@ -421,23 +424,83 @@ function SubmissionSectionWithFeedback({
   );
 }
 
+function passRuleNote(node: StudentNode): string {
+  if (node.kind === "call") {
+    return "A sessão não tem passagem automática. Depois da chamada, concluis o nível aqui. Não há check-in.";
+  }
+  if (node.pass_rule === "none") {
+    return "Este nível fecha quando o aluno marca como visto. Não há check-in para rever.";
+  }
+  if (node.pass_rule === "quiz") {
+    return "Este nível fecha quando o quiz atinge a nota mínima. Não há check-in.";
+  }
+  return "Este nível só avança quando o concluis. Não há check-in.";
+}
+
+function LevelFeedbackList({ feedbacks }: { feedbacks: JourneyLevelFeedback[] }) {
+  if (feedbacks.length === 0) return null;
+  return (
+    <Card className="space-y-4 p-6">
+      <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+        Feedback já enviado
+      </h2>
+      <ul className="space-y-4">
+        {feedbacks.map((feedback) => (
+          <li key={feedback.id} className="space-y-1">
+            <p className="text-xs text-muted-foreground">
+              {formatDateTime(feedback.created_at)}
+            </p>
+            {feedback.notes ? (
+              <p className="whitespace-pre-wrap text-sm">{feedback.notes}</p>
+            ) : null}
+            {feedback.video_url ? (
+              <p className="text-sm text-muted-foreground">Vídeo incluído.</p>
+            ) : null}
+            {!feedback.notes && !feedback.video_url && feedback.file_url ? (
+              <p className="text-sm text-muted-foreground">Ficheiro incluído.</p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 function SubmissionSection({
   pathId,
   nodeId,
+  node,
   studentName,
   nodeCheckIns,
+  nodeFeedbacks,
   checkInDetail,
   selectedCheckInId,
   feedbackPanelProps,
 }: {
   pathId: string;
   nodeId: string;
+  node: StudentNode;
   studentName: string;
   nodeCheckIns: JourneyCheckIn[];
+  nodeFeedbacks: JourneyLevelFeedback[];
   checkInDetail: CheckInDetail | null;
   selectedCheckInId: string | null;
   feedbackPanelProps?: MentorFeedbackPanelProps;
 }) {
+  if (node.pass_rule !== "check_in") {
+    return (
+      <div className="space-y-4">
+        <Card className="space-y-2 border-dashed p-6">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+            {node.kind === "call" ? "Sessão" : passRuleLabel[node.pass_rule]}
+          </h2>
+          <p className="text-sm text-muted-foreground">{passRuleNote(node)}</p>
+        </Card>
+        <LevelFeedbackList feedbacks={nodeFeedbacks} />
+      </div>
+    );
+  }
+
   if (nodeCheckIns.length === 0) {
     return (
       <Card className="space-y-2 border-dashed p-6">
@@ -505,6 +568,8 @@ export function MentorLevelReviewView({
   node,
   levelNumber,
   nodeCheckIns,
+  nodeFeedbacks,
+  bestQuizScore,
   checkInDetail,
   selectedCheckInId,
   activeTab,
@@ -517,6 +582,8 @@ export function MentorLevelReviewView({
   node: StudentNode;
   levelNumber: number;
   nodeCheckIns: JourneyCheckIn[];
+  nodeFeedbacks: JourneyLevelFeedback[];
+  bestQuizScore: number | null;
   checkInDetail: CheckInDetail | null;
   selectedCheckInId: string | null;
   activeTab: MentorLevelTab;
@@ -528,14 +595,16 @@ export function MentorLevelReviewView({
   });
 
   const feedbackPanelProps: MentorFeedbackPanelProps = {
-    checkInId: selectedCheckInId,
+    checkInId: node.pass_rule === "check_in" ? selectedCheckInId : null,
     pathId,
     nodeId: node.id,
     node,
     studentName,
-    existing: checkInDetail?.feedback,
-    draft: checkInDetail?.draft,
+    existing:
+      node.pass_rule === "check_in" ? checkInDetail?.feedback : undefined,
+    draft: node.pass_rule === "check_in" ? checkInDetail?.draft : undefined,
     returnTo,
+    bestQuizScore,
   };
 
   return (
@@ -571,13 +640,15 @@ export function MentorLevelReviewView({
           Gate {passRuleLabel[node.pass_rule]} · {nodeStatusLabel[node.status]}
           {node.due_date ? ` · prazo ${node.due_date}` : ""}
           {" · "}
-          {node.pass_rule === "check_in"
-            ? "fecha ao aprovar o check-in"
-            : node.pass_rule === "quiz"
-              ? "fecha quando o quiz passa"
-              : node.pass_rule === "none"
-                ? "fecha quando o aluno marca visto"
-                : "fecha quando avanças a sessão"}
+          {node.kind === "call"
+            ? "concluis a sessão para fechar"
+            : node.pass_rule === "check_in"
+              ? "fecha ao aprovar o check-in"
+              : node.pass_rule === "quiz"
+                ? "fecha quando o quiz passa"
+                : node.pass_rule === "none"
+                  ? "fecha quando o aluno marca visto"
+                  : "fecha quando o concluis"}
         </p>
       </header>
 
@@ -612,14 +683,16 @@ export function MentorLevelReviewView({
           <SubmissionSection
             pathId={pathId}
             nodeId={node.id}
+            node={node}
             studentName={studentName}
             nodeCheckIns={nodeCheckIns}
+            nodeFeedbacks={nodeFeedbacks}
             checkInDetail={checkInDetail}
             selectedCheckInId={selectedCheckInId}
             feedbackPanelProps={checkInDetail ? feedbackPanelProps : undefined}
           />
 
-          {!checkInDetail ? (
+          {node.pass_rule !== "check_in" || !checkInDetail ? (
             <MentorFeedbackPanel {...feedbackPanelProps} />
           ) : null}
         </>

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { nodeUsesQuizGate } from "@/lib/nodes/pass-rule";
 import { playableVideoUrl } from "@/lib/storage/playable-video";
 import { mentorLevelReviewHref } from "@/lib/journey-path/level-review-url";
 import { loadJourneyPathPageData } from "@/lib/journey-path/load-journey-path";
@@ -40,6 +41,8 @@ export type MentorLevelReviewData = {
   levelNumber: number;
   nodeCheckIns: JourneyCheckIn[];
   nodeFeedbacks: JourneyLevelFeedback[];
+  /** Best stored quiz score when the level closes by quiz. Null if none yet. */
+  bestQuizScore: number | null;
   checkInDetail: CheckInDetail | null;
   selectedCheckInId: string | null;
 };
@@ -161,6 +164,19 @@ export async function loadMentorLevelReviewData(
     ? await loadCheckInDetail(selectedCheckInId)
     : null;
 
+  let bestQuizScore: number | null = null;
+  if (nodeUsesQuizGate(node.pass_rule)) {
+    const supabase = await createClient();
+    const { data: attempts } = await supabase
+      .from("node_quiz_attempts")
+      .select("score")
+      .eq("node_id", nodeId)
+      .order("score", { ascending: false })
+      .limit(1);
+    const best = attempts?.[0]?.score;
+    bestQuizScore = typeof best === "number" ? best : null;
+  }
+
   return {
     pathId,
     pathTitle: journey.path.title,
@@ -170,6 +186,7 @@ export async function loadMentorLevelReviewData(
     levelNumber: nodeIndex + 1,
     nodeCheckIns,
     nodeFeedbacks,
+    bestQuizScore,
     checkInDetail,
     selectedCheckInId,
   };

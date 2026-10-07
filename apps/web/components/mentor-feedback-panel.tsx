@@ -11,6 +11,7 @@ import {
   Check,
   Clock,
   Loader2,
+  MessageSquare,
   Pencil,
   Sparkles,
   Trash2,
@@ -27,7 +28,12 @@ import {
 import { getMentorFeedbackVideoUploadUrl } from "@/lib/actions/r2-uploads";
 import { uploadToR2Presigned } from "@/lib/uploads/presigned-client";
 import { rejectFeedbackDraft } from "@/lib/actions/ai-drafts";
-import { advanceLevel, extendLevelWeek } from "@/lib/actions/journey-level";
+import {
+  advanceLevel,
+  createLevelFeedback,
+  extendLevelWeek,
+} from "@/lib/actions/journey-level";
+import { quizPassScore } from "@/lib/nodes/pass-rule";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { WeekStepper } from "@/components/week-stepper";
@@ -86,7 +92,31 @@ type Draft = {
   body_next_steps: string | null;
 };
 
-type Decision = "advance" | "extend" | "revise";
+type Decision = "advance" | "extend" | "revise" | "note";
+
+function decisionsFor(node: StudentNode, checkInId: string | null): Decision[] {
+  if (node.pass_rule === "check_in") {
+    return checkInId ? ["advance", "revise", "extend"] : ["advance", "extend"];
+  }
+  if (node.pass_rule === "none" || node.pass_rule === "quiz") {
+    return ["note", "advance", "extend"];
+  }
+  return ["advance", "extend"];
+}
+
+function defaultDecision(node: StudentNode, checkInId: string | null): Decision {
+  if (node.pass_rule === "none" || node.pass_rule === "quiz") return "note";
+  if (node.pass_rule === "check_in" && !checkInId) return "extend";
+  return "advance";
+}
+
+function levelFeedbackBody(notes: string, nextSteps: string): string {
+  const written = notes.trim();
+  const steps = nextSteps.trim();
+  if (written && steps) return `${written}\n\nPróximos passos:\n${steps}`;
+  if (steps) return `Próximos passos:\n${steps}`;
+  return written;
+}
 
 export type MentorFeedbackPanelProps = {
   checkInId: string | null;
@@ -102,6 +132,8 @@ export type MentorFeedbackPanelProps = {
   } | null;
   draft?: Draft | null;
   returnTo?: string;
+  /** Best quiz attempt when the level closes by quiz. */
+  bestQuizScore?: number | null;
   /** When true, omits the outer Card on desktop (for embedding inside the submission card). */
   embedded?: boolean;
 };
@@ -130,9 +162,17 @@ function useMentorFeedbackForm({
   draft,
   existing,
   returnTo,
+  bestQuizScore = null,
 }: Pick<
   MentorFeedbackPanelProps,
-  "checkInId" | "pathId" | "nodeId" | "node" | "draft" | "existing" | "returnTo"
+  | "checkInId"
+  | "pathId"
+  | "nodeId"
+  | "node"
+  | "draft"
+  | "existing"
+  | "returnTo"
+  | "bestQuizScore"
 >) {
   const fileRef = useRef<HTMLInputElement>(null);
   const initialVideoUrl = existing?.video_url ?? "";
@@ -153,7 +193,9 @@ function useMentorFeedbackForm({
     initialVideoUrl ? videoLabelFromUrl(initialVideoUrl) : "",
   );
   const [uploading, setUploading] = useState(false);
-  const [decision, setDecision] = useState<Decision>("advance");
+  const [decision, setDecision] = useState<Decision>(() =>
+    defaultDecision(node, checkInId),
+  );
   const [extendWeeks, setExtendWeeks] = useState(1);
   const [pendingDiscard, startDiscard] = useTransition();
   const [pendingSubmit, startSubmit] = useTransition();
@@ -226,7 +268,7 @@ function useMentorFeedbackForm({
     if (fileRef.current) fileRef.current.value = "";
   }
 
-  function markSubmitted() {
+  function markSubmitted(message = "Feedback enviado") {
     savedFeedbackRef.current = {
       notes: notes.trim(),
       nextSteps: nextSteps.trim(),
@@ -236,7 +278,18 @@ function useMentorFeedbackForm({
     setSubmitted(true);
     setShowDraftBanner(false);
     setIsEditing(false);
-    toast.success("Feedback enviado com sucesso");
+    toast.success(message);
+  }
+
+  async function saveLevelNoteIfAny() {
+    const body = levelFeedbackBody(notes, nextSteps);
+    if (!body && !videoUrl.trim()) return;
+    const fd = new FormData();
+    fd.set("node_id", nodeId);
+    fd.set("path_id", pathId);
+    fd.set("notes", body);
+    fd.set("video_url", videoUrl.trim());
+    await createLevelFeedback(fd);
   }
 
   function startEditing() {
@@ -281,7 +334,14 @@ function useMentorFeedbackForm({
   function handleSubmit() {
     startSubmit(async () => {
       try {
-        if (decision === "advance") {
+        if (decision === "note") {
+          if (!notes.trim() && !nextSteps.trim() && !videoUrl.trim()) {
+            toast.error("Escreve o feedback ou adiciona um vídeo.");
+            return;
+          }
+          await saveLevelNoteIfAny();
+          markSubmitted("Feedback enviado");
+        } else if (decision === "advance") {
           if (checkInId) {
             const fd = new FormData();
             fd.set("check_in_id", checkInId);
@@ -292,13 +352,16 @@ function useMentorFeedbackForm({
             fd.set("notes", notes.trim());
             fd.set("next_steps", nextSteps.trim());
             await submitFeedback(fd);
-            markSubmitted();
+            markSubmitted("Feedback enviado");
           } else {
+            await saveLevelNoteIfAny();
             const fd = new FormData();
             fd.set("node_id", nodeId);
             fd.set("path_id", pathId);
             await advanceLevel(fd);
-            markSubmitted();
+            markSubmitted(
+              node.kind === "call" ? "Sessão concluída" : "Nível avançado",
+            );
           }
         } else if (decision === "revise") {
           if (!checkInId) {
@@ -313,7 +376,7 @@ function useMentorFeedbackForm({
           fd.set("notes", notes.trim());
           fd.set("next_steps", nextSteps.trim());
           await submitFeedback(fd);
-          markSubmitted();
+          markSubmitted("Revisão pedida");
         } else {
           if (!isExtendAmountValid) {
             toast.error("Prolonga pelo menos 1 semana");
@@ -336,9 +399,11 @@ function useMentorFeedbackForm({
             feedbackFd.set("notes", notes.trim());
             feedbackFd.set("next_steps", nextSteps.trim());
             await saveCheckInFeedbackOnly(feedbackFd);
+          } else if (!checkInId) {
+            await saveLevelNoteIfAny();
           }
 
-          markSubmitted();
+          markSubmitted("Prazo prolongado");
         }
         requestMentorBadgesRefresh();
       } catch (err) {
@@ -382,6 +447,7 @@ function useMentorFeedbackForm({
     canEdit,
     node,
     checkInId,
+    bestQuizScore,
   };
 }
 
@@ -593,63 +659,86 @@ export function MentorFeedbackFields({
   );
 }
 
+function decisionTitle(node: StudentNode, decision: Decision): string {
+  if (decision === "note") return "Enviar feedback";
+  if (decision === "revise") return "Pedir revisão";
+  if (decision === "extend") return "Prolongar prazo";
+  if (node.kind === "call") return "Concluir sessão";
+  if (node.pass_rule === "none") return "Concluir nível";
+  return "Avançar nível";
+}
+
+function decisionSelectedClass(decision: Decision): string {
+  if (decision === "revise") {
+    return "border-[var(--neuma-orange)]/50 bg-[var(--neuma-orange)]/10";
+  }
+  if (decision === "extend") {
+    return "border-[var(--neuma-coral)]/50 bg-[var(--neuma-coral)]/10";
+  }
+  if (decision === "note") {
+    return "border-white/30 bg-white/10";
+  }
+  return "border-[#cece13]/50 bg-[#cece13]/10";
+}
+
 export function MentorDecisionAndSubmit({ className }: { className?: string }) {
   const form = useMentorFeedbackFormContext();
 
   if (form.isCompleted || form.isEditing) return null;
 
+  const options = decisionsFor(form.node, form.checkInId);
+  const quizThreshold = quizPassScore(form.node.pass_score);
+  const quizBlocked =
+    form.node.pass_rule === "quiz" &&
+    (form.bestQuizScore == null || form.bestQuizScore < quizThreshold);
+  const advanceBlocked =
+    form.node.status === "completed" ||
+    (form.node.pass_rule === "check_in" && !form.checkInId) ||
+    quizBlocked;
+  const noteEmpty =
+    !form.notes.trim() && !form.nextSteps.trim() && !form.videoUrl.trim();
+  const submitLabel = form.pendingSubmit
+    ? "A guardar…"
+    : form.decision === "advance" && form.node.pass_rule === "check_in"
+      ? "Submeter feedback"
+      : decisionTitle(form.node, form.decision);
+
   return (
     <div className={cn("space-y-3", className)}>
       <div className="space-y-3">
         <p className="text-sm font-medium">Decisão</p>
-        <div className="grid gap-2 sm:grid-cols-3">
-          <button
-            type="button"
-            onClick={() => form.setDecision("advance")}
-            className={cn(
-              "rounded-xl border px-4 py-3 text-left text-sm transition-colors",
-              form.decision === "advance"
-                ? "border-[#cece13]/50 bg-[#cece13]/10"
-                : "border-white/10 bg-black/20 hover:bg-white/5",
-            )}
-          >
-            <span className="flex items-center gap-2 font-medium">
-              <Check className="size-4 text-[#cece13]" />
-              Avançar nível
-            </span>
-          </button>
-          {form.checkInId ? (
+        <div
+          className={cn(
+            "grid gap-2",
+            options.length >= 3 ? "sm:grid-cols-3" : "sm:grid-cols-2",
+          )}
+        >
+          {options.map((option) => (
             <button
+              key={option}
               type="button"
-              onClick={() => form.setDecision("revise")}
+              onClick={() => form.setDecision(option)}
               className={cn(
                 "rounded-xl border px-4 py-3 text-left text-sm transition-colors",
-                form.decision === "revise"
-                  ? "border-[var(--neuma-orange)]/50 bg-[var(--neuma-orange)]/10"
+                form.decision === option
+                  ? decisionSelectedClass(option)
                   : "border-white/10 bg-black/20 hover:bg-white/5",
               )}
             >
               <span className="flex items-center gap-2 font-medium">
-                <Pencil className="size-4 text-[var(--neuma-orange)]" />
-                Pedir revisão
+                {option === "note" ? (
+                  <MessageSquare className="size-4 text-foreground" />
+                ) : option === "revise" ? (
+                  <Pencil className="size-4 text-[var(--neuma-orange)]" />
+                ) : option === "extend" ? (
+                  <Clock className="size-4 text-[var(--neuma-coral)]" />
+                ) : (
+                  <Check className="size-4 text-[#cece13]" />
+                )}
+                {decisionTitle(form.node, option)}
               </span>
             </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => form.setDecision("extend")}
-            className={cn(
-              "rounded-xl border px-4 py-3 text-left text-sm transition-colors",
-              form.decision === "extend"
-                ? "border-[var(--neuma-coral)]/50 bg-[var(--neuma-coral)]/10"
-                : "border-white/10 bg-black/20 hover:bg-white/5",
-            )}
-          >
-            <span className="flex items-center gap-2 font-medium">
-              <Clock className="size-4 text-[var(--neuma-coral)]" />
-              Prolongar prazo
-            </span>
-          </button>
+          ))}
         </div>
         {form.node.pass_rule === "check_in" && !form.checkInId ? (
           <p className="text-xs text-muted-foreground">
@@ -659,8 +748,27 @@ export function MentorDecisionAndSubmit({ className }: { className?: string }) {
         ) : null}
         {form.node.pass_rule === "quiz" ? (
           <p className="text-xs text-muted-foreground">
-            Uma nota abaixo do limiar não passa. Avançar só funciona depois
-            de uma tentativa suficiente.
+            {form.bestQuizScore == null
+              ? `Ainda não há tentativa. O limiar é ${quizThreshold}%.`
+              : form.bestQuizScore < quizThreshold
+                ? `A melhor nota é ${form.bestQuizScore}% e o limiar é ${quizThreshold}%. Avançar fica bloqueado.`
+                : `A melhor nota é ${form.bestQuizScore}%. Podes avançar o nível.`}
+          </p>
+        ) : null}
+        {form.node.pass_rule === "none" && form.decision === "note" ? (
+          <p className="text-xs text-muted-foreground">
+            O feedback fica no nível. O aluno continua a marcar visto para
+            avançar.
+          </p>
+        ) : null}
+        {form.node.pass_rule === "none" && form.decision === "advance" ? (
+          <p className="text-xs text-muted-foreground">
+            O aluno marca visto sozinho. Isto fecha o nível por ele.
+          </p>
+        ) : null}
+        {form.node.kind === "call" && form.decision === "advance" ? (
+          <p className="text-xs text-muted-foreground">
+            A concluir, o aluno passa ao nível seguinte.
           </p>
         ) : null}
 
@@ -691,10 +799,8 @@ export function MentorDecisionAndSubmit({ className }: { className?: string }) {
           disabled={
             form.pendingSubmit ||
             form.uploading ||
-            (form.decision === "advance" && form.node.status === "completed") ||
-            (form.decision === "advance" &&
-              form.node.pass_rule === "check_in" &&
-              !form.checkInId) ||
+            (form.decision === "advance" && advanceBlocked) ||
+            (form.decision === "note" && noteEmpty) ||
             (form.decision === "extend" && !form.isExtendAmountValid)
           }
           className="h-11 w-full gap-2 py-3 text-base"
@@ -702,20 +808,16 @@ export function MentorDecisionAndSubmit({ className }: { className?: string }) {
         >
           {form.pendingSubmit ? (
             <Loader2 className="size-4 animate-spin" />
-          ) : form.decision === "advance" ? (
-            <Check className="size-4" />
+          ) : form.decision === "note" ? (
+            <MessageSquare className="size-4" />
           ) : form.decision === "revise" ? (
             <Pencil className="size-4" />
-          ) : (
+          ) : form.decision === "extend" ? (
             <Clock className="size-4" />
+          ) : (
+            <Check className="size-4" />
           )}
-          {form.pendingSubmit
-            ? "A guardar…"
-            : form.decision === "advance"
-              ? "Submeter Feedback"
-              : form.decision === "revise"
-                ? "Pedir revisão"
-                : "Enviar Feedback"}
+          {submitLabel}
         </Button>
       </div>
     </div>

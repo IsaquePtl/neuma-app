@@ -16,10 +16,12 @@ import { cn } from "@/lib/utils";
 export function SupportMediaToggle({
   url,
   title,
+  poster,
   label = "Abrir anexo de apoio",
 }: {
   url: string;
   title?: string;
+  poster?: string | null;
   label?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -141,6 +143,7 @@ export function SupportMediaToggle({
         <MediaVideoPlayer
           url={url}
           title={title}
+          poster={poster}
           size="full"
           fallbackLabel={label}
         />

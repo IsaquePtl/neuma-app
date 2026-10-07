@@ -144,8 +144,8 @@ export type LevelCheckInSummary = {
 };
 
 /**
- * Status for the level CTA. Returns null when the level has no check-in flow
- * and no feedback to show.
+ * Status for the level CTA. Null unless the pass rule is check-in.
+ * Histórico de envios antigos não mantém o botão se a regra deixou de ser check-in.
  */
 export function summarizeLevelCheckIns(
   activity: StudentNodeActivity,
@@ -155,9 +155,11 @@ export function summarizeLevelCheckIns(
     canSubmit,
   }: { requiresCheckIn: boolean; completed: boolean; canSubmit: boolean },
 ): LevelCheckInSummary | null {
+  if (!requiresCheckIn) return null;
+
   const rounds = activity.checkIns.length;
   const hasLevelFeedback = activity.levelFeedbacks.length > 0;
-  if ((!requiresCheckIn || completed) && rounds === 0 && !hasLevelFeedback) {
+  if (completed && rounds === 0 && !hasLevelFeedback) {
     return null;
   }
 

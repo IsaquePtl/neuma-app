@@ -62,9 +62,10 @@ async function libraryObjectInUse(
   exceptAssetId?: string,
 ): Promise<boolean> {
   const url = getPublicUrl(key);
-  const [byPath, byUrl, nodes, templates] = await Promise.all([
+  const [byPath, byUrl, byCover, nodes, templates] = await Promise.all([
     supabase.from("library_assets").select("id").eq("storage_path", key).limit(5),
     supabase.from("library_assets").select("id").eq("url", url).limit(5),
+    supabase.from("library_assets").select("id").eq("cover_url", url).limit(5),
     supabase.from("nodes").select("id").eq("resource_url", url).limit(1),
     supabase
       .from("path_template_nodes")
@@ -72,10 +73,14 @@ async function libraryObjectInUse(
       .eq("default_resource_url", url)
       .limit(1),
   ]);
-  if (byPath.error || byUrl.error || nodes.error || templates.error) return true;
+  if (byPath.error || byUrl.error || byCover.error || nodes.error || templates.error) {
+    return true;
+  }
 
   const assetIds = new Set(
-    [...(byPath.data ?? []), ...(byUrl.data ?? [])].map((row) => row.id),
+    [...(byPath.data ?? []), ...(byUrl.data ?? []), ...(byCover.data ?? [])].map(
+      (row) => row.id,
+    ),
   );
   if (exceptAssetId) assetIds.delete(exceptAssetId);
   if (assetIds.size > 0) return true;
@@ -168,7 +173,7 @@ export async function upsertLibraryAsset(formData: FormData) {
   if (id) {
     const { data: previous } = await supabase
       .from("library_assets")
-      .select("storage_path, url")
+      .select("storage_path, url, cover_url")
       .eq("id", id)
       .maybeSingle();
 
@@ -190,6 +195,16 @@ export async function upsertLibraryAsset(formData: FormData) {
         await deleteLibraryObjectIfFree(supabase, previousKey, id);
       } catch (err) {
         console.error("[library] failed to delete replaced object", err);
+      }
+    }
+
+    const previousCover = libraryObjectKey(null, previous?.cover_url);
+    const nextCover = libraryObjectKey(null, payload.cover_url);
+    if (previousCover && previousCover !== nextCover) {
+      try {
+        await deleteLibraryObjectIfFree(supabase, previousCover, id);
+      } catch (err) {
+        console.error("[library] failed to delete replaced cover", err);
       }
     }
   } else {
@@ -232,15 +247,23 @@ export async function deleteLibraryAsset(
   const id = formData.get("id") as string;
   const { data: previous } = await supabase
     .from("library_assets")
-    .select("storage_path, url")
+    .select("storage_path, url, cover_url")
     .eq("id", id)
     .maybeSingle();
   const key = libraryObjectKey(previous?.storage_path, previous?.url);
+  const coverKey = libraryObjectKey(null, previous?.cover_url);
 
   let fileRemoved: boolean | null = key ? false : null;
   if (key && !(await libraryObjectInUse(supabase, key, id))) {
     await deleteR2Object(key);
     fileRemoved = true;
+  }
+  if (coverKey) {
+    try {
+      await deleteLibraryObjectIfFree(supabase, coverKey, id);
+    } catch (err) {
+      console.error("[library] failed to delete cover", err);
+    }
   }
 
   const { error } = await supabase.from("library_assets").delete().eq("id", id);
@@ -304,6 +327,60 @@ export async function replaceLibraryAssetMedia(input: {
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Falha ao guardar o ficheiro",
+    };
+  }
+}
+
+/** Grava a capa no item e apaga a imagem anterior se já ninguém a usar. */
+export async function replaceLibraryAssetCover(input: {
+  id: string;
+  coverUrl: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const { supabase } = await requireMentor();
+    const id = input.id.trim();
+    const coverUrl = input.coverUrl.trim();
+    if (!id) return { ok: false, error: "Item não encontrado" };
+    if (coverUrl) {
+      const key = libraryObjectKey(null, coverUrl);
+      if (!key?.startsWith("library/covers/")) {
+        return { ok: false, error: "Capa inválida" };
+      }
+    }
+
+    const { data: previous, error: readError } = await supabase
+      .from("library_assets")
+      .select("cover_url")
+      .eq("id", id)
+      .maybeSingle();
+    if (readError) return { ok: false, error: readError.message };
+    if (!previous) return { ok: false, error: "Item não encontrado" };
+
+    const { error } = await supabase
+      .from("library_assets")
+      .update({
+        cover_url: coverUrl || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+    if (error) return { ok: false, error: error.message };
+
+    const previousKey = libraryObjectKey(null, previous.cover_url);
+    const nextKey = libraryObjectKey(null, coverUrl);
+    if (previousKey && previousKey !== nextKey) {
+      try {
+        await deleteLibraryObjectIfFree(supabase, previousKey, id);
+      } catch (err) {
+        console.error("[library] failed to delete replaced cover", err);
+      }
+    }
+
+    revalidateLibrary();
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Falha ao guardar a capa",
     };
   }
 }

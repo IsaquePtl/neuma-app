@@ -19,6 +19,7 @@ import {
   Library,
   CalendarDays,
   ChevronLeft,
+  Menu,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -539,9 +540,19 @@ export function AppShell({
               }
               aria-pressed={sidebarCollapsed}
               title={sidebarCollapsed ? "Maximizar menu" : "Minimizar menu"}
-              className="flex shrink-0 items-center justify-start rounded-xl px-2 py-3"
+              className="group/logo flex shrink-0 items-center justify-start rounded-xl px-2 py-3"
             >
-              <NeumaLogo withWordmark={false} size={28} />
+              <span className="relative">
+                <span className="block transition-opacity duration-150 ease-out group-hover/logo:opacity-0 group-active/logo:opacity-0">
+                  <NeumaLogo withWordmark={false} size={28} />
+                </span>
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute top-1/2 left-1/2 grid size-12 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/5 text-foreground opacity-0 transition-opacity duration-150 ease-out group-hover/logo:opacity-100 group-active/logo:opacity-100"
+                >
+                  <Menu className="size-6" />
+                </span>
+              </span>
             </button>
             <div
               className="neuma-hairline mt-1 w-full shrink-0"

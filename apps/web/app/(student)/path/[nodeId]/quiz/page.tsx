@@ -41,7 +41,7 @@ export default async function CheckpointQuizPage({
 
   const node = nodes.find((n) => n.id === nodeId);
   if (!node) notFound();
-  if (node.kind !== "milestone" && !nodeUsesQuizGate(node.pass_rule)) {
+  if (!nodeUsesQuizGate(node.pass_rule)) {
     redirect(`/path/${nodeId}`);
   }
 

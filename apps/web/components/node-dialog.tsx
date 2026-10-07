@@ -78,6 +78,16 @@ function allowsContent(kind: NodeKind) {
   );
 }
 
+/** The level stores the asset URL, not its id. Match it back when reopening. */
+function assetIdForResource(
+  url: string | null | undefined,
+  assets: PickerAsset[],
+): string {
+  const trimmed = url?.trim();
+  if (!trimmed) return "";
+  return assets.find((asset) => asset.url?.trim() === trimmed)?.id ?? "";
+}
+
 /** Named fields only; controls inside `[data-dirty-ignore]` (e.g. the quiz editor) save on their own. */
 function serializeForm(form: HTMLFormElement): string {
   const parts: string[] = [];
@@ -160,6 +170,7 @@ export function NodeEditorForm({
       title: node?.title ?? "",
       resourceUrl: node?.resource_url ?? "",
       contentBody: node?.content_body ?? "",
+      assetId: assetIdForResource(node?.resource_url, assets),
       weeks: suggested ?? plannedWeeks(node?.duration_weeks),
     };
   });
@@ -170,7 +181,7 @@ export function NodeEditorForm({
   const [title, setTitle] = useState(initial.title);
   const [resourceUrl, setResourceUrl] = useState(initial.resourceUrl);
   const [contentBody, setContentBody] = useState(initial.contentBody);
-  const [pickedAssetId, setPickedAssetId] = useState("");
+  const [pickedAssetId, setPickedAssetId] = useState(initial.assetId);
   const [fieldsDirty, setFieldsDirty] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const initialFieldsRef = useRef<string | null>(null);
@@ -185,7 +196,7 @@ export function NodeEditorForm({
     resourceUrl !== initial.resourceUrl ||
     contentBody !== initial.contentBody ||
     (!hideWeeks && weeks !== initial.weeks) ||
-    pickedAssetId !== "";
+    pickedAssetId !== initial.assetId;
 
   useEffect(() => {
     if (formRef.current) initialFieldsRef.current = serializeForm(formRef.current);
@@ -281,7 +292,6 @@ export function NodeEditorForm({
             const next = e.target.value as NodeKind;
             setKind(next);
             setPickedAssetId("");
-            setPassRule(defaultPassRule(next));
           }}
           className={selectClass}
         >
@@ -306,6 +316,7 @@ export function NodeEditorForm({
 
       <PhaseFields
         kind={kind}
+        passRule={passRule}
         phases={phases}
         nodeId={node?.id}
         initialPhaseKey={node?.phase_key}
@@ -425,6 +436,7 @@ export function NodeEditorForm({
           topics={topics}
           assets={assets}
           value={pickedAssetId}
+          initialAssetId={initial.assetId}
           onChange={(sel) => {
             if (!sel) {
               setPickedAssetId("");
@@ -471,7 +483,7 @@ export function NodeEditorForm({
           </div>
         ) : null}
 
-        {(passRule === "quiz" || kind === "milestone") && isEdit && node ? (
+        {passRule === "quiz" && kind !== "call" && isEdit && node ? (
           <div data-dirty-ignore>
             <NodeQuizEditor nodeId={node.id} passRule={passRule} />
           </div>

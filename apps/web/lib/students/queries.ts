@@ -3,6 +3,7 @@ import {
   checkInLevelTitle,
   ORPHAN_CHECKIN_LABEL,
 } from "@/lib/labels";
+import { defaultPassRule, effectivePassRule } from "@/lib/nodes/pass-rule";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import type {
@@ -48,6 +49,8 @@ export type StudentNode = {
   status: NodeStatus;
   due_date: string | null;
   resource_url: string | null;
+  /** Capa do vídeo na biblioteca, quando o URL do nível coincide com o item. */
+  poster_url?: string | null;
   content_body: string | null;
   order_index: number;
   pass_rule: NodePassRule;
@@ -310,9 +313,13 @@ export function mapNode(n: {
     resource_url: n.resource_url,
     content_body: n.content_body ?? null,
     order_index: n.order_index,
-    pass_rule: n.pass_rule ?? (n.kind === "practice" ? "check_in" : n.kind === "lesson" || n.kind === "resource" ? "none" : n.kind === "milestone" ? "quiz" : "mentor"),
+    pass_rule: effectivePassRule(n.kind, n.pass_rule ?? defaultPassRule(n.kind)),
     pass_score: n.pass_score ?? null,
-    check_in_kind: n.check_in_kind ?? null,
+    check_in_kind:
+      effectivePassRule(n.kind, n.pass_rule ?? defaultPassRule(n.kind)) ===
+      "check_in"
+        ? (n.check_in_kind ?? null)
+        : null,
     phase_key: n.phase_key ?? null,
     node_code: n.node_code ?? null,
     is_phase_checkpoint: Boolean(n.is_phase_checkpoint),
@@ -338,8 +345,41 @@ export async function loadMyPathWithNodes(studentId: string): Promise<{
 
   return {
     path: mapPath(pathRow),
-    nodes: (nodes ?? []).map(mapNode),
+    nodes: await attachLibraryPosters(supabase, (nodes ?? []).map(mapNode)),
   };
+}
+
+/** Liga a capa do item da biblioteca ao nível que usa o mesmo vídeo. */
+export async function attachLibraryPosters<T extends { resource_url: string | null }>(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  nodes: T[],
+): Promise<Array<T & { poster_url: string | null }>> {
+  const urls = [
+    ...new Set(
+      nodes
+        .map((node) => node.resource_url?.trim())
+        .filter((url): url is string => Boolean(url)),
+    ),
+  ];
+  if (urls.length === 0) {
+    return nodes.map((node) => ({ ...node, poster_url: null }));
+  }
+
+  const { data } = await supabase
+    .from("library_assets")
+    .select("url, cover_url")
+    .in("url", urls)
+    .not("cover_url", "is", null);
+
+  const byUrl = new Map<string, string>();
+  for (const row of data ?? []) {
+    if (row.url && row.cover_url) byUrl.set(row.url, row.cover_url);
+  }
+
+  return nodes.map((node) => ({
+    ...node,
+    poster_url: node.resource_url ? (byUrl.get(node.resource_url) ?? null) : null,
+  }));
 }
 
 export type StudentMentor = {

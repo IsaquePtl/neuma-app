@@ -16,9 +16,7 @@ export default async function MentorLevelQuizPage({
   if (!data) notFound();
 
   const { node } = data;
-  const isQuizLevel =
-    node.kind === "milestone" || nodeUsesQuizGate(node.pass_rule);
-  if (!isQuizLevel) notFound();
+  if (node.kind === "call" || !nodeUsesQuizGate(node.pass_rule)) notFound();
 
   const questions = await listQuizQuestions(nodeId);
 

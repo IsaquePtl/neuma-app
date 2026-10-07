@@ -5,6 +5,7 @@ import {
   abortLibraryMultipartUploadsForUser,
   abortMultipartUpload,
   buildCheckInKey,
+  buildLibraryCoverKey,
   buildLibraryKey,
   buildMentorFeedbackKey,
   completeMultipartUpload,
@@ -189,6 +190,47 @@ export async function getMentorFeedbackVideoUploadUrl(
       meta.size,
       Boolean(meta.forceMultipart),
     );
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Falha a preparar o upload",
+    };
+  }
+}
+
+const COVER_BYTES = 8 * 1024 * 1024;
+const COVER_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+/** Presigned upload for a library video cover (PNG, JPEG, WebP). */
+export async function getLibraryCoverUploadUrl(meta: {
+  filename: string;
+  contentType: string;
+  size: number;
+}): Promise<PresignedUploadOutcome> {
+  const user = await requireMentor();
+  if (!user.ok) return user;
+
+  const contentType = sanitizeContentType(meta.contentType);
+  if (!COVER_TYPES.has(contentType)) {
+    return { ok: false, error: "A capa tem de ser PNG, JPEG ou WebP." };
+  }
+  if (!Number.isFinite(meta.size) || meta.size <= 0) {
+    return { ok: false, error: "Ficheiro inválido" };
+  }
+  if (meta.size > COVER_BYTES) {
+    return { ok: false, error: "A capa pode ter no máximo 8 MB." };
+  }
+
+  const key = buildLibraryCoverKey(user.id, meta.filename);
+  try {
+    const uploadUrl = await createPresignedPutUrl(key, contentType);
+    return {
+      ok: true,
+      mode: "put",
+      uploadUrl,
+      publicUrl: getPublicUrl(key),
+      key,
+    };
   } catch (e) {
     return {
       ok: false,

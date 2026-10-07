@@ -27,16 +27,19 @@ import { cn } from "@/lib/utils";
 function LessonVideoPlayer({
   url,
   title,
+  poster,
   fallbackLabel = "Abrir aula",
 }: {
   url: string;
   title?: string;
+  poster?: string | null;
   fallbackLabel?: string;
 }) {
   return (
     <MediaVideoPlayer
       url={url}
       title={title}
+      poster={poster}
       size="full"
       fallbackLabel={fallbackLabel}
     />
@@ -66,6 +69,31 @@ function SupportAttachmentButton({
   );
 }
 
+function LevelIntro({ text }: { text: string }) {
+  const compact = text.trim();
+  if (!compact) return null;
+  const prose =
+    "break-words whitespace-pre-wrap text-[13px] leading-snug text-white/55";
+  if (compact.length <= 180) {
+    return <p className={cn("mt-1.5 pr-6 sm:pr-10", prose)}>{compact}</p>;
+  }
+  return (
+    <details className="group mt-1.5 pr-6 sm:pr-10">
+      <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        <span className={cn(prose, "line-clamp-2 group-open:line-clamp-none")}>
+          {compact}
+        </span>
+        <span className="mt-1 block text-xs text-white/40 group-open:hidden">
+          Ver mais
+        </span>
+        <span className="mt-1 hidden text-xs text-white/40 group-open:block">
+          Ver menos
+        </span>
+      </summary>
+    </details>
+  );
+}
+
 export function NodeLevelHeader({
   node,
   levelNumber,
@@ -78,10 +106,10 @@ export function NodeLevelHeader({
 }) {
   return (
     <header className="min-w-0 shrink-0">
-      <div className="flex min-w-0 items-center gap-3.5">
+      <div className="flex min-w-0 items-start gap-3.5">
         <span
           className={cn(
-            "student-path-marker relative grid size-14 shrink-0 place-items-center rounded-full",
+            "student-path-marker relative mt-0.5 grid size-14 shrink-0 place-items-center rounded-full",
             "neuma-gradient text-base font-semibold tabular-nums text-white",
             "shadow-[0_0_28px_-4px_color-mix(in_oklch,var(--neuma-coral)_55%,transparent)]",
           )}
@@ -120,6 +148,7 @@ export function NodeLevelHeader({
           <h1 className="break-words font-heading text-2xl font-bold leading-tight tracking-tight sm:text-3xl">
             {node.title}
           </h1>
+          {node.content_body ? <LevelIntro text={node.content_body} /> : null}
         </div>
       </div>
     </header>
@@ -128,20 +157,18 @@ export function NodeLevelHeader({
 
 export function CheckInActions({
   node,
-  practiceStyle = false,
   canSubmitCheckIn = true,
   blockedMessage = null,
   preview = false,
   checkInSlot,
 }: {
   node: StudentNode;
-  practiceStyle?: boolean;
   canSubmitCheckIn?: boolean;
   blockedMessage?: string | null;
   preview?: boolean;
   checkInSlot?: ReactNode;
 }) {
-  if (preview) return null;
+  if (preview || node.kind === "call") return null;
 
   const markSeen =
     node.status !== "completed" && nodeAllowsMarkSeen(node.pass_rule) ? (
@@ -157,7 +184,7 @@ export function CheckInActions({
     return (
       <>
         {markSeen}
-        {checkInSlot}
+        {nodeRequiresCheckIn(node.pass_rule) ? checkInSlot : null}
       </>
     );
   }
@@ -178,12 +205,8 @@ export function CheckInActions({
     kind === "call"
       ? "Registar a chamada"
       : kind === "text"
-        ? practiceStyle
-          ? "Fazer check-in em texto"
-          : "Confirmar em texto"
-        : practiceStyle
-          ? "Fazer check-in em vídeo"
-          : "Confirmar que concluíste";
+        ? "Fazer check-in em texto"
+        : "Fazer check-in em vídeo";
   const Icon = kind === "call" ? Phone : kind === "text" ? FileText : Video;
 
   return (
@@ -217,7 +240,6 @@ export function CheckInActions({
 
 function GateControls({
   node,
-  practiceStyle = false,
   canSubmitCheckIn = true,
   blockedMessage = null,
   preview = false,
@@ -226,7 +248,6 @@ function GateControls({
   checkInSlot,
 }: {
   node: StudentNode;
-  practiceStyle?: boolean;
   canSubmitCheckIn?: boolean;
   blockedMessage?: string | null;
   preview?: boolean;
@@ -234,9 +255,7 @@ function GateControls({
   phaseCheckpoint?: PhaseReview | null;
   checkInSlot?: ReactNode;
 }) {
-  const showQuiz =
-    node.kind === "milestone" || nodeUsesQuizGate(node.pass_rule);
-  const quizGate = nodeUsesQuizGate(node.pass_rule);
+  const quizGate = node.kind !== "call" && nodeUsesQuizGate(node.pass_rule);
   const phase =
     phaseCheckpoint && quizGate && phaseCheckpoint.items.length > 0
       ? {
@@ -250,7 +269,7 @@ function GateControls({
 
   return (
     <>
-      {showQuiz ? (
+      {quizGate ? (
         <CheckpointQuiz
           nodeId={node.id}
           quizGate={quizGate}
@@ -262,7 +281,6 @@ function GateControls({
       ) : null}
       <CheckInActions
         node={node}
-        practiceStyle={practiceStyle}
         canSubmitCheckIn={canSubmitCheckIn}
         blockedMessage={blockedMessage}
         preview={preview}
@@ -301,16 +319,11 @@ function SessionLayout({
     <div className="min-w-0 w-full max-w-full space-y-5">
       <NodeLevelHeader node={node} levelNumber={levelNumber} />
 
-      {node.content_body ? (
-        <div className="min-w-0 break-words whitespace-pre-wrap text-sm text-muted-foreground">
-          {node.content_body}
-        </div>
-      ) : null}
-
       {node.resource_url ? (
         <SupportMediaToggle
           url={node.resource_url}
           title={node.title}
+          poster={node.poster_url}
           label="Abrir anexo de apoio"
         />
       ) : null}
@@ -341,6 +354,7 @@ function RecordingLayout({
   blockedMessage = null,
   preview = false,
   pathId,
+  phaseCheckpoint = null,
   checkInSlot,
 }: {
   node: StudentNode;
@@ -349,6 +363,7 @@ function RecordingLayout({
   blockedMessage?: string | null;
   preview?: boolean;
   pathId?: string;
+  phaseCheckpoint?: PhaseReview | null;
   checkInSlot?: ReactNode;
 }) {
   return (
@@ -359,6 +374,7 @@ function RecordingLayout({
         <LessonVideoPlayer
           url={node.resource_url}
           title={node.title}
+          poster={node.poster_url}
           fallbackLabel="Abrir aula"
         />
       ) : (
@@ -367,10 +383,8 @@ function RecordingLayout({
         </p>
       )}
 
-      {node.content_body ? (
-        <div className="min-w-0 break-words whitespace-pre-wrap rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
-          {node.content_body}
-        </div>
+      {phaseCheckpoint?.reviewRequired && !preview ? (
+        <PhaseReviewChecklist review={phaseCheckpoint} />
       ) : null}
 
       <GateControls
@@ -379,6 +393,7 @@ function RecordingLayout({
         blockedMessage={blockedMessage}
         preview={preview}
         pathId={pathId}
+        phaseCheckpoint={phaseCheckpoint}
         checkInSlot={checkInSlot}
       />
     </div>
@@ -392,6 +407,7 @@ function PracticeLayout({
   blockedMessage = null,
   preview = false,
   pathId,
+  phaseCheckpoint = null,
   checkInSlot,
 }: {
   node: StudentNode;
@@ -400,6 +416,7 @@ function PracticeLayout({
   blockedMessage?: string | null;
   preview?: boolean;
   pathId?: string;
+  phaseCheckpoint?: PhaseReview | null;
   checkInSlot?: ReactNode;
 }) {
   const hasVideo = isPlayableVideoUrl(node.resource_url);
@@ -408,17 +425,12 @@ function PracticeLayout({
     <div className="min-w-0 w-full max-w-full space-y-6">
       <NodeLevelHeader node={node} levelNumber={levelNumber} />
 
-      {node.content_body ? (
-        <div className="min-w-0 break-words whitespace-pre-wrap rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
-          {node.content_body}
-        </div>
-      ) : null}
-
       {node.resource_url ? (
         hasVideo ? (
           <LessonVideoPlayer
             url={node.resource_url}
             title={node.title}
+            poster={node.poster_url}
             fallbackLabel="Abrir recurso"
           />
         ) : (
@@ -429,13 +441,17 @@ function PracticeLayout({
         )
       ) : null}
 
+      {phaseCheckpoint?.reviewRequired && !preview ? (
+        <PhaseReviewChecklist review={phaseCheckpoint} />
+      ) : null}
+
       <GateControls
         node={node}
-        practiceStyle
         canSubmitCheckIn={canSubmitCheckIn}
         blockedMessage={blockedMessage}
         preview={preview}
         pathId={pathId}
+        phaseCheckpoint={phaseCheckpoint}
         checkInSlot={checkInSlot}
       />
     </div>
@@ -465,12 +481,6 @@ function CheckpointLayout({
     <div className="min-w-0 w-full max-w-full space-y-6">
       <NodeLevelHeader node={node} levelNumber={levelNumber} />
 
-      {node.content_body ? (
-        <div className="min-w-0 break-words whitespace-pre-wrap rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
-          {node.content_body}
-        </div>
-      ) : null}
-
       {phaseCheckpoint?.reviewRequired && !preview ? (
         <PhaseReviewChecklist review={phaseCheckpoint} />
       ) : null}
@@ -489,6 +499,7 @@ function CheckpointLayout({
         <SupportMediaToggle
           url={node.resource_url}
           title={node.title}
+          poster={node.poster_url}
           label="Abrir anexo de apoio"
         />
       ) : null}
@@ -557,6 +568,7 @@ export function StudentNodePlayer({
         blockedMessage={checkInBlockedMessage}
         preview={preview}
         pathId={pathId}
+        phaseCheckpoint={phaseCheckpoint}
         checkInSlot={checkInSlot}
       />
     );
@@ -585,6 +597,7 @@ export function StudentNodePlayer({
       blockedMessage={checkInBlockedMessage}
       preview={preview}
       pathId={pathId}
+      phaseCheckpoint={phaseCheckpoint}
       checkInSlot={checkInSlot}
     />
   );

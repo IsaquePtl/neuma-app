@@ -16,8 +16,6 @@ import {
 } from "@/components/student-node-player";
 import { StudentLevelCheckIns } from "@/components/student-level-activity";
 
-const PRACTICE_STYLE_EXCLUDED = new Set(["lesson", "resource", "milestone", "call"]);
-
 function stateHint(state: LevelCheckInState, mentorName: string) {
   switch (state) {
     case "todo":
@@ -99,11 +97,7 @@ export default async function LevelCheckInsPage({
               {hint ? (
                 <p className="text-sm leading-relaxed text-foreground/90">{hint}</p>
               ) : null}
-              <CheckInActions
-                node={node}
-                practiceStyle={!PRACTICE_STYLE_EXCLUDED.has(node.kind)}
-                canSubmitCheckIn
-              />
+              <CheckInActions node={node} canSubmitCheckIn />
             </div>
           ) : null}
 

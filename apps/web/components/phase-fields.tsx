@@ -10,7 +10,7 @@ import {
   suggestNextPhaseKey,
   type PhaseOption,
 } from "@/lib/nodes/phases";
-import type { NodeKind } from "@/lib/types/database.types";
+import type { NodeKind, NodePassRule } from "@/lib/types/database.types";
 import { cn } from "@/lib/utils";
 
 const NEW_PHASE = "__new__";
@@ -21,6 +21,7 @@ const NEW_PHASE = "__new__";
  */
 export function PhaseFields({
   kind,
+  passRule,
   phases,
   nodeId,
   initialPhaseKey,
@@ -31,6 +32,7 @@ export function PhaseFields({
   inline = false,
 }: {
   kind: NodeKind;
+  passRule: NodePassRule;
   phases: PhaseOption[];
   nodeId?: string;
   initialPhaseKey?: string | null;
@@ -60,10 +62,9 @@ export function PhaseFields({
   const [linkChoice, setLinkChoice] = useState<boolean | null>(
     nodeId ? initialIsCheckpoint : null,
   );
+  const quizClosesPhase = kind !== "call" && passRule === "quiz";
   const closesPhase =
-    kind === "milestone" &&
-    Boolean(phaseKey) &&
-    (linkChoice ?? !otherCheckpoint);
+    quizClosesPhase && Boolean(phaseKey) && (linkChoice ?? !otherCheckpoint);
 
   const fieldId = (name: string) =>
     idPrefix ? `${idPrefix}-${name}` : `node-${name}`;
@@ -92,7 +93,7 @@ export function PhaseFields({
           {phases.map((p) => (
             <option key={p.key} value={p.key}>
               Fase {p.key} · {p.count} {p.count === 1 ? "nível" : "níveis"}
-              {p.checkpoint ? " · com check-point" : ""}
+              {p.checkpoint ? " · com fecho" : ""}
             </option>
           ))}
           <option value={NEW_PHASE}>+ Nova fase…</option>
@@ -109,7 +110,7 @@ export function PhaseFields({
         ) : null}
       </div>
 
-      {kind === "milestone" ? (
+      {quizClosesPhase ? (
         phaseKey ? (
           <div className="space-y-2">
             <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Ligação à fase">
@@ -148,7 +149,7 @@ export function PhaseFields({
               >
                 <span className="inline-flex items-center gap-1.5 text-sm font-medium">
                   <Unlink className="size-3.5 text-muted-foreground" />
-                  Check-point solto
+                  Quiz solto
                 </span>
                 <span className="text-xs leading-snug text-muted-foreground">
                   Só o quiz. Se falhar, repete logo.
@@ -159,8 +160,8 @@ export function PhaseFields({
               <p className="flex items-start gap-2 rounded-lg border border-[var(--neuma-orange)]/30 bg-[var(--neuma-orange)]/10 px-3 py-2 text-xs leading-snug text-muted-foreground">
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-[var(--neuma-orange)]" />
                 <span>
-                  Substitui «{otherCheckpoint.title}» como check-point da {label}{" "}
-                  (passa a solto).
+                  Substitui «{otherCheckpoint.title}» como fecho da {label}{" "}
+                  (passa a quiz solto).
                 </span>
               </p>
             ) : closesPhase ? (
@@ -173,14 +174,14 @@ export function PhaseFields({
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Sem fase → check-point solto (só o quiz). Escolhe uma fase para o
-            ligar aos níveis dela.
+            Sem fase → quiz solto. Escolhe uma fase para o ligar aos níveis
+            dela.
           </p>
         )
       ) : phase?.checkpoint && phase.checkpoint.id !== nodeId ? (
         <p className="inline-flex items-start gap-1.5 text-xs text-muted-foreground">
           <Flag className="mt-0.5 size-3 shrink-0 text-[var(--neuma-coral)]" />
-          Entra na {label} antes do check-point «{phase.checkpoint.title}».
+          Entra na {label} antes de «{phase.checkpoint.title}», que fecha a fase.
         </p>
       ) : null}
     </div>

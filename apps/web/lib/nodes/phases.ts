@@ -1,9 +1,9 @@
 import type { NodeKind } from "@/lib/types/database.types";
 
 /**
- * Phases group consecutive levels by `phase_key`. A milestone flagged with
+ * Phases group consecutive levels by `phase_key`. A level flagged with
  * `is_phase_checkpoint` closes its phase: it is always the phase's last level.
- * Any other milestone is a standalone check-point (quiz retried immediately).
+ * Sessão não fecha fase. O tipo de nível não decide o fecho.
  */
 export type PhaseNodeLike = {
   id: string;
@@ -31,7 +31,7 @@ function keyOf(node: PhaseNodeLike): string | null {
 
 /** Shape check only — position is checked by `resolvePhaseCheckpointIds`. */
 export function canCloseOwnPhase(node: PhaseNodeLike): boolean {
-  return node.kind === "milestone" && keyOf(node) !== null;
+  return node.kind !== "call" && keyOf(node) !== null;
 }
 
 /**
@@ -335,7 +335,7 @@ export function validatePhaseRanges(
 
 /**
  * Levels keep their order. A phase checkpoint survives only if it is still the
- * last level of its (new) phase — otherwise it becomes a standalone milestone.
+ * last level of its (new) phase — otherwise it stops closing the phase.
  */
 export function planPhaseRanges<T extends PhaseNodeLike>(
   nodes: T[],
@@ -354,7 +354,7 @@ export function planPhaseRanges<T extends PhaseNodeLike>(
       Boolean(node.is_phase_checkpoint) &&
       phase_key !== null &&
       lastAt.has(i) &&
-      node.kind === "milestone";
+      node.kind !== "call";
     return { ...node, phase_key, is_phase_checkpoint: keepCheckpoint };
   });
 }

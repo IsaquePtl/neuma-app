@@ -136,7 +136,7 @@ export default async function LibraryPage({
     supabase
       .from("library_assets")
       .select(
-        "id, title, summary, kind, usage, topic_id, body, url, storage_path, tags, duration_label, archived_at, created_at, content_status, created_by_agent",
+        "id, title, summary, kind, usage, topic_id, body, url, storage_path, cover_url, tags, duration_label, archived_at, created_at, content_status, created_by_agent",
       )
       .eq("content_status", "ready")
       .order("created_at", { ascending: false }),
@@ -329,6 +329,7 @@ export default async function LibraryPage({
                 body: a.body,
                 url: a.url,
                 storage_path: a.storage_path,
+                cover_url: a.cover_url,
                 tags: a.tags ?? [],
                 duration_label: a.duration_label,
               }))}

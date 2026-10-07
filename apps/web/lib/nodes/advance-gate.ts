@@ -1,7 +1,7 @@
 import type { createClient } from "@/lib/supabase/server";
 
 import { mentorMayComplete } from "@/lib/nodes/evaluation";
-import { nodeUsesQuizGate, quizPassScore } from "@/lib/nodes/pass-rule";
+import { effectivePassRule, nodeUsesQuizGate, quizPassScore } from "@/lib/nodes/pass-rule";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -19,21 +19,22 @@ export async function assertMentorMayCompleteNode(
 ) {
   const { data: node, error } = await supabase
     .from("nodes")
-    .select("id, path_id, pass_rule, pass_score")
+    .select("id, path_id, kind, pass_rule, pass_score")
     .eq("id", nodeId)
     .maybeSingle();
   if (error || !node) throw new Error("Nível não encontrado");
 
-  const bestScore = nodeUsesQuizGate(node.pass_rule)
+  const passRule = effectivePassRule(node.kind, node.pass_rule);
+  const bestScore = nodeUsesQuizGate(passRule)
     ? await bestQuizScore(supabase, nodeId)
     : null;
   const approvedCheckIns =
-    node.pass_rule === "check_in" && mode === "advance"
+    passRule === "check_in" && mode === "advance"
       ? await approvedCheckInCount(supabase, nodeId)
       : 0;
 
   const decision = mentorMayComplete({
-    passRule: node.pass_rule,
+    passRule,
     passScore: node.pass_score,
     bestScore,
     approvedCheckIns,
@@ -41,7 +42,7 @@ export async function assertMentorMayCompleteNode(
   });
   if (!decision.ok) {
     const threshold = quizPassScore(node.pass_score);
-    if (node.pass_rule === "quiz") {
+    if (passRule === "quiz") {
       throw new Error(
         typeof bestScore === "number"
           ? `Este nível pede quiz. A melhor nota é ${bestScore}% e o limiar é ${threshold}%.`
