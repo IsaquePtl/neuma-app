@@ -12,6 +12,7 @@ import {
   createPresignedUploadPartUrl,
   getPublicUrl,
   multipartPartCount,
+  sanitizeContentType,
 } from "@/lib/storage/r2";
 import {
   MAX_LIBRARY_FILE_BYTES,
@@ -103,16 +104,17 @@ async function buildUploadPlan(
 ): Promise<PresignedPutUpload | PresignedMultipartUpload> {
   const publicUrl = getPublicUrl(key);
   const bytes = Number(size);
+  const safeType = sanitizeContentType(contentType);
   if (!Number.isFinite(bytes) || bytes <= 0) {
     throw new Error("Ficheiro inválido");
   }
 
   if (!forceMultipart && bytes <= R2_MULTIPART_THRESHOLD_BYTES) {
-    const uploadUrl = await createPresignedPutUrl(key, contentType);
+    const uploadUrl = await createPresignedPutUrl(key, safeType);
     return { ok: true, mode: "put", uploadUrl, publicUrl, key };
   }
 
-  const { uploadId } = await createMultipartUpload(key, contentType);
+  const { uploadId } = await createMultipartUpload(key, safeType);
   const partCount = multipartPartCount(bytes);
   const parts = await Promise.all(
     Array.from({ length: partCount }, async (_, i) => {

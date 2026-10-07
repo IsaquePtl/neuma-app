@@ -28,12 +28,36 @@ type R2Config = {
   endpoint: string;
 };
 
+/**
+ * Vercel/env colam por vezes \\n, aspas ou espaços nas secrets.
+ * Isso parte o header Authorization do AWS SDK (Node: Invalid character…).
+ */
+function cleanEnv(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  let v = value.trim();
+  if (
+    (v.startsWith('"') && v.endsWith('"')) ||
+    (v.startsWith("'") && v.endsWith("'"))
+  ) {
+    v = v.slice(1, -1).trim();
+  }
+  v = v.replace(/[\0\r\n]/g, "").trim();
+  return v || undefined;
+}
+
+/** MIME simples para headers S3/R2 — evita chars inválidos no Authorization. */
+export function sanitizeContentType(raw: string | undefined | null): string {
+  const base = (raw ?? "").split(";")[0]?.trim().toLowerCase() || "";
+  if (/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(base)) return base;
+  return "application/octet-stream";
+}
+
 function getR2Config(): R2Config {
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  const bucketName = process.env.R2_BUCKET_NAME;
-  const publicUrl = process.env.R2_PUBLIC_URL;
-  const endpoint = process.env.R2_ENDPOINT;
+  const accessKeyId = cleanEnv(process.env.R2_ACCESS_KEY_ID);
+  const secretAccessKey = cleanEnv(process.env.R2_SECRET_ACCESS_KEY);
+  const bucketName = cleanEnv(process.env.R2_BUCKET_NAME);
+  const publicUrl = cleanEnv(process.env.R2_PUBLIC_URL);
+  const endpoint = cleanEnv(process.env.R2_ENDPOINT);
 
   if (
     !accessKeyId ||
@@ -58,10 +82,14 @@ function getR2Client(): S3Client {
   client = new S3Client({
     region: "auto",
     endpoint: cfg.endpoint,
+    forcePathStyle: true,
     credentials: {
       accessKeyId: cfg.accessKeyId,
       secretAccessKey: cfg.secretAccessKey,
     },
+    // SDK recente manda checksums que o R2 ainda não implementa.
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
   });
   return client;
 }
@@ -117,7 +145,7 @@ export async function uploadToR2(
     Bucket: cfg.bucketName,
     Key: key,
     Body: body,
-    ContentType: contentType,
+    ContentType: sanitizeContentType(contentType),
   };
 
   const { error } = await getR2Client()
@@ -199,7 +227,7 @@ export async function createPresignedPutUrl(
   const command = new PutObjectCommand({
     Bucket: cfg.bucketName,
     Key: key,
-    ContentType: contentType,
+    ContentType: sanitizeContentType(contentType),
   });
   return getSignedUrl(getR2Client(), command, { expiresIn: expiresInSeconds });
 }
@@ -213,7 +241,7 @@ export async function createMultipartUpload(
     new CreateMultipartUploadCommand({
       Bucket: cfg.bucketName,
       Key: key,
-      ContentType: contentType,
+      ContentType: sanitizeContentType(contentType),
     }),
   );
   if (!out.UploadId) throw new Error("R2 não devolveu uploadId");
