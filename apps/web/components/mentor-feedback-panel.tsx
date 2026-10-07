@@ -25,7 +25,7 @@ import {
   updateFeedback,
 } from "@/lib/actions/feedbacks";
 import { getMentorFeedbackVideoUploadUrl } from "@/lib/actions/r2-uploads";
-import { uploadViaPresignedPut } from "@/lib/uploads/presigned-client";
+import { uploadToR2Presigned } from "@/lib/uploads/presigned-client";
 import { rejectFeedbackDraft } from "@/lib/actions/ai-drafts";
 import { advanceLevel, extendLevelWeek } from "@/lib/actions/journey-level";
 import { Button } from "@/components/ui/button";
@@ -204,7 +204,11 @@ function useMentorFeedbackForm({
         contentType: file.type,
         size: file.size,
       });
-      const url = await uploadViaPresignedPut(file, presigned);
+      if (!presigned.ok) {
+        toast.error(presigned.error);
+        return;
+      }
+      const url = await uploadToR2Presigned(file, presigned);
       setVideoUrl(url);
       setVideoFileLabel(file.name);
     } catch (err) {

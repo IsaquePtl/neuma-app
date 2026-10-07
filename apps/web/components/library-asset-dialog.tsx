@@ -6,7 +6,12 @@ import { toast } from "sonner";
 
 import { upsertLibraryAsset } from "@/lib/actions/library";
 import { getLibraryAssetUploadUrl } from "@/lib/actions/r2-uploads";
-import { uploadViaPresignedPut } from "@/lib/uploads/presigned-client";
+import { uploadToR2Presigned } from "@/lib/uploads/presigned-client";
+import {
+  MAX_LIBRARY_FILE_BYTES,
+  MAX_LIBRARY_FILE_MB,
+  libraryFileTooLargeMessage,
+} from "@/lib/uploads/video-limits";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -148,6 +153,10 @@ export function LibraryAssetDialog({
 
   async function onFile(file: File | null) {
     if (!file) return;
+    if (file.size > MAX_LIBRARY_FILE_BYTES) {
+      toast.error(libraryFileTooLargeMessage());
+      return;
+    }
     setUploading(true);
     try {
       const presigned = await getLibraryAssetUploadUrl({
@@ -156,7 +165,11 @@ export function LibraryAssetDialog({
         size: file.size,
         categoryId,
       });
-      const publicUrl = await uploadViaPresignedPut(file, presigned);
+      if (!presigned.ok) {
+        toast.error(presigned.error);
+        return;
+      }
+      const publicUrl = await uploadToR2Presigned(file, presigned);
       setUrl(publicUrl);
       setStoragePath(presigned.key);
       setFileLabel(file.name);
@@ -447,6 +460,9 @@ export function LibraryAssetDialog({
                       className="bg-muted/40"
                     />
                   ) : null}
+                  <p className="text-xs text-muted-foreground">
+                    Até {MAX_LIBRARY_FILE_MB} MB
+                  </p>
                 </div>
               )}
             </>

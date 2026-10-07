@@ -722,6 +722,23 @@ body:has(.auth-shell) .neuma-ui {
   scroll-padding-bottom: 0;
 }
 
+/* Privacidade / termos: painel opaco a ecrã inteiro. Scroll só no miolo. */
+body:has(.legal-shell) .neuma-ui {
+  overflow: hidden;
+  scroll-padding-bottom: 0;
+}
+
+.legal-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+@media (min-width: 1500px) and (pointer: fine) {
+  .legal-back {
+    display: none;
+  }
+}
+
 html.oauth-leaving,
 html.oauth-leaving body,
 html.oauth-leaving .neuma-ui,

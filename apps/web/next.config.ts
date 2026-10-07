@@ -117,12 +117,13 @@ const nextConfig: NextConfig = {
     ];
   },
   experimental: {
-    // Default Server Actions = 1 MB; check-in / feedback videos up to 500 MB
+    // Default Server Actions = 1 MB. Biblioteca sobe por URL assinada ao R2;
+    // estes limites cobrem fallbacks que ainda passam pelo Next (até ~2 GB).
     serverActions: {
-      bodySizeLimit: "520mb",
+      bodySizeLimit: "2100mb",
     },
     // Proxy (Next 16) — evita cortar o body em produção
-    proxyClientMaxBodySize: "520mb",
+    proxyClientMaxBodySize: "2100mb",
   },
   images: {
     // Vercel Services (vercel.json services.web) does not expose /_next/image —

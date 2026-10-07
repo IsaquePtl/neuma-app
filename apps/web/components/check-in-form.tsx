@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 import { submitCheckIn } from "@/lib/actions/checkins";
 import { getCheckInVideoUploadUrl } from "@/lib/actions/r2-uploads";
-import { uploadViaPresignedPut } from "@/lib/uploads/presigned-client";
+import { uploadToR2Presigned } from "@/lib/uploads/presigned-client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -78,7 +78,13 @@ export function CheckInForm({
         contentType: file.type,
         size: file.size,
       });
-      const url = await uploadViaPresignedPut(file, presigned);
+      if (!presigned.ok) {
+        setFileLabel(null);
+        setVideoUrl("");
+        toast.error(presigned.error);
+        return;
+      }
+      const url = await uploadToR2Presigned(file, presigned);
       setVideoUrl(url);
     } catch (e) {
       setFileLabel(null);
