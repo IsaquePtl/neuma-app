@@ -23,6 +23,7 @@ import {
 } from "@/lib/feedbacks/student";
 import { formatDate } from "@/lib/labels";
 import {
+  effectivePassRule,
   nodeRequiresCheckIn,
   nodeUsesVideoCheckInSlot,
 } from "@/lib/nodes/pass-rule";
@@ -102,7 +103,7 @@ export default async function StudentSessionPage({
   const { data: activeNode } = activePath
     ? await supabase
         .from("nodes")
-        .select("id, title, due_date, status, pass_rule, check_in_kind")
+        .select("id, title, due_date, status, kind, pass_rule, check_in_kind")
         .eq("path_id", activePath.id)
         .eq("status", "active")
         .maybeSingle()
@@ -116,9 +117,12 @@ export default async function StudentSessionPage({
   const revisionCount =
     checkIns?.filter((c) => c.status === "needs_revision").length ?? 0;
 
-  const needsCheckIn = nodeRequiresCheckIn(activeNode?.pass_rule);
+  const activePassRule = activeNode
+    ? effectivePassRule(activeNode.kind, activeNode.pass_rule)
+    : null;
+  const needsCheckIn = nodeRequiresCheckIn(activePassRule);
   const videoCheckIn = nodeUsesVideoCheckInSlot(
-    activeNode?.pass_rule,
+    activePassRule,
     activeNode?.check_in_kind,
   );
 

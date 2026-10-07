@@ -6,14 +6,19 @@ import { toast } from "sonner";
 
 import {
   releaseUnsavedLibraryUpload,
+  replaceLibraryAssetCover,
   replaceLibraryAssetMedia,
   upsertLibraryAsset,
 } from "@/lib/actions/library";
 import {
   cancelMultipartUpload,
   getLibraryAssetUploadUrl,
+  getLibraryCoverUploadUrl,
 } from "@/lib/actions/r2-uploads";
-import { uploadToR2Presigned } from "@/lib/uploads/presigned-client";
+import {
+  uploadToR2Presigned,
+  uploadViaPresignedPut,
+} from "@/lib/uploads/presigned-client";
 import {
   MAX_LIBRARY_FILE_BYTES,
   MAX_LIBRARY_FILE_MB,
@@ -47,6 +52,7 @@ export type LibraryAssetData = {
   body: string | null;
   url: string | null;
   storage_path: string | null;
+  cover_url?: string | null;
   tags: string[];
   duration_label: string | null;
 };
@@ -131,6 +137,11 @@ export function LibraryAssetDialog({
   const [uploading, setUploading] = useState(false);
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const coverRef = useRef<HTMLInputElement>(null);
+  const [coverUrl, setCoverUrl] = useState(asset?.cover_url ?? "");
+  const [coverUploading, setCoverUploading] = useState(false);
+  const coverKeyRef = useRef("");
+  const savedCoverKeyRef = useRef("");
   const savedKeyRef = useRef(asset?.storage_path ?? "");
   const storagePathRef = useRef(storagePath);
   const uploadRef = useRef<{ key: string; uploadId?: string } | null>(null);
@@ -167,8 +178,93 @@ export function LibraryAssetDialog({
         : "",
     );
     setMode(initialMode(nextAsset));
+    setCoverUrl(nextAsset?.cover_url ?? "");
+    coverKeyRef.current = "";
+    savedCoverKeyRef.current = "";
     setUploading(false);
+    setCoverUploading(false);
     setUploadPercent(null);
+  }
+
+  function coverContentType(file: File): string | null {
+    const type = (file.type || "").split(";")[0]?.trim().toLowerCase() ?? "";
+    if (type === "image/jpg" || type === "image/jpeg") return "image/jpeg";
+    if (type === "image/png" || type === "image/webp") return type;
+    const name = file.name.toLowerCase();
+    if (name.endsWith(".png")) return "image/png";
+    if (name.endsWith(".webp")) return "image/webp";
+    if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+    return null;
+  }
+
+  async function onCover(file: File | null) {
+    if (!file) return;
+    const contentType = coverContentType(file);
+    if (!contentType) {
+      toast.error("A capa tem de ser PNG, JPEG ou WebP.");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("A capa pode ter no máximo 8 MB.");
+      return;
+    }
+    setCoverUploading(true);
+    try {
+      const presigned = await getLibraryCoverUploadUrl({
+        filename: file.name,
+        contentType,
+        size: file.size,
+      });
+      if (!presigned.ok) {
+        toast.error(presigned.error);
+        return;
+      }
+      if (presigned.mode !== "put") {
+        toast.error("Não foi possível enviar a capa.");
+        return;
+      }
+      const publicUrl = await uploadViaPresignedPut(file, presigned);
+      const previousUnsaved = coverKeyRef.current;
+      coverKeyRef.current = presigned.key;
+      if (asset?.id) {
+        const saved = await replaceLibraryAssetCover({
+          id: asset.id,
+          coverUrl: publicUrl,
+        });
+        if (!saved.ok) {
+          toast.error(saved.error);
+          void releaseUnsavedLibraryUpload(presigned.key);
+          coverKeyRef.current = previousUnsaved;
+          return;
+        }
+        savedCoverKeyRef.current = presigned.key;
+      }
+      if (previousUnsaved && previousUnsaved !== savedCoverKeyRef.current) {
+        void releaseUnsavedLibraryUpload(previousUnsaved);
+      }
+      setCoverUrl(publicUrl);
+      toast.success(asset?.id ? "Capa guardada" : "Capa enviada — prime Guardar");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha no upload da capa");
+    } finally {
+      setCoverUploading(false);
+    }
+  }
+
+  async function clearCover() {
+    const unsaved = coverKeyRef.current;
+    if (asset?.id && coverUrl) {
+      const saved = await replaceLibraryAssetCover({ id: asset.id, coverUrl: "" });
+      if (!saved.ok) {
+        toast.error(saved.error);
+        return;
+      }
+    } else if (unsaved && unsaved !== savedCoverKeyRef.current) {
+      void releaseUnsavedLibraryUpload(unsaved);
+    }
+    coverKeyRef.current = "";
+    savedCoverKeyRef.current = "";
+    setCoverUrl("");
   }
 
   async function onFile(file: File | null) {
@@ -255,6 +351,7 @@ export function LibraryAssetDialog({
     const fd = new FormData(e.currentTarget);
     fd.set("url", url);
     fd.set("storage_path", storagePath);
+    fd.set("cover_url", coverUrl);
     fd.set("kind", kind);
     fd.set("usage", usage);
     fd.set("topic_id", topicId);
@@ -262,6 +359,7 @@ export function LibraryAssetDialog({
       try {
         await upsertLibraryAsset(fd);
         savedKeyRef.current = storagePath;
+        savedCoverKeyRef.current = coverKeyRef.current;
         toast.success(isEdit ? "Actualizado" : "Criado");
         setOpen(false);
       } catch (err) {
@@ -284,6 +382,12 @@ export function LibraryAssetDialog({
             });
           }
           releaseIfUnsaved(storagePathRef.current);
+          if (
+            coverKeyRef.current &&
+            coverKeyRef.current !== savedCoverKeyRef.current
+          ) {
+            void releaseUnsavedLibraryUpload(coverKeyRef.current);
+          }
         }
         setOpen(next);
         if (next) {
@@ -567,6 +671,64 @@ export function LibraryAssetDialog({
                   </p>
                 </div>
               )}
+              {kind === "video" ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="asset-cover">Capa do vídeo</Label>
+                  {coverUrl ? (
+                    <img
+                      src={coverUrl}
+                      alt=""
+                      className="aspect-video w-full rounded-lg object-cover"
+                    />
+                  ) : null}
+                  <input
+                    ref={coverRef}
+                    id="asset-cover"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="sr-only"
+                    disabled={coverUploading}
+                    onChange={(e) => {
+                      void onCover(e.currentTarget.files?.[0] ?? null);
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 flex-1 gap-1.5"
+                      disabled={coverUploading}
+                      onClick={() => coverRef.current?.click()}
+                    >
+                      {coverUploading ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Upload className="size-4" />
+                      )}
+                      {coverUploading
+                        ? "A enviar capa…"
+                        : coverUrl
+                          ? "Trocar capa"
+                          : "Adicionar capa"}
+                    </Button>
+                    {coverUrl ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-10"
+                        disabled={coverUploading}
+                        onClick={() => void clearCover()}
+                      >
+                        Remover
+                      </Button>
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    PNG, JPEG ou WebP. Até 8 MB. Aparece antes de dar play.
+                  </p>
+                </div>
+              ) : null}
             </>
           )}
 

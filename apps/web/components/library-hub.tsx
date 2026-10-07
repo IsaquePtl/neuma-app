@@ -71,6 +71,7 @@ export type LibraryItemRow = {
   body: string | null;
   url: string | null;
   storage_path: string | null;
+  cover_url?: string | null;
   tags: string[];
   duration_label: string | null;
 };

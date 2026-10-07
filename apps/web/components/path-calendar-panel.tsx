@@ -1,6 +1,7 @@
 "use client";
 
-import { CalendarDays, Layers, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { CalendarDays, ChevronDown, Layers, Plus, Trash2 } from "lucide-react";
 
 import { DatePicker } from "@/components/ui/date-picker";
 import { WeekStepper } from "@/components/week-stepper";
@@ -68,6 +69,7 @@ function PhaseEditor({
   onChange: (next: PhaseRange[]) => void;
   disabled?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   const count = levels.length;
   const free = unassignedRuns(ranges, count);
   const levelOption = (i: number) => {
@@ -112,14 +114,28 @@ function PhaseEditor({
 
   const selectClass =
     "h-8 min-w-0 max-w-[11rem] rounded-lg border border-white/10 bg-black/30 px-2 text-xs disabled:opacity-50";
+  const phaseCount =
+    ranges.length === 1 ? "1 fase" : `${ranges.length} fases`;
 
   return (
     <div className="mt-5 border-t border-white/10 pt-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground"
+        >
           <Layers className="size-3.5" />
           Fases
-        </p>
+          <span className="text-[11px] font-normal normal-case tracking-normal">
+            {phaseCount}
+          </span>
+          <ChevronDown
+            className={cn("size-3.5 transition-transform", open && "rotate-180")}
+          />
+        </button>
+        {open ? (
         <button
           type="button"
           onClick={add}
@@ -134,9 +150,11 @@ function PhaseEditor({
           <Plus className="size-3.5" />
           Nova fase
         </button>
+        ) : null}
       </div>
 
-      {ranges.length === 0 ? (
+      {open ? (
+        ranges.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">
           Ainda sem fases. Cria uma e escolhe os níveis que ela abrange.
         </p>
@@ -225,8 +243,9 @@ function PhaseEditor({
             );
           })}
         </ul>
-      )}
-      {free.length > 0 && ranges.length > 0 ? (
+        )
+      ) : null}
+      {open && free.length > 0 && ranges.length > 0 ? (
         <p className="mt-2 text-xs text-muted-foreground">
           Sem fase: {free.map((r) => rangeLabel(r.from, r.to)).join(", ")}.
         </p>

@@ -9,7 +9,12 @@ import type {
   PickerCategory,
   PickerTopic,
 } from "@/components/library-asset-picker";
-import { mapNode, mapPath, type StudentNode } from "@/lib/students/queries";
+import {
+  attachLibraryPosters,
+  mapNode,
+  mapPath,
+  type StudentNode,
+} from "@/lib/students/queries";
 
 export type JourneyPathStudent = {
   id: string;
@@ -126,7 +131,10 @@ export async function loadJourneyPathPageData(
     ]),
   );
 
-  const mappedNodes: StudentNode[] = (nodes ?? []).map(mapNode);
+  const mappedNodes: StudentNode[] = await attachLibraryPosters(
+    supabase,
+    (nodes ?? []).map(mapNode),
+  );
 
   const journeyCheckIns: JourneyCheckIn[] = await Promise.all(
     (checkIns ?? [])

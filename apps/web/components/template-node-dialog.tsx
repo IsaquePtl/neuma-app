@@ -196,7 +196,6 @@ export function TemplateNodeDialog({
                 setKind(next);
                 setAssetId("");
                 setResourceUrl("");
-                setPassRule(defaultPassRule(next));
               }}
               className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
             >
@@ -219,6 +218,7 @@ export function TemplateNodeDialog({
 
           <PhaseFields
             kind={kind}
+            passRule={passRule}
             phases={phases}
             nodeId={node?.id}
             initialPhaseKey={node?.phase_key}

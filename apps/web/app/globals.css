@@ -708,10 +708,12 @@ body:has(.auth-shell) .neuma-bg::before {
   position: absolute;
   inset: 0;
   z-index: 1;
-  overflow-x: hidden;
+  overflow-x: clip;
   overflow-y: auto;
+  touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  overscroll-behavior-x: none;
   scroll-padding-bottom: 45vh;
   background: transparent;
 }
@@ -784,8 +786,9 @@ html.oauth-leaving .auth-shell-visual-wordmark {
 .neuma-quiz-cta-host {
   position: relative;
   z-index: 1;
-  margin-inline: -1rem;
-  padding: 0.85rem 1rem;
+  max-width: 100%;
+  margin-inline: 0;
+  padding: 0.35rem 0;
   overflow: visible;
 }
 
@@ -826,8 +829,8 @@ html.oauth-leaving .auth-shell-visual-wordmark {
 
 @media (min-width: 850px) {
   .neuma-quiz-cta-host {
-    margin-inline: -0.5rem;
-    padding: 0.85rem 0.5rem;
+    margin-inline: 0;
+    padding: 0.35rem 0;
   }
 }
 
@@ -846,6 +849,10 @@ html.oauth-leaving .auth-shell-visual-wordmark {
  */
 .neuma-mobile-viewport {
   height: calc(100lvh - 4rem - env(safe-area-inset-top, 0px) - 1rem);
+  max-width: 100%;
+  overflow-x: clip !important;
+  touch-action: pan-y;
+  overscroll-behavior-x: none;
 }
 @media (min-width: 850px) {
   .neuma-mobile-viewport {
@@ -910,9 +917,11 @@ html.oauth-leaving .auth-shell-visual-wordmark {
     --neuma-tablet-fade: 1.75rem;
     height: 100dvh;
     max-height: 100dvh;
-    overflow-x: hidden;
+    overflow-x: clip;
     overflow-y: auto;
+    touch-action: pan-y;
     overscroll-behavior: contain;
+    overscroll-behavior-x: none;
     -webkit-overflow-scrolling: touch;
     -webkit-mask-image: linear-gradient(
       to bottom,

@@ -7,6 +7,7 @@ import {
   Clock,
   FileText,
   MessageSquare,
+  MessageSquareText,
   Phone,
   Video,
 } from "lucide-react";
@@ -57,6 +58,24 @@ function SectionLabel({ children }: { children: ReactNode }) {
     <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
       {children}
     </p>
+  );
+}
+
+function FeedbackMark({
+  mentorName,
+  unviewed = false,
+}: {
+  mentorName: string;
+  unviewed?: boolean;
+}) {
+  return (
+    <span className="inline-flex max-w-full flex-wrap items-center gap-1.5">
+      <span className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-gradient-to-br from-[var(--neuma-coral)]/35 via-[var(--neuma-lavender)]/20 to-[var(--neuma-blue)]/30 px-3 py-1.5 text-xs font-semibold text-white ring-1 ring-[var(--neuma-coral)]/40">
+        <MessageSquareText className="size-3.5" aria-hidden />
+        <span>Feedback do {mentorName}</span>
+      </span>
+      {unviewed ? <NewPill /> : null}
+    </span>
   );
 }
 
@@ -169,6 +188,7 @@ function RoundCard({
   meta,
   preview,
   feedbackLine,
+  cornerNotice = false,
   badge,
   highlight,
   expanded,
@@ -181,6 +201,8 @@ function RoundCard({
   meta: string;
   preview?: string | null;
   feedbackLine: ReactNode;
+  /** Unread feedback: a dot in the card corner, instead of a feedback label. */
+  cornerNotice?: boolean;
   badge?: ReactNode;
   highlight: boolean;
   expanded: boolean;
@@ -192,13 +214,19 @@ function RoundCard({
   return (
     <article
       className={cn(
-        "student-path-step min-w-0 !p-0",
+        "student-path-step relative min-w-0 !p-0",
         highlight || expanded
           ? "student-path-step--active"
           : "student-path-step--done",
         expanded && "ring-1 ring-white/12",
       )}
     >
+      {cornerNotice ? (
+        <span
+          className="pointer-events-none absolute top-3.5 right-3.5 z-10 size-2.5 rounded-full bg-[var(--neuma-coral)] shadow-[0_0_0_4px_color-mix(in_oklch,var(--neuma-coral)_32%,transparent)]"
+          aria-hidden
+        />
+      ) : null}
       <button
         type="button"
         onClick={onToggle}
@@ -206,6 +234,7 @@ function RoundCard({
         aria-controls={bodyId}
         className={cn(
           "group flex w-full min-w-0 items-start justify-between gap-2 p-4 text-left sm:gap-3 sm:p-5",
+          cornerNotice && "pr-8 sm:pr-9",
           "rounded-[inherit] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--neuma-coral)]/50",
         )}
       >
@@ -222,7 +251,8 @@ function RoundCard({
               {preview}
             </span>
           ) : null}
-          <span className="block">{feedbackLine}</span>
+          {feedbackLine ? <span className="block">{feedbackLine}</span> : null}
+          {cornerNotice ? <span className="sr-only">Novo feedback</span> : null}
         </span>
         <span className="flex shrink-0 flex-row items-center gap-2 self-start">
           {badge}
@@ -434,13 +464,10 @@ export function StudentLevelCheckIns({
               title={totalRounds > 1 ? `Check-in ${round}` : "Check-in"}
               meta={formatDateTime(checkIn.created_at)}
               preview={checkInPreview(checkIn)}
+              cornerNotice={hasFeedback && unviewed}
               feedbackLine={
-                hasFeedback ? (
-                  <span className="inline-flex max-w-full flex-wrap items-center gap-1.5 text-sm font-medium text-[var(--neuma-coral)]">
-                    <MessageSquare className="size-3.5 shrink-0" aria-hidden />
-                    Feedback do {mentorName}
-                    {unviewed ? <NewPill /> : null}
-                  </span>
+                hasFeedback && unviewed ? null : hasFeedback ? (
+                  <FeedbackMark mentorName={mentorName} />
                 ) : (
                   <span className="text-sm text-muted-foreground/80">
                     A aguardar feedback
@@ -463,7 +490,6 @@ export function StudentLevelCheckIns({
                 <CheckInSubmission checkIn={checkIn} />
               </section>
               <section className="min-w-0 space-y-3 border-t border-white/10 pt-5">
-                <SectionLabel>Feedback do {mentorName}</SectionLabel>
                 {hasFeedback ? (
                   <CheckInFeedback
                     checkIn={checkIn}

@@ -10,16 +10,38 @@ export const DEFAULT_QUIZ_PASS_SCORE = 60;
 export type NodeCheckInKind = CheckInKind | null;
 
 export function defaultPassRule(kind: NodeKind): NodePassRule {
+  if (kind === "call") return "mentor";
   if (kind === "practice") return "check_in";
   if (kind === "lesson" || kind === "resource") return "none";
   if (kind === "milestone") return "quiz";
   return "mentor";
 }
 
+/**
+ * Sessão não tem regra de passagem: o mentor conclui o nível.
+ * O valor guardado é `mentor` para não mostrar visto, check-in nem quiz.
+ */
+export function effectivePassRule(
+  kind: NodeKind | null | undefined,
+  passRule: NodePassRule | null | undefined,
+): NodePassRule {
+  if (kind === "call") return "mentor";
+  if (
+    passRule === "mentor" ||
+    passRule === "quiz" ||
+    passRule === "check_in" ||
+    passRule === "none"
+  ) {
+    return passRule;
+  }
+  return defaultPassRule(kind ?? "lesson");
+}
+
 export function parsePassRule(
   raw: string | null | undefined,
   kind: NodeKind,
 ): NodePassRule {
+  if (kind === "call") return "mentor";
   const value = (raw ?? "").trim();
   if (
     value === "mentor" ||
@@ -48,11 +70,11 @@ export function quizPassScore(stored: number | null | undefined): number {
 }
 
 export function defaultCheckInKind(
-  kind: NodeKind,
+  _kind: NodeKind,
   passRule: NodePassRule,
 ): NodeCheckInKind {
   if (passRule !== "check_in") return null;
-  return kind === "practice" ? "video" : "text";
+  return "video";
 }
 
 export function parseCheckInKind(
@@ -60,7 +82,7 @@ export function parseCheckInKind(
   kind: NodeKind,
   passRule: NodePassRule,
 ): NodeCheckInKind {
-  if (passRule !== "check_in") return null;
+  if (kind === "call" || passRule !== "check_in") return null;
   const value = (raw ?? "").trim();
   if (value === "video" || value === "text" || value === "call") return value;
   return defaultCheckInKind(kind, passRule);

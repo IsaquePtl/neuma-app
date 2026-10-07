@@ -120,6 +120,12 @@ export function buildLibraryKey(
   return `library/${categorySegment}/${userId}/${Date.now()}.${ext}`;
 }
 
+export function buildLibraryCoverKey(userId: string, filename: string): string {
+  const ext = sanitizeExt(filename, "jpg");
+  const safe = ext === "png" || ext === "webp" || ext === "jpeg" ? ext : "jpg";
+  return `library/covers/${userId}/${Date.now()}.${safe}`;
+}
+
 /** Public URL for an object key on the R2 dev/public domain. */
 export function getPublicUrl(key: string): string {
   const base = getR2Config().publicUrl.replace(/\/$/, "");
