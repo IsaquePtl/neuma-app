@@ -54,6 +54,17 @@ export type NodeEditorData = {
   is_phase_checkpoint?: boolean | null;
 };
 
+function FormSectionHeading({ title, hint }: { title: string; hint?: string }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        {title}
+      </p>
+      {hint ? <p className="text-xs text-muted-foreground/80">{hint}</p> : null}
+    </div>
+  );
+}
+
 function normalizeKind(kind: NodeKind): NodeKind {
   return kind === "resource" ? "lesson" : kind;
 }
@@ -258,6 +269,9 @@ export function NodeEditorForm({
       <input type="hidden" name="path_id" value={pathId} />
       {node ? <input type="hidden" name="id" value={node.id} /> : null}
 
+      <section className="space-y-3">
+      <FormSectionHeading title="Definições do nível" />
+
       <div className={cn("space-y-2", inline && "space-y-1.5")}>
         <Label htmlFor={fieldId("kind")}>Tipo</Label>
         <select
@@ -302,27 +316,28 @@ export function NodeEditorForm({
         inline={inline}
       />
 
-      <div className={cn("space-y-2", inline && "space-y-1.5")}>
-        <Label htmlFor={fieldId("code")}>Código</Label>
-        <Input
-          id={fieldId("code")}
-          name="node_code"
-          defaultValue={node?.node_code ?? ""}
-          placeholder="A1"
-          className={inputClass}
-        />
-      </div>
-
-      <div className={cn("space-y-2", inline && "space-y-1.5")}>
-        <Label htmlFor={fieldId("title")}>Titulo</Label>
-        <Input
-          id={fieldId("title")}
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          required
-          autoFocus={!inline}
-          className={inputClass}
-        />
+      <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2">
+        <div className={cn("space-y-2", inline && "space-y-1.5")}>
+          <Label htmlFor={fieldId("code")}>Código</Label>
+          <Input
+            id={fieldId("code")}
+            name="node_code"
+            defaultValue={node?.node_code ?? ""}
+            placeholder="A1"
+            className={inputClass}
+          />
+        </div>
+        <div className={cn("min-w-0 space-y-2", inline && "space-y-1.5")}>
+          <Label htmlFor={fieldId("title")}>Título</Label>
+          <Input
+            id={fieldId("title")}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+            autoFocus={!inline}
+            className={inputClass}
+          />
+        </div>
       </div>
 
       <div className={cn("space-y-2", inline && "space-y-1.5")}>
@@ -335,93 +350,6 @@ export function NodeEditorForm({
           className={inputClass}
         />
       </div>
-
-      {kind === "call" ? (
-        <p
-          className={cn(
-            "rounded-lg border border-[var(--neuma-coral)]/25 bg-[var(--neuma-coral)]/10 px-3 py-2 text-sm text-muted-foreground",
-            inline && "rounded-xl",
-          )}
-        >
-          Foco desta sessão: o aluno agenda e entra no Google Meet. Texto e
-          anexo abaixo são só apoio (antes ou durante a call).
-        </p>
-      ) : null}
-
-      {kind === "lesson" ? (
-        <p
-          className={cn(
-            "rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-muted-foreground",
-            inline && "rounded-xl bg-black/20",
-          )}
-        >
-          Foco: vídeo em destaque. Escolhe a aula na biblioteca.
-        </p>
-      ) : null}
-
-      <LibraryAssetPicker
-        nodeKind={kind}
-        categories={categories}
-        topics={topics}
-        assets={assets}
-        value={pickedAssetId}
-        onChange={(sel) => {
-          if (!sel) {
-            setPickedAssetId("");
-            setResourceUrl("");
-            return;
-          }
-          setPickedAssetId(sel.assetId);
-          setResourceUrl(sel.url ?? "");
-          if (sel.body) setContentBody(sel.body);
-          if (!title.trim()) setTitle(sel.title);
-        }}
-      />
-
-      {allowsContent(kind) ? (
-        <div className={cn("space-y-2", inline && "space-y-1.5")}>
-          <Label htmlFor={fieldId("content")}>
-            {kind === "call"
-              ? "Texto de apoio à sessão"
-              : kind === "milestone"
-                ? "Texto de apoio ao check-point"
-                : "Texto / conteúdo"}
-          </Label>
-          <Textarea
-            id={fieldId("content")}
-            value={contentBody}
-            onChange={(e) => setContentBody(e.target.value)}
-            rows={4}
-            placeholder={
-              kind === "call"
-                ? "Notas para o aluno antes ou durante a call…"
-                : undefined
-            }
-            className={inputClass}
-          />
-        </div>
-      ) : null}
-
-      {allowsContent(kind) && resourceUrl ? (
-        <p className="truncate text-xs text-muted-foreground">
-          {kind === "call" || kind === "milestone"
-            ? "Anexo de apoio: "
-            : "Link: "}
-          {resourceUrl}
-        </p>
-      ) : null}
-
-      {(passRule === "quiz" || kind === "milestone") && isEdit && node ? (
-        <div data-dirty-ignore>
-          <NodeQuizEditor nodeId={node.id} passRule={passRule} />
-        </div>
-      ) : null}
-
-      {passRule === "quiz" && !isEdit ? (
-        <p className="text-xs text-muted-foreground">
-          Depois de criar o nível, volta a editar para configurar o quiz.
-        </p>
-      ) : null}
 
       {hideWeeks ? null : (
         <div className={cn("space-y-2", inline && "space-y-1.5")}>
@@ -475,6 +403,86 @@ export function NodeEditorForm({
           </select>
         </div>
       ) : null}
+      </section>
+
+      <section className="space-y-3 border-t border-white/10 pt-4">
+        <FormSectionHeading
+          title="Conteúdo"
+          hint={
+            kind === "call"
+              ? "Foco: o aluno agenda e entra no Google Meet. Material e texto são só apoio."
+              : kind === "lesson"
+                ? "Foco: vídeo em destaque. Escolhe uma aula da biblioteca."
+                : kind === "practice"
+                  ? "Só aparecem itens de Prática da biblioteca."
+                  : "Material de apoio ao check-point (opcional)."
+          }
+        />
+
+        <LibraryAssetPicker
+          nodeKind={kind}
+          categories={categories}
+          topics={topics}
+          assets={assets}
+          value={pickedAssetId}
+          onChange={(sel) => {
+            if (!sel) {
+              setPickedAssetId("");
+              setResourceUrl("");
+              return;
+            }
+            setPickedAssetId(sel.assetId);
+            setResourceUrl(sel.url ?? "");
+            if (sel.body) setContentBody(sel.body);
+            if (!title.trim()) setTitle(sel.title);
+          }}
+        />
+
+        {allowsContent(kind) && resourceUrl && !pickedAssetId ? (
+          <p className="truncate text-xs text-muted-foreground">
+            {kind === "call" || kind === "milestone"
+              ? "Anexo de apoio: "
+              : "Link: "}
+            {resourceUrl}
+          </p>
+        ) : null}
+
+        {allowsContent(kind) ? (
+          <div className={cn("space-y-2", inline && "space-y-1.5")}>
+            <Label htmlFor={fieldId("content")}>
+              {kind === "call"
+                ? "Texto de apoio à sessão"
+                : kind === "milestone"
+                  ? "Texto de apoio ao check-point"
+                  : "Texto para o aluno"}
+            </Label>
+            <Textarea
+              id={fieldId("content")}
+              value={contentBody}
+              onChange={(e) => setContentBody(e.target.value)}
+              rows={4}
+              placeholder={
+                kind === "call"
+                  ? "Notas para o aluno antes ou durante a call…"
+                  : "Instruções, contexto ou exercícios deste nível…"
+              }
+              className={inputClass}
+            />
+          </div>
+        ) : null}
+
+        {(passRule === "quiz" || kind === "milestone") && isEdit && node ? (
+          <div data-dirty-ignore>
+            <NodeQuizEditor nodeId={node.id} passRule={passRule} />
+          </div>
+        ) : null}
+
+        {passRule === "quiz" && !isEdit ? (
+          <p className="text-xs text-muted-foreground">
+            Depois de criar o nível, volta a editar para configurar o quiz.
+          </p>
+        ) : null}
+      </section>
 
       {inline ? (
         <div className="pt-1">

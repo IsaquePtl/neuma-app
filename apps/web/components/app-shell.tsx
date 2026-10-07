@@ -189,14 +189,14 @@ function shellBackHref(
     if (pathname === "/path" && searchParams?.get("onboarding") === "1") {
       return "/path";
     }
-    const quizMatch = pathname.match(/^\/path\/([^/]+)\/quiz\/?$/);
-    if (quizMatch) return `/path/${quizMatch[1]}`;
+    const levelSubMatch = pathname.match(/^\/path\/([^/]+)\/(quiz|checkins)\/?$/);
+    if (levelSubMatch) return `/path/${levelSubMatch[1]}`;
     if (pathname.startsWith("/path/")) return "/path";
     if (pathname.startsWith("/session/")) return "/session";
     if (pathname === "/checkins" || pathname.startsWith("/checkins/new")) {
       const nodeId = searchParams?.get("node")?.trim();
       if (nodeId && pathname.startsWith("/checkins/new")) {
-        return `/path/${nodeId}`;
+        return `/path/${nodeId}/checkins`;
       }
       return "/session";
     }

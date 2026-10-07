@@ -1,18 +1,20 @@
 import { notFound, redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { getCheckInAllowance } from "@/lib/checkins/allowance";
 import {
-  checkInBlockedMessage,
-  getCheckInAllowance,
-} from "@/lib/checkins/allowance";
-import { loadStudentNodeActivity } from "@/lib/feedbacks/student";
+  levelCheckInsHref,
+  loadStudentNodeActivity,
+  summarizeLevelCheckIns,
+} from "@/lib/feedbacks/student";
+import { nodeRequiresCheckIn } from "@/lib/nodes/pass-rule";
 import {
   loadMyPathWithNodes,
   loadMentorCalUsername,
   loadMyUpcomingBooking,
 } from "@/lib/students/queries";
 import { StudentNodePlayer } from "@/components/student-node-player";
-import { StudentLevelActivity } from "@/components/student-level-activity";
+import { LevelCheckInCta } from "@/components/level-check-in-cta";
 import { PhaseReviewBanner } from "@/components/phase-review-checklist";
 import { RecordNodeVisit } from "@/components/record-node-visit";
 import {
@@ -33,6 +35,17 @@ export default async function StudentNodePage({
     checkIn: focusCheckInId,
     feedback: focusLevelFeedbackId,
   } = await searchParams;
+
+  // Older links (emails, notifications) pointed at the level page.
+  if (focus || focusCheckInId || focusLevelFeedbackId) {
+    redirect(
+      levelCheckInsHref(nodeId, {
+        checkIn: focusCheckInId,
+        feedback: focusLevelFeedbackId,
+      }),
+    );
+  }
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -88,6 +101,12 @@ export default async function StudentNodePage({
   const reviewingThisLevel =
     activeReview?.items.some((i) => i.id === nodeId) ? activeReview : null;
 
+  const checkInSummary = summarizeLevelCheckIns(activity, {
+    requiresCheckIn: nodeRequiresCheckIn(node.pass_rule),
+    completed: node.status === "completed",
+    canSubmit: allowance.allowed,
+  });
+
   return (
     <div
       className={
@@ -110,23 +129,13 @@ export default async function StudentNodePage({
           calUsername={mentor?.cal_username}
           upcomingBooking={node.kind === "call" ? upcomingBooking : null}
           canBookSessions={canBookSessions}
-          canSubmitCheckIn={allowance.allowed}
-          checkInBlockedMessage={
-            !allowance.allowed ? checkInBlockedMessage(allowance) : null
-          }
-        />
-        <StudentLevelActivity
-          activity={activity}
-          pathNodes={nodes}
-          currentNodeId={nodeId}
-          focusCheckInId={focusCheckInId ?? null}
-          focusLevelFeedbackId={focusLevelFeedbackId ?? null}
-          initialFocus={
-            focus === "checkin"
-              ? "checkin"
-              : focus === "feedback"
-                ? "feedback"
-                : null
+          checkInSlot={
+            checkInSummary ? (
+              <LevelCheckInCta
+                href={levelCheckInsHref(nodeId)}
+                summary={checkInSummary}
+              />
+            ) : null
           }
         />
       </div>

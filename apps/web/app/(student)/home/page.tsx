@@ -219,7 +219,7 @@ export default async function StudentHomePage() {
         todos.push({
           key: `checkin:${activeCheckin.id}`,
           title: `Fazer check-in da semana ${week}`,
-          href: `/path/${activeCheckin.id}`,
+          href: `/path/${activeCheckin.id}/checkins`,
           tag: todoTagLabel(`checkin:${activeCheckin.id}`),
         });
       }

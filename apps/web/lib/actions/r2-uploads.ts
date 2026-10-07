@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import {
+  abortLibraryMultipartUploadsForUser,
   abortMultipartUpload,
   buildCheckInKey,
   buildLibraryKey,
@@ -17,6 +18,7 @@ import {
 import {
   MAX_LIBRARY_FILE_BYTES,
   MAX_VIDEO_BYTES,
+  R2_LIBRARY_PART_BYTES,
   R2_MULTIPART_PART_BYTES,
   R2_MULTIPART_THRESHOLD_BYTES,
   libraryFileTooLargeMessage,
@@ -101,6 +103,7 @@ async function buildUploadPlan(
   contentType: string,
   size: number,
   forceMultipart = false,
+  partBytes = R2_MULTIPART_PART_BYTES,
 ): Promise<PresignedPutUpload | PresignedMultipartUpload> {
   const publicUrl = getPublicUrl(key);
   const bytes = Number(size);
@@ -115,7 +118,7 @@ async function buildUploadPlan(
   }
 
   const { uploadId } = await createMultipartUpload(key, safeType);
-  const partCount = multipartPartCount(bytes);
+  const partCount = multipartPartCount(bytes, partBytes);
   const parts = await Promise.all(
     Array.from({ length: partCount }, async (_, i) => {
       const partNumber = i + 1;
@@ -123,6 +126,7 @@ async function buildUploadPlan(
         key,
         uploadId,
         partNumber,
+        60 * 60 * 6,
       );
       return { partNumber, uploadUrl };
     }),
@@ -134,7 +138,7 @@ async function buildUploadPlan(
     publicUrl,
     key,
     uploadId,
-    partSize: R2_MULTIPART_PART_BYTES,
+    partSize: partBytes,
     parts,
   };
 }
@@ -205,12 +209,19 @@ export async function getLibraryAssetUploadUrl(
 
   const key = buildLibraryKey(meta.categoryId ?? "", user.id, meta.filename);
   try {
+    await abortLibraryMultipartUploadsForUser(user.id);
     // Biblioteca: vídeos longos — multipart cedo (acima de 5 MiB, mínimo
     // de parte R2) para nunca bater no 413 do proxy Cloudflare (~100 MB).
     const force =
       Boolean(meta.forceMultipart) ||
       Number(meta.size) > 5 * 1024 * 1024;
-    return await buildUploadPlan(key, meta.contentType, meta.size, force);
+    return await buildUploadPlan(
+      key,
+      meta.contentType,
+      meta.size,
+      force,
+      R2_LIBRARY_PART_BYTES,
+    );
   } catch (e) {
     return {
       ok: false,

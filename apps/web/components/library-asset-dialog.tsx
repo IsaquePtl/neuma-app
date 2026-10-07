@@ -4,8 +4,15 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import { Loader2, Pencil, Plus, Upload, Link2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { upsertLibraryAsset } from "@/lib/actions/library";
-import { getLibraryAssetUploadUrl } from "@/lib/actions/r2-uploads";
+import {
+  releaseUnsavedLibraryUpload,
+  replaceLibraryAssetMedia,
+  upsertLibraryAsset,
+} from "@/lib/actions/library";
+import {
+  cancelMultipartUpload,
+  getLibraryAssetUploadUrl,
+} from "@/lib/actions/r2-uploads";
 import { uploadToR2Presigned } from "@/lib/uploads/presigned-client";
 import {
   MAX_LIBRARY_FILE_BYTES,
@@ -122,7 +129,17 @@ export function LibraryAssetDialog({
   );
   const [mode, setMode] = useState<"link" | "upload">(() => initialMode(asset));
   const [uploading, setUploading] = useState(false);
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const savedKeyRef = useRef(asset?.storage_path ?? "");
+  const storagePathRef = useRef(storagePath);
+  const uploadRef = useRef<{ key: string; uploadId?: string } | null>(null);
+  const cancelUploadRef = useRef(false);
+
+  function releaseIfUnsaved(key: string) {
+    if (!key || key === savedKeyRef.current) return;
+    void releaseUnsavedLibraryUpload(key);
+  }
   const isEdit = Boolean(asset);
   const createTriggerSize =
     triggerSize ?? (triggerVariant === "outline" ? "default" : "sm");
@@ -141,7 +158,9 @@ export function LibraryAssetDialog({
     setCategoryId(t?.category_id ?? defaultCategoryId ?? "");
     setTopicId(nextAsset?.topic_id ?? defaultTopicId ?? "");
     setUrl(nextAsset?.url ?? "");
-    setStoragePath(nextAsset?.storage_path ?? "");
+    const nextPath = nextAsset?.storage_path ?? "";
+    storagePathRef.current = nextPath;
+    setStoragePath(nextPath);
     setFileLabel(
       nextAsset?.storage_path
         ? mediaFileLabel(nextAsset.url, nextAsset.storage_path)
@@ -149,6 +168,7 @@ export function LibraryAssetDialog({
     );
     setMode(initialMode(nextAsset));
     setUploading(false);
+    setUploadPercent(null);
   }
 
   async function onFile(file: File | null) {
@@ -157,6 +177,8 @@ export function LibraryAssetDialog({
       toast.error(libraryFileTooLargeMessage());
       return;
     }
+    cancelUploadRef.current = false;
+    setUploadPercent(null);
     setUploading(true);
     try {
       const presigned = await getLibraryAssetUploadUrl({
@@ -169,19 +191,62 @@ export function LibraryAssetDialog({
         toast.error(presigned.error);
         return;
       }
+      if (cancelUploadRef.current) {
+        if (presigned.mode === "multipart") {
+          void cancelMultipartUpload({
+            key: presigned.key,
+            uploadId: presigned.uploadId,
+          });
+        }
+        return;
+      }
+      uploadRef.current = {
+        key: presigned.key,
+        uploadId: presigned.mode === "multipart" ? presigned.uploadId : undefined,
+      };
       const publicUrl = await uploadToR2Presigned(file, presigned, {
         kind: "library",
         categoryId,
+        onProgress: (ratio) => setUploadPercent(Math.round(ratio * 100)),
       });
+      uploadRef.current = null;
+      if (cancelUploadRef.current) {
+        void releaseUnsavedLibraryUpload(presigned.key);
+        return;
+      }
+      if (asset?.id) {
+        const saved = await replaceLibraryAssetMedia({
+          id: asset.id,
+          url: publicUrl,
+          storagePath: presigned.key,
+        });
+        if (!saved.ok) {
+          toast.error(saved.error);
+          void releaseUnsavedLibraryUpload(presigned.key);
+          return;
+        }
+        savedKeyRef.current = presigned.key;
+      }
+      const replacedUnsaved = storagePathRef.current;
+      storagePathRef.current = presigned.key;
       setUrl(publicUrl);
       setStoragePath(presigned.key);
+      releaseIfUnsaved(replacedUnsaved);
       setFileLabel(file.name);
       setMode("upload");
-      toast.success("Ficheiro enviado");
+      toast.success(
+        asset?.id
+          ? "Ficheiro guardado no item"
+          : "Ficheiro enviado — prime Guardar para criar o item",
+      );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha no upload");
+      if (!cancelUploadRef.current) {
+        toast.error(e instanceof Error ? e.message : "Falha no upload");
+      }
     } finally {
+      uploadRef.current = null;
       setUploading(false);
+      setUploadPercent(null);
     }
   }
 
@@ -196,6 +261,7 @@ export function LibraryAssetDialog({
     startTransition(async () => {
       try {
         await upsertLibraryAsset(fd);
+        savedKeyRef.current = storagePath;
         toast.success(isEdit ? "Actualizado" : "Criado");
         setOpen(false);
       } catch (err) {
@@ -208,8 +274,22 @@ export function LibraryAssetDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
+        if (!next) {
+          cancelUploadRef.current = true;
+          const active = uploadRef.current;
+          if (active?.uploadId) {
+            void cancelMultipartUpload({
+              key: active.key,
+              uploadId: active.uploadId,
+            });
+          }
+          releaseIfUnsaved(storagePathRef.current);
+        }
         setOpen(next);
-        if (next) resetFormState(asset);
+        if (next) {
+          savedKeyRef.current = asset?.storage_path ?? "";
+          resetFormState(asset);
+        }
       }}
     >
       {isEdit ? (
@@ -410,8 +490,11 @@ export function LibraryAssetDialog({
                     onChange={(e) => {
                       setUrl(e.target.value);
                       // Manual link replaces any prior R2 object association.
+                      const previous = storagePathRef.current;
+                      storagePathRef.current = "";
                       setStoragePath("");
                       setFileLabel("");
+                      releaseIfUnsaved(previous);
                     }}
                     placeholder="https://..."
                   />
@@ -450,11 +533,27 @@ export function LibraryAssetDialog({
                       <Upload className="size-4" />
                     )}
                     {uploading
-                      ? "A enviar..."
+                      ? uploadPercent == null
+                        ? "A preparar o envio…"
+                        : `A enviar… ${uploadPercent}%`
                       : fileLabel
                         ? "Trocar ficheiro"
                         : "Escolher ficheiro"}
                   </Button>
+                  {uploading && uploadPercent != null ? (
+                    <div
+                      className="h-1 overflow-hidden rounded-full bg-white/10"
+                      role="progressbar"
+                      aria-valuenow={uploadPercent}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                    >
+                      <div
+                        className="h-full bg-[var(--neuma-coral)] transition-[width] duration-200"
+                        style={{ width: `${uploadPercent}%` }}
+                      />
+                    </div>
+                  ) : null}
                   {fileLabel && !uploading ? (
                     <Input
                       value={fileLabel}

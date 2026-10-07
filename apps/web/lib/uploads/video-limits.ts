@@ -16,6 +16,8 @@ export const MAX_LIBRARY_FILE_BYTES = MAX_LIBRARY_FILE_MB * 1024 * 1024;
  * proxy Cloudflare (Free/Pro → HTTP 413 num PUT único).
  */
 export const R2_MULTIPART_PART_BYTES = 16 * 1024 * 1024;
+/** Biblioteca: menos pedidos num MOV de vários GB. O PUT vai directo ao R2. */
+export const R2_LIBRARY_PART_BYTES = 32 * 1024 * 1024;
 export const R2_MULTIPART_THRESHOLD_BYTES = 50 * 1024 * 1024;
 
 export function videoTooLargeMessage(maxMb: number = MAX_VIDEO_MB): string {

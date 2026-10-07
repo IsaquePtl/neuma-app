@@ -64,11 +64,13 @@ function normalizeEtag(raw: string | null): string | null {
 export async function uploadViaPresignedMultipart(
   file: File,
   plan: PresignedMultipartUpload,
+  onProgress?: (ratio: number) => void,
 ): Promise<string> {
   const completed: { partNumber: number; etag: string }[] = [];
+  let done = 0;
 
   try {
-    const concurrency = 3;
+    const concurrency = 4;
     let next = 0;
 
     async function uploadOne(part: {
@@ -78,32 +80,53 @@ export async function uploadViaPresignedMultipart(
       const start = (part.partNumber - 1) * plan.partSize;
       const end = Math.min(start + plan.partSize, file.size);
       const blob = file.slice(start, end);
+      let lastError: Error | null = null;
 
-      const res = await fetch(part.uploadUrl, {
-        method: "PUT",
-        body: blob,
-      });
-      if (!res.ok) {
-        let host = "R2";
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8 * 60 * 1000);
         try {
-          host = new URL(part.uploadUrl).host;
-        } catch {
-          /* ignore */
+          const res = await fetch(part.uploadUrl, {
+            method: "PUT",
+            body: blob,
+            signal: controller.signal,
+          });
+          if (!res.ok) {
+            let host = "R2";
+            try {
+              host = new URL(part.uploadUrl).host;
+            } catch {
+              /* ignore */
+            }
+            throw new Error(
+              `Falha na parte ${part.partNumber} (${res.status} em ${host}).` +
+                (res.status === 413
+                  ? " Parte ainda demasiado grande."
+                  : " Verifica CORS no bucket R2."),
+            );
+          }
+          const etag = normalizeEtag(res.headers.get("etag"));
+          if (!etag) {
+            throw new Error(
+              "O R2 não devolveu ETag. No CORS do bucket adiciona ExposeHeaders: ETag.",
+            );
+          }
+          completed.push({ partNumber: part.partNumber, etag });
+          done += 1;
+          onProgress?.(done / plan.parts.length);
+          return;
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error("Falha no upload");
+          if (lastError.name === "AbortError") {
+            lastError = new Error(
+              `A parte ${part.partNumber} excedeu o tempo. A tentar outra vez…`,
+            );
+          }
+        } finally {
+          clearTimeout(timer);
         }
-        throw new Error(
-          `Falha na parte ${part.partNumber} (${res.status} em ${host}).` +
-            (res.status === 413
-              ? " Parte ainda demasiado grande."
-              : " Verifica CORS no bucket R2."),
-        );
       }
-      const etag = normalizeEtag(res.headers.get("etag"));
-      if (!etag) {
-        throw new Error(
-          "O R2 não devolveu ETag. No CORS do bucket adiciona ExposeHeaders: ETag.",
-        );
-      }
-      completed.push({ partNumber: part.partNumber, etag });
+      throw lastError ?? new Error(`Falha na parte ${part.partNumber}`);
     }
 
     const workers = Array.from(
@@ -163,7 +186,11 @@ async function requestUploadPlan(
 export async function uploadToR2Presigned(
   file: File,
   plan: PresignedPutUpload | PresignedMultipartUpload,
-  opts?: { kind?: R2UploadKind; categoryId?: string | null },
+  opts?: {
+    kind?: R2UploadKind;
+    categoryId?: string | null;
+    onProgress?: (ratio: number) => void;
+  },
 ): Promise<string> {
   const preferMultipart =
     file.size > R2_MULTIPART_THRESHOLD_BYTES || plan.mode === "multipart";
@@ -177,11 +204,11 @@ export async function uploadToR2Presigned(
     if (forced.mode !== "multipart") {
       throw new Error("Não foi possível iniciar upload multipart.");
     }
-    return uploadViaPresignedMultipart(file, forced);
+    return uploadViaPresignedMultipart(file, forced, opts?.onProgress);
   }
 
   if (plan.mode === "multipart") {
-    return uploadViaPresignedMultipart(file, plan);
+    return uploadViaPresignedMultipart(file, plan, opts?.onProgress);
   }
 
   try {
@@ -196,6 +223,6 @@ export async function uploadToR2Presigned(
     });
     if (!forced.ok) throw new Error(forced.error);
     if (forced.mode !== "multipart") throw err;
-    return uploadViaPresignedMultipart(file, forced);
+    return uploadViaPresignedMultipart(file, forced, opts?.onProgress);
   }
 }

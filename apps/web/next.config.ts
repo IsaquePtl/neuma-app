@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 function supabaseHostname() {
@@ -115,6 +116,10 @@ const nextConfig: NextConfig = {
         destination: "/studio/paths/:path*",
       },
     ];
+  },
+  // Evita o Turbopack escolher a pasta do monorepo quando há lockfiles extra.
+  turbopack: {
+    root: path.join(__dirname),
   },
   experimental: {
     // Default Server Actions = 1 MB. Biblioteca sobe por URL assinada ao R2;

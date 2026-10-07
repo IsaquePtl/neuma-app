@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
@@ -19,7 +19,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FeedbackDecisionBlock } from "@/components/status-badges";
 import { checkInKindLabel, checkInLevelTitle, formatDateTime } from "@/lib/labels";
-import { resolveNextLevel } from "@/lib/feedbacks/student-shared";
+import {
+  levelCheckInsHref,
+  resolveNextLevel,
+} from "@/lib/feedbacks/student-shared";
 import { loadMyPathWithNodes } from "@/lib/students/queries";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +47,11 @@ export default async function CheckInDetailPage({
 
   if (!checkIn || checkIn.student_id !== user!.id) notFound();
 
+  const { nodes } = await loadMyPathWithNodes(user!.id);
+  if (checkIn.node_id && nodes.some((n) => n.id === checkIn.node_id)) {
+    redirect(levelCheckInsHref(checkIn.node_id, { checkIn: checkIn.id }));
+  }
+
   const { data: tally } = await supabase
     .from("tally_submissions")
     .select("answers, payload, video_url")
@@ -61,7 +69,6 @@ export default async function CheckInDetailPage({
     playableVideoUrl(checkIn.video_url || tally?.video_url || null),
     playableVideoUrl(feedback?.video_url),
   ]);
-  const { nodes } = await loadMyPathWithNodes(user!.id);
 
   const nextLevel =
     checkIn.status === "approved" && checkIn.node_id

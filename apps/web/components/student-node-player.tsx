@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { Video, FileText, Phone } from "lucide-react";
 
@@ -65,12 +66,15 @@ function SupportAttachmentButton({
   );
 }
 
-function NodeLevelHeader({
+export function NodeLevelHeader({
   node,
   levelNumber,
+  section,
 }: {
   node: StudentNode;
   levelNumber: number;
+  /** Extra eyebrow segment after the level type (e.g. "Check-in"). */
+  section?: string;
 }) {
   return (
     <header className="min-w-0 shrink-0">
@@ -96,6 +100,14 @@ function NodeLevelHeader({
               </>
             ) : null}
             {nodeKindLabel[node.kind]}
+            {section ? (
+              <>
+                <span aria-hidden className="mx-2 text-white/25">
+                  ·
+                </span>
+                {section}
+              </>
+            ) : null}
             {node.due_date ? (
               <>
                 <span aria-hidden className="mx-2 text-white/25">
@@ -114,35 +126,47 @@ function NodeLevelHeader({
   );
 }
 
-function CheckInActions({
+export function CheckInActions({
   node,
   practiceStyle = false,
   canSubmitCheckIn = true,
   blockedMessage = null,
   preview = false,
+  checkInSlot,
 }: {
   node: StudentNode;
   practiceStyle?: boolean;
   canSubmitCheckIn?: boolean;
   blockedMessage?: string | null;
   preview?: boolean;
+  checkInSlot?: ReactNode;
 }) {
   if (preview) return null;
 
-  if (node.status === "completed") {
-    return null;
-  }
-
-  if (nodeAllowsMarkSeen(node.pass_rule)) {
-    return (
+  const markSeen =
+    node.status !== "completed" && nodeAllowsMarkSeen(node.pass_rule) ? (
       <form action={markNodeSeen} className="flex min-w-0 flex-col gap-2">
         <input type="hidden" name="node_id" value={node.id} />
         <Button type="submit" className="h-14 w-full gap-2 text-base font-semibold">
           Marcar como visto
         </Button>
       </form>
+    ) : null;
+
+  if (checkInSlot !== undefined) {
+    return (
+      <>
+        {markSeen}
+        {checkInSlot}
+      </>
     );
   }
+
+  if (node.status === "completed") {
+    return null;
+  }
+
+  if (markSeen) return markSeen;
 
   if (!nodeRequiresCheckIn(node.pass_rule)) {
     return null;
@@ -199,6 +223,7 @@ function GateControls({
   preview = false,
   pathId,
   phaseCheckpoint = null,
+  checkInSlot,
 }: {
   node: StudentNode;
   practiceStyle?: boolean;
@@ -207,6 +232,7 @@ function GateControls({
   preview?: boolean;
   pathId?: string;
   phaseCheckpoint?: PhaseReview | null;
+  checkInSlot?: ReactNode;
 }) {
   const showQuiz =
     node.kind === "milestone" || nodeUsesQuizGate(node.pass_rule);
@@ -240,6 +266,7 @@ function GateControls({
         canSubmitCheckIn={canSubmitCheckIn}
         blockedMessage={blockedMessage}
         preview={preview}
+        checkInSlot={checkInSlot}
       />
     </>
   );
@@ -256,6 +283,7 @@ function SessionLayout({
   blockedMessage = null,
   preview = false,
   pathId,
+  checkInSlot,
 }: {
   node: StudentNode;
   levelNumber: number;
@@ -267,6 +295,7 @@ function SessionLayout({
   blockedMessage?: string | null;
   preview?: boolean;
   pathId?: string;
+  checkInSlot?: ReactNode;
 }) {
   return (
     <div className="min-w-0 w-full max-w-full space-y-5">
@@ -299,6 +328,7 @@ function SessionLayout({
         blockedMessage={blockedMessage}
         preview={preview}
         pathId={pathId}
+        checkInSlot={checkInSlot}
       />
     </div>
   );
@@ -311,6 +341,7 @@ function RecordingLayout({
   blockedMessage = null,
   preview = false,
   pathId,
+  checkInSlot,
 }: {
   node: StudentNode;
   levelNumber: number;
@@ -318,6 +349,7 @@ function RecordingLayout({
   blockedMessage?: string | null;
   preview?: boolean;
   pathId?: string;
+  checkInSlot?: ReactNode;
 }) {
   return (
     <div className="min-w-0 w-full max-w-full space-y-6">
@@ -347,6 +379,7 @@ function RecordingLayout({
         blockedMessage={blockedMessage}
         preview={preview}
         pathId={pathId}
+        checkInSlot={checkInSlot}
       />
     </div>
   );
@@ -359,6 +392,7 @@ function PracticeLayout({
   blockedMessage = null,
   preview = false,
   pathId,
+  checkInSlot,
 }: {
   node: StudentNode;
   levelNumber: number;
@@ -366,6 +400,7 @@ function PracticeLayout({
   blockedMessage?: string | null;
   preview?: boolean;
   pathId?: string;
+  checkInSlot?: ReactNode;
 }) {
   const hasVideo = isPlayableVideoUrl(node.resource_url);
 
@@ -401,6 +436,7 @@ function PracticeLayout({
         blockedMessage={blockedMessage}
         preview={preview}
         pathId={pathId}
+        checkInSlot={checkInSlot}
       />
     </div>
   );
@@ -414,6 +450,7 @@ function CheckpointLayout({
   preview = false,
   pathId,
   phaseCheckpoint = null,
+  checkInSlot,
 }: {
   node: StudentNode;
   levelNumber: number;
@@ -422,6 +459,7 @@ function CheckpointLayout({
   preview?: boolean;
   pathId?: string;
   phaseCheckpoint?: PhaseReview | null;
+  checkInSlot?: ReactNode;
 }) {
   return (
     <div className="min-w-0 w-full max-w-full space-y-6">
@@ -444,6 +482,7 @@ function CheckpointLayout({
         preview={preview}
         pathId={pathId}
         phaseCheckpoint={phaseCheckpoint}
+        checkInSlot={checkInSlot}
       />
 
       {node.resource_url ? (
@@ -469,6 +508,7 @@ export function StudentNodePlayer({
   preview = false,
   pathId,
   phaseCheckpoint = null,
+  checkInSlot,
 }: {
   node: StudentNode;
   levelNumber: number;
@@ -482,6 +522,8 @@ export function StudentNodePlayer({
   pathId?: string;
   /** Present when this level is the checkpoint that closes its phase. */
   phaseCheckpoint?: PhaseReview | null;
+  /** Replaces the inline check-in button (e.g. the Check-in + Feedback CTA). */
+  checkInSlot?: ReactNode;
 }) {
   const calUser =
     calUsername ||
@@ -501,6 +543,7 @@ export function StudentNodePlayer({
         blockedMessage={checkInBlockedMessage}
         preview={preview}
         pathId={pathId}
+        checkInSlot={checkInSlot}
       />
     );
   }
@@ -514,6 +557,7 @@ export function StudentNodePlayer({
         blockedMessage={checkInBlockedMessage}
         preview={preview}
         pathId={pathId}
+        checkInSlot={checkInSlot}
       />
     );
   }
@@ -528,6 +572,7 @@ export function StudentNodePlayer({
         preview={preview}
         pathId={pathId}
         phaseCheckpoint={phaseCheckpoint}
+        checkInSlot={checkInSlot}
       />
     );
   }
@@ -540,6 +585,7 @@ export function StudentNodePlayer({
       blockedMessage={checkInBlockedMessage}
       preview={preview}
       pathId={pathId}
+      checkInSlot={checkInSlot}
     />
   );
 }

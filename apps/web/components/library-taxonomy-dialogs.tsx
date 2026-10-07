@@ -2,16 +2,27 @@
 
 import { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FolderPlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import {
+  Archive,
+  ArrowDown,
+  ArrowUp,
+  FolderPlus,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import {
+  archiveLibraryAsset,
   createLibraryCategory,
   createLibraryTopic,
   deleteLibraryAsset,
   deleteLibraryTopic,
   deleteLibraryCategory,
+  moveLibraryTopic,
   renameLibraryCategory,
+  updateLibraryTopic,
 } from "@/lib/actions/library";
 import { LIBRARY_PATH } from "@/lib/library-routes";
 import { Button } from "@/components/ui/button";
@@ -295,6 +306,204 @@ export function LibraryTopicDialog({
 }
 
 
+export function LibraryTopicActions({
+  topic,
+  categories,
+  itemCount,
+  isFirst,
+  isLast,
+}: {
+  topic: { id: string; name: string; category_id: string };
+  categories: { id: string; name: string }[];
+  itemCount: number;
+  isFirst: boolean;
+  isLast: boolean;
+}) {
+  const router = useRouter();
+  const [editOpen, setEditOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  function onSave(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    fd.set("id", topic.id);
+    startTransition(async () => {
+      const result = await updateLibraryTopic(fd);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Tópico atualizado");
+      setEditOpen(false);
+      router.refresh();
+    });
+  }
+
+  function onMove(direction: "up" | "down") {
+    startTransition(async () => {
+      const result = await moveLibraryTopic(topic.id, direction);
+      if (!result.ok) toast.error(result.error);
+      else router.refresh();
+    });
+  }
+
+  function onDelete() {
+    const message =
+      itemCount > 0
+        ? `Eliminar o tópico “${topic.name}” e os ${itemCount} item(s) dentro dele?`
+        : `Eliminar o tópico “${topic.name}”?`;
+    if (!window.confirm(message)) return;
+    const fd = new FormData();
+    fd.set("id", topic.id);
+    startTransition(async () => {
+      try {
+        await deleteLibraryTopic(fd);
+        toast.success("Tópico eliminado");
+        router.refresh();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Falha ao eliminar");
+      }
+    });
+  }
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={<Button variant="ghost" size="icon-sm" disabled={pending} />}
+          aria-label={`Ações do tópico ${topic.name}`}
+        >
+          <MoreHorizontal className="size-4" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-44">
+          <DropdownMenuItem onClick={() => setEditOpen(true)}>
+            <Pencil className="size-4" />
+            Renomear / mover
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={isFirst} onClick={() => onMove("up")}>
+            <ArrowUp className="size-4" />
+            Subir
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={isLast} onClick={() => onMove("down")}>
+            <ArrowDown className="size-4" />
+            Descer
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" onClick={onDelete}>
+            <Trash2 className="size-4" />
+            Eliminar tópico
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar tópico</DialogTitle>
+            <DialogDescription>
+              Muda o nome ou move o tópico (com os itens) para outra categoria.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={onSave} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor={`topic-rename-${topic.id}`}>Nome</Label>
+              <Input
+                id={`topic-rename-${topic.id}`}
+                name="name"
+                required
+                autoFocus
+                defaultValue={topic.name}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`topic-cat-${topic.id}`}>Categoria</Label>
+              <select
+                id={`topic-cat-${topic.id}`}
+                name="category_id"
+                defaultValue={topic.category_id}
+                className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+              >
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={pending}>
+                {pending ? "A guardar…" : "Guardar"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+export function LibraryItemMenu({
+  assetId,
+  title,
+}: {
+  assetId: string;
+  title: string;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  function run(
+    action: (fd: FormData) => Promise<void | { fileRemoved: boolean | null }>,
+    success: string,
+  ) {
+    const fd = new FormData();
+    fd.set("id", assetId);
+    startTransition(async () => {
+      try {
+        const result = await action(fd);
+        toast.success(
+          result && "fileRemoved" in result && result.fileRemoved === false
+            ? "Item eliminado. O ficheiro ficou na Cloudflare porque ainda está num nível."
+            : success,
+        );
+        router.refresh();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Falha");
+      }
+    });
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<Button variant="ghost" size="icon-sm" disabled={pending} />}
+        aria-label={`Mais ações para ${title}`}
+      >
+        <MoreHorizontal className="size-4" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-40">
+        <DropdownMenuItem
+          onClick={() => run(archiveLibraryAsset, "Item arquivado")}
+        >
+          <Archive className="size-4" />
+          Arquivar
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          variant="destructive"
+          onClick={() => {
+            if (!window.confirm(`Eliminar “${title}” definitivamente?`)) return;
+            run(deleteLibraryAsset, "Item eliminado");
+          }}
+        >
+          <Trash2 className="size-4" />
+          Eliminar
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function LibraryTopicDeleteButton({
   topicId,
   compactOnMobile = false,
@@ -353,8 +562,12 @@ export function LibraryAssetDeleteButton({ assetId }: { assetId: string }) {
         fd.set("id", assetId);
         startTransition(async () => {
           try {
-            await deleteLibraryAsset(fd);
-            toast.success("Asset eliminado");
+            const result = await deleteLibraryAsset(fd);
+            toast.success(
+              result.fileRemoved
+                ? "Asset eliminado"
+                : "Item eliminado. O ficheiro ficou na Cloudflare porque ainda está num nível.",
+            );
             router.refresh();
           } catch (err) {
             toast.error(err instanceof Error ? err.message : "Falha");
