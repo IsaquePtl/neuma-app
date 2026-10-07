@@ -3,13 +3,25 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ChevronDown, Search } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  File,
+  FileText,
+  Folder,
+  FolderOpen,
+  ImageIcon,
+  Link2,
+  Search,
+  Video,
+} from "lucide-react";
 
 import { CategoryThemeIcon } from "@/components/category-theme-icon";
 import { LibraryAssetDialog } from "@/components/library-asset-dialog";
 import {
   LibraryCategoryActions,
-  LibraryTopicDeleteButton,
+  LibraryItemMenu,
+  LibraryTopicActions,
   LibraryTopicDialog,
 } from "@/components/library-taxonomy-dialogs";
 import { Card } from "@/components/ui/card";
@@ -70,6 +82,28 @@ type Props = {
   categoryId?: string | null;
 };
 
+type UsageFilter = "all" | LibraryAssetUsage;
+
+const USAGE_FILTERS: { id: UsageFilter; label: string }[] = [
+  { id: "all", label: "Tudo" },
+  { id: "lesson", label: "Aulas" },
+  { id: "practice", label: "Práticas" },
+];
+
+function AssetKindIcon({ kind }: { kind: LibraryAssetKind }) {
+  const Icon =
+    kind === "video"
+      ? Video
+      : kind === "image"
+        ? ImageIcon
+        : kind === "link"
+          ? Link2
+          : kind === "file"
+            ? File
+            : FileText;
+  return <Icon className="size-3.5 text-muted-foreground" aria-hidden />;
+}
+
 function itemMatchesSearch(item: LibraryItemRow, query: string) {
   if (!query) return true;
   const q = query.toLowerCase();
@@ -86,6 +120,7 @@ export function LibraryHub({ categories, topics, items, categoryId }: Props) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [openTopics, setOpenTopics] = useState<Set<string>>(() => new Set());
+  const [usageFilter, setUsageFilter] = useState<UsageFilter>("all");
 
   const activeCategory = categoryId
     ? categories.find((c) => c.id === categoryId)
@@ -100,6 +135,9 @@ export function LibraryHub({ categories, topics, items, categoryId }: Props) {
   );
 
   const searchQuery = search.trim();
+  const allOpen =
+    categoryTopics.length > 0 &&
+    categoryTopics.every((t) => openTopics.has(t.id));
 
   function toggleTopic(topicId: string) {
     setOpenTopics((prev) => {
@@ -172,46 +210,103 @@ export function LibraryHub({ categories, topics, items, categoryId }: Props) {
           />
         </div>
 
+        <div className="flex flex-wrap items-center gap-1.5">
+          {USAGE_FILTERS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setUsageFilter(f.id)}
+              aria-pressed={usageFilter === f.id}
+              className={cn(
+                "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                usageFilter === f.id
+                  ? "border-[var(--neuma-coral)]/60 bg-[var(--neuma-coral)]/15 text-foreground"
+                  : "border-white/10 text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+          {categoryTopics.length > 1 ? (
+            <button
+              type="button"
+              onClick={() =>
+                setOpenTopics(
+                  allOpen ? new Set() : new Set(categoryTopics.map((t) => t.id)),
+                )
+              }
+              className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+            >
+              {allOpen ? "Fechar todos" : "Abrir todos"}
+            </button>
+          ) : null}
+        </div>
+
         {categoryTopics.length === 0 ? (
-          <Card className="p-6 text-sm text-muted-foreground">
-            Sem tópicos nesta categoria. Usa o botão Tópico para criar um.
+          <Card className="flex flex-col items-start gap-3 p-6 text-sm text-muted-foreground">
+            <span>
+              Esta categoria ainda não tem tópicos. Cria pastas (ex.: Acordes,
+              Escalas) para organizar os itens.
+            </span>
+            <LibraryTopicDialog
+              categories={categories}
+              defaultCategoryId={activeCategory.id}
+              triggerSize="sm"
+            />
           </Card>
         ) : (
-          <div className="flex w-full flex-col gap-3">
-            {categoryTopics.map((topic) => {
+          <div className="flex w-full flex-col gap-2.5">
+            {categoryTopics.map((topic, topicIndex) => {
               const topicItems = items.filter((a) => a.topic_id === topic.id);
-              const visibleItems = topicItems.filter((a) =>
-                itemMatchesSearch(a, searchQuery),
+              const visibleItems = topicItems.filter(
+                (a) =>
+                  itemMatchesSearch(a, searchQuery) &&
+                  (usageFilter === "all" || a.usage === usageFilter),
               );
-              if (searchQuery && visibleItems.length === 0) return null;
+              const filtering = searchQuery.length > 0 || usageFilter !== "all";
+              if (filtering && visibleItems.length === 0) return null;
 
-              const expanded =
-                searchQuery.length > 0 || openTopics.has(topic.id);
+              const expanded = searchQuery.length > 0 || openTopics.has(topic.id);
+              const lessons = topicItems.filter((a) => a.usage === "lesson").length;
+              const practices = topicItems.length - lessons;
 
               return (
                 <Card
                   key={topic.id}
-                  className="w-full gap-0 overflow-hidden rounded-xl p-0"
+                  className={cn(
+                    "w-full gap-0 overflow-hidden rounded-2xl p-0 transition-colors",
+                    expanded && "ring-1 ring-white/12",
+                  )}
                 >
-                  <div className="flex w-full flex-nowrap items-center gap-1.5 px-2 py-2 sm:gap-2 sm:px-4 sm:py-3">
+                  <div className="flex w-full flex-nowrap items-center gap-1 px-2 py-2 sm:gap-2 sm:px-3">
                     <button
                       type="button"
                       onClick={() => toggleTopic(topic.id)}
                       aria-expanded={expanded}
-                      className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-white/[0.03]"
+                      className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-white/[0.03]"
                     >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{topic.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {topicItems.length} item
-                          {topicItems.length === 1 ? "" : "s"}
-                          {topic.created_by_agent ? (
-                            <span className="ml-1 uppercase text-amber-500">
-                              agent
-                            </span>
-                          ) : null}
-                        </p>
-                      </div>
+                      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/[0.06] text-muted-foreground">
+                        {expanded ? (
+                          <FolderOpen className="size-4" aria-hidden />
+                        ) : (
+                          <Folder className="size-4" aria-hidden />
+                        )}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">{topic.name}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {topicItems.length === 0
+                            ? "Vazio"
+                            : [
+                                lessons ? `${lessons} aula${lessons === 1 ? "" : "s"}` : null,
+                                practices
+                                  ? `${practices} prática${practices === 1 ? "" : "s"}`
+                                  : null,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                        </span>
+                      </span>
                       <ChevronDown
                         className={cn(
                           "size-4 shrink-0 text-muted-foreground transition-transform",
@@ -219,54 +314,84 @@ export function LibraryHub({ categories, topics, items, categoryId }: Props) {
                         )}
                       />
                     </button>
-                    <div className="flex shrink-0 items-center gap-1.5 sm:gap-1">
+                    <div className="flex shrink-0 items-center gap-0.5">
                       <LibraryAssetDialog
                         categories={categories}
                         topics={topics}
                         defaultCategoryId={activeCategory.id}
                         defaultTopicId={topic.id}
-                        triggerLabel="Adicionar item"
-                        triggerVariant="outline"
+                        triggerLabel="Item"
+                        triggerVariant="ghost"
                         triggerSize="sm"
                         compactOnMobile
                       />
-                      <LibraryTopicDeleteButton
-                        topicId={topic.id}
-                        compactOnMobile
+                      <LibraryTopicActions
+                        topic={topic}
+                        categories={categories}
+                        itemCount={topicItems.length}
+                        isFirst={topicIndex === 0}
+                        isLast={topicIndex === categoryTopics.length - 1}
                       />
                     </div>
                   </div>
 
                   {expanded ? (
-                    <div className="border-t border-white/5">
+                    <div className="border-t border-white/5 p-2">
                       {visibleItems.length === 0 ? (
-                        <p className="px-4 py-3 text-xs text-muted-foreground">
-                          Sem itens neste tópico.
+                        <p className="px-3 py-3 text-xs text-muted-foreground">
+                          Sem itens nesta pasta. Usa “Item” para adicionar.
                         </p>
                       ) : (
-                        <ul className="divide-y divide-white/5">
+                        <ul className="space-y-1">
                           {visibleItems.map((a) => (
                             <li
                               key={a.id}
-                              className="flex items-center justify-between gap-2 px-4 py-2.5"
+                              className="group/item flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-white/[0.03]"
                             >
-                              <div className="min-w-0">
+                              <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-white/10 bg-black/30">
+                                <AssetKindIcon kind={a.kind} />
+                              </span>
+                              <div className="min-w-0 flex-1">
                                 <p className="truncate text-sm font-medium">
                                   {a.title}
                                 </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {libraryAssetUsageLabel[a.usage]} ·{" "}
-                                  {libraryAssetKindLabel[a.kind]}
-                                  {a.duration_label
-                                    ? ` · ${a.duration_label}`
-                                    : ""}
+                                <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
+                                  <span
+                                    className={cn(
+                                      "font-medium",
+                                      a.usage === "practice"
+                                        ? "text-sky-300"
+                                        : "text-[var(--neuma-coral)]",
+                                    )}
+                                  >
+                                    {libraryAssetUsageLabel[a.usage]}
+                                  </span>
+                                  <span aria-hidden>·</span>
+                                  <span>{libraryAssetKindLabel[a.kind]}</span>
+                                  {a.duration_label ? (
+                                    <>
+                                      <span aria-hidden>·</span>
+                                      <span>{a.duration_label}</span>
+                                    </>
+                                  ) : null}
+                                  {a.tags.slice(0, 3).map((tag) => (
+                                    <span
+                                      key={tag}
+                                      className="rounded-full bg-white/[0.06] px-1.5 py-px text-[10px]"
+                                    >
+                                      #{tag}
+                                    </span>
+                                  ))}
                                 </p>
                               </div>
-                              <LibraryAssetDialog
-                                asset={a}
-                                categories={categories}
-                                topics={topics}
-                              />
+                              <div className="flex shrink-0 items-center">
+                                <LibraryAssetDialog
+                                  asset={a}
+                                  categories={categories}
+                                  topics={topics}
+                                />
+                                <LibraryItemMenu assetId={a.id} title={a.title} />
+                              </div>
                             </li>
                           ))}
                         </ul>
@@ -279,16 +404,19 @@ export function LibraryHub({ categories, topics, items, categoryId }: Props) {
           </div>
         )}
 
-        {searchQuery &&
+        {(searchQuery || usageFilter !== "all") &&
+        categoryTopics.length > 0 &&
         categoryTopics.every(
           (t) =>
             items.filter(
               (a) =>
-                a.topic_id === t.id && itemMatchesSearch(a, searchQuery),
+                a.topic_id === t.id &&
+                itemMatchesSearch(a, searchQuery) &&
+                (usageFilter === "all" || a.usage === usageFilter),
             ).length === 0,
         ) ? (
           <p className="text-sm text-muted-foreground">
-            Nenhum item corresponde a «{searchQuery}».
+            Nenhum item corresponde aos filtros.
           </p>
         ) : null}
       </div>

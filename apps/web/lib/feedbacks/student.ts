@@ -17,6 +17,8 @@ import {
 } from "@/lib/feedbacks/student-shared";
 
 export type {
+  LevelCheckInState,
+  LevelCheckInSummary,
   StudentFeedbackListItem,
   StudentFeedbackViewRef,
   StudentNodeActivity,
@@ -30,6 +32,8 @@ export {
   getStudentAccessibleNodeIds,
   hasVisibleCheckInFeedback,
   hasVisibleLevelFeedback,
+  levelCheckInsHref,
+  summarizeLevelCheckIns,
 } from "@/lib/feedbacks/student-shared";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;

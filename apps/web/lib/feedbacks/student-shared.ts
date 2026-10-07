@@ -104,14 +104,88 @@ export function getStudentAccessibleNodeIds(nodes: StudentNode[]): string[] {
     .map((node) => node.id);
 }
 
+/** Level sub-page that groups every check-in round with its feedback. */
+export function levelCheckInsHref(
+  nodeId: string,
+  open?: { checkIn?: string | null; feedback?: string | null },
+): string {
+  const params = new URLSearchParams();
+  if (open?.checkIn) params.set("checkIn", open.checkIn);
+  else if (open?.feedback) params.set("feedback", open.feedback);
+  const query = params.toString();
+  return `/path/${nodeId}/checkins${query ? `?${query}` : ""}`;
+}
+
 export function feedbackHrefForItem(item: StudentUnviewedFeedbackItem): string {
-  const params = new URLSearchParams({ focus: "feedback" });
   if (item.kind === "check_in" && item.checkInId) {
-    params.set("checkIn", item.checkInId);
-  } else if (item.kind === "level") {
-    params.set("feedback", item.referenceId);
+    return levelCheckInsHref(item.nodeId, { checkIn: item.checkInId });
   }
-  return `/path/${item.nodeId}?${params.toString()}`;
+  if (item.kind === "level") {
+    return levelCheckInsHref(item.nodeId, { feedback: item.referenceId });
+  }
+  return levelCheckInsHref(item.nodeId);
+}
+
+export type LevelCheckInState =
+  | "todo"
+  | "revision"
+  | "extended"
+  | "awaiting"
+  | "approved"
+  | "feedback";
+
+export type LevelCheckInSummary = {
+  state: LevelCheckInState;
+  /** Feedback items the student has not opened yet. */
+  unviewedCount: number;
+  /** The student can (and should) send a new check-in now. */
+  actionNeeded: boolean;
+  rounds: number;
+};
+
+/**
+ * Status for the level CTA. Returns null when the level has no check-in flow
+ * and no feedback to show.
+ */
+export function summarizeLevelCheckIns(
+  activity: StudentNodeActivity,
+  {
+    requiresCheckIn,
+    completed,
+    canSubmit,
+  }: { requiresCheckIn: boolean; completed: boolean; canSubmit: boolean },
+): LevelCheckInSummary | null {
+  const rounds = activity.checkIns.length;
+  const hasLevelFeedback = activity.levelFeedbacks.length > 0;
+  if ((!requiresCheckIn || completed) && rounds === 0 && !hasLevelFeedback) {
+    return null;
+  }
+
+  const unviewedCount =
+    activity.checkIns.filter(
+      (c) => hasVisibleCheckInFeedback(c.feedback) && !c.viewed,
+    ).length + activity.levelFeedbacks.filter((f) => !f.viewed).length;
+
+  const latest = activity.checkIns[0] ?? null;
+  const actionNeeded =
+    requiresCheckIn && !completed && canSubmit && latest?.status !== "approved";
+
+  let state: LevelCheckInState;
+  if (actionNeeded) {
+    state = !latest
+      ? "todo"
+      : latest.status === "needs_revision"
+        ? "revision"
+        : "extended";
+  } else if (latest?.status === "pending") {
+    state = "awaiting";
+  } else if (latest?.status === "approved" || completed) {
+    state = "approved";
+  } else {
+    state = "feedback";
+  }
+
+  return { state, unviewedCount, actionNeeded, rounds };
 }
 
 export type NextLevelNode = Pick<

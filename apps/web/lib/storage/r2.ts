@@ -6,6 +6,7 @@ import {
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  ListMultipartUploadsCommand,
   PutObjectCommand,
   UploadPartCommand,
   S3Client,
@@ -282,6 +283,40 @@ export async function completeMultipartUpload(
       },
     }),
   );
+}
+
+/** Drops library uploads this mentor abandoned. Fresh ones stay, so a retry does not kill an upload in progress. */
+export async function abortLibraryMultipartUploadsForUser(
+  userId: string,
+  minAgeMs = 45 * 60 * 1000,
+): Promise<void> {
+  const cfg = getR2Config();
+  let keyMarker: string | undefined;
+  let uploadIdMarker: string | undefined;
+
+  do {
+    const page = await getR2Client().send(
+      new ListMultipartUploadsCommand({
+        Bucket: cfg.bucketName,
+        Prefix: "library/",
+        KeyMarker: keyMarker,
+        UploadIdMarker: uploadIdMarker,
+      }),
+    );
+    for (const upload of page.Uploads ?? []) {
+      if (!upload.Key || !upload.UploadId) continue;
+      if (!upload.Key.includes(`/${userId}/`)) continue;
+      const started = upload.Initiated?.getTime() ?? 0;
+      if (started && Date.now() - started < minAgeMs) continue;
+      try {
+        await abortMultipartUpload(upload.Key, upload.UploadId);
+      } catch (err) {
+        console.error("[r2] abort library multipart", upload.Key, err);
+      }
+    }
+    keyMarker = page.IsTruncated ? page.NextKeyMarker : undefined;
+    uploadIdMarker = page.IsTruncated ? page.NextUploadIdMarker : undefined;
+  } while (keyMarker);
 }
 
 export async function abortMultipartUpload(

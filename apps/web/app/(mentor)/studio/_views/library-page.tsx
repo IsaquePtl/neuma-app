@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AlertTriangle, ChevronDown, Plus } from "lucide-react";
 
 import { archiveLibraryAsset } from "@/lib/actions/library";
 import { LibraryHub } from "@/components/library-hub";
@@ -41,28 +42,80 @@ function EmptyLessons({
     return !hasText && !hasVideo;
   });
   if (empty.length === 0) return null;
+
+  const groups = new Map<string, { title: string; lessons: typeof empty }>();
+  for (const lesson of empty) {
+    const path = Array.isArray(lesson.path) ? lesson.path[0] : lesson.path;
+    const group = groups.get(lesson.path_id) ?? {
+      title: path?.title ?? "Percurso",
+      lessons: [],
+    };
+    group.lessons.push(lesson);
+    groups.set(lesson.path_id, group);
+  }
+  const sortedGroups = [...groups.entries()].sort(
+    (a, b) => b[1].lessons.length - a[1].lessons.length,
+  );
+
   return (
-    <section className="space-y-2">
-      <h2 className="text-sm font-semibold">Em uso e vazio</h2>
-      <ul className="divide-y divide-white/10 rounded-2xl border border-white/10">
-        {empty.map((lesson) => {
-          const path = Array.isArray(lesson.path) ? lesson.path[0] : lesson.path;
-          return (
-            <li key={lesson.id}>
+    <details className="group/empty overflow-hidden rounded-2xl border border-amber-400/20 bg-amber-400/[0.04] open:bg-white/[0.02]">
+      <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 transition-colors hover:bg-white/[0.03] sm:px-5 [&::-webkit-details-marker]:hidden">
+        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-amber-300">
+          <AlertTriangle className="size-4" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">
+            {empty.length} {empty.length === 1 ? "aula sem conteúdo" : "aulas sem conteúdo"}
+          </span>
+          <span className="block truncate text-xs text-muted-foreground">
+            Em percursos ativos ·{" "}
+            {sortedGroups.length === 1
+              ? sortedGroups[0]![1].title
+              : `${sortedGroups.length} percursos`}
+          </span>
+        </span>
+        <ChevronDown
+          className="size-4 shrink-0 text-muted-foreground transition-transform group-open/empty:rotate-180"
+          aria-hidden
+        />
+      </summary>
+
+      <div className="space-y-4 border-t border-white/10 px-4 pb-4 pt-4 sm:px-5">
+        {sortedGroups.map(([pathId, group]) => (
+          <section key={pathId} className="min-w-0 space-y-2">
+            <div className="flex items-center justify-between gap-2">
               <Link
-                href={`/studio/journeys/${lesson.path_id}/levels/${lesson.id}`}
-                className="flex flex-col gap-0.5 px-4 py-3 hover:bg-white/[0.04]"
+                href={`/studio/journeys/${pathId}`}
+                className="min-w-0 truncate text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground hover:text-foreground"
               >
-                <span className="text-sm font-medium">{lesson.title}</span>
-                <span className="text-xs text-muted-foreground">
-                  {path?.title} · aula sem texto nem vídeo
-                </span>
+                {group.title}
               </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+              <span className="shrink-0 rounded-full bg-white/[0.06] px-2 py-0.5 text-[11px] tabular-nums text-muted-foreground">
+                {group.lessons.length}
+              </span>
+            </div>
+            <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {group.lessons.map((lesson) => (
+                <li key={lesson.id} className="min-w-0">
+                  <Link
+                    href={`/studio/journeys/${lesson.path_id}/levels/${lesson.id}`}
+                    className="group/lesson flex min-w-0 items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 transition-colors hover:border-white/20 hover:bg-white/[0.05]"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {lesson.title}
+                    </span>
+                    <span className="inline-flex shrink-0 items-center gap-1 text-xs text-[var(--neuma-coral)] opacity-80 group-hover/lesson:opacity-100">
+                      <Plus className="size-3" aria-hidden />
+                      Conteúdo
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -194,8 +247,13 @@ export default async function LibraryPage({
   const activeCategory = category ? catById.get(category) : null;
 
   return (
-    <div className="space-y-10">
-      <div className="space-y-3">
+    <div
+      className={
+        "neuma-mobile-viewport neuma-mobile-scroll-fade relative flex w-full min-w-0 flex-col overflow-y-auto pb-0 " +
+        "desktop:h-auto desktop:min-h-0 desktop:overflow-visible desktop:pb-4"
+      }
+    >
+      <div className="w-full min-w-0 shrink-0 space-y-3">
         <PageHero eyebrow="Studio" title="Biblioteca" />
         <EmptyLessons lessons={emptyLessons ?? []} />
 
@@ -320,6 +378,10 @@ export default async function LibraryPage({
           ) : null}
         </section>
       </div>
+      <div
+        aria-hidden
+        className="h-[calc(5.5rem+env(safe-area-inset-bottom,0px))] shrink-0 desktop:hidden"
+      />
     </div>
   );
 }

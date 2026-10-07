@@ -1,7 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Maximize, Minimize, Pause, Play, Volume2, VolumeX } from "lucide-react";
+import {
+  Loader2,
+  Maximize,
+  Minimize,
+  Pause,
+  Play,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 
 import { VideoEmbed, toEmbedUrl } from "@/components/video-embed";
 import { cn } from "@/lib/utils";
@@ -75,7 +83,15 @@ function NativeVideoPlayer({
   const [isFinePointer, setIsFinePointer] = useState(false);
   const [isTimelineHovered, setIsTimelineHovered] = useState(false);
   const [isTimelinePointerActive, setIsTimelinePointerActive] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
+  const [playError, setPlayError] = useState<string | null>(null);
   const scrubbingRef = useRef(false);
+  const isSeekingRef = useRef(false);
+  const playRequestRef = useRef<Promise<void> | null>(null);
+
+  useEffect(() => {
+    isSeekingRef.current = isSeeking;
+  }, [isSeeking]);
 
   const clearHideControlsTimeout = useCallback(() => {
     if (hideControlsTimeoutRef.current !== null) {
@@ -102,11 +118,29 @@ function NativeVideoPlayer({
     const video = videoRef.current;
     if (!video) return;
 
-    const syncDuration = () => setDuration(video.duration || 0);
+    const syncDuration = () =>
+      setDuration(Number.isFinite(video.duration) ? video.duration : 0);
     const onTimeUpdate = () => {
-      if (!isSeeking) setCurrentTime(video.currentTime);
+      if (!isSeekingRef.current) setCurrentTime(video.currentTime);
+    };
+    const onWaiting = () => {
+      if (!video.paused) setIsBuffering(true);
+    };
+    const onReady = () => setIsBuffering(false);
+    const onError = () => {
+      setIsBuffering(false);
+      setIsPlaying(false);
+      setControlsVisible(true);
+      clearHideControlsTimeout();
+      const code = video.error?.code;
+      setPlayError(
+        code === 4
+          ? "Este browser não consegue reproduzir este formato de vídeo."
+          : "Não foi possível carregar o vídeo.",
+      );
     };
     const onPlay = () => {
+      setPlayError(null);
       setIsPlaying(true);
       // After play, show chrome briefly then hide — surface taps reopen it.
       setControlsVisible(true);
@@ -118,39 +152,60 @@ function NativeVideoPlayer({
     };
     const onPause = () => {
       setIsPlaying(false);
+      setIsBuffering(false);
       clearHideControlsTimeout();
       setControlsVisible(true);
     };
     const onEnded = () => {
       setIsPlaying(false);
+      setIsBuffering(false);
       clearHideControlsTimeout();
       setControlsVisible(true);
     };
 
-    video.addEventListener("timeupdate", onTimeUpdate);
-    video.addEventListener("durationchange", syncDuration);
-    video.addEventListener("loadedmetadata", syncDuration);
-    video.addEventListener("play", onPlay);
-    video.addEventListener("pause", onPause);
-    video.addEventListener("ended", onEnded);
+    const listeners: [string, () => void][] = [
+      ["timeupdate", onTimeUpdate],
+      ["durationchange", syncDuration],
+      ["loadedmetadata", syncDuration],
+      ["play", onPlay],
+      ["pause", onPause],
+      ["ended", onEnded],
+      ["waiting", onWaiting],
+      ["stalled", onWaiting],
+      ["playing", onReady],
+      ["canplay", onReady],
+      ["seeked", onReady],
+      ["error", onError],
+    ];
+    for (const [name, fn] of listeners) video.addEventListener(name, fn);
+
+    // Events may have fired before hydration attached the listeners.
+    syncDuration();
+    if (!video.paused) setIsPlaying(true);
+    if (video.error) onError();
 
     return () => {
-      video.removeEventListener("timeupdate", onTimeUpdate);
-      video.removeEventListener("durationchange", syncDuration);
-      video.removeEventListener("loadedmetadata", syncDuration);
-      video.removeEventListener("play", onPlay);
-      video.removeEventListener("pause", onPause);
-      video.removeEventListener("ended", onEnded);
+      for (const [name, fn] of listeners) video.removeEventListener(name, fn);
     };
-  }, [clearHideControlsTimeout, isSeeking]);
+  }, [clearHideControlsTimeout]);
 
   useEffect(() => {
+    const doc = document as Document & { webkitFullscreenElement?: Element };
     const onFullscreenChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+      setIsFullscreen(
+        Boolean(document.fullscreenElement ?? doc.webkitFullscreenElement),
+      );
     };
+    const video = videoRef.current;
+    const onWebkitEnd = () => setIsFullscreen(false);
     document.addEventListener("fullscreenchange", onFullscreenChange);
-    return () =>
+    document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+    video?.addEventListener("webkitendfullscreen", onWebkitEnd);
+    return () => {
       document.removeEventListener("fullscreenchange", onFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", onFullscreenChange);
+      video?.removeEventListener("webkitendfullscreen", onWebkitEnd);
+    };
   }, []);
 
   useEffect(() => {
@@ -165,22 +220,50 @@ function NativeVideoPlayer({
     return () => mq.removeEventListener("change", sync);
   }, []);
 
-  const playWithSound = useCallback(async () => {
+  const playWithSound = useCallback(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video) return Promise.resolve();
+    if (playRequestRef.current) return playRequestRef.current;
 
+    setPlayError(null);
+    if (video.error) {
+      // Retry after a failed load (e.g. network blip).
+      video.load();
+    }
+    if (video.ended) video.currentTime = 0;
     video.muted = false;
     setMuted(false);
+    if (video.readyState < 3) setIsBuffering(true);
 
-    try {
-      await video.play();
-    } catch {
-      // Autoplay policy or load error — leave paused.
-    }
-  }, []);
-
-  const pauseVideo = useCallback(() => {
-    videoRef.current?.pause();
+    const request = (async () => {
+      try {
+        await video.play();
+      } catch (err) {
+        const name = err instanceof DOMException ? err.name : "";
+        if (name === "AbortError") return;
+        if (name === "NotAllowedError") {
+          // Browser blocked sound: start muted so playback still works.
+          video.muted = true;
+          setMuted(true);
+          try {
+            await video.play();
+            return;
+          } catch {
+            // fall through to error state
+          }
+        }
+        setIsBuffering(false);
+        setPlayError(
+          name === "NotSupportedError"
+            ? "Este browser não consegue reproduzir este formato de vídeo."
+            : "Não foi possível reproduzir o vídeo.",
+        );
+      } finally {
+        playRequestRef.current = null;
+      }
+    })();
+    playRequestRef.current = request;
+    return request;
   }, []);
 
   const togglePlay = useCallback(async () => {
@@ -273,19 +356,37 @@ function NativeVideoPlayer({
     const video = videoRef.current;
     if (!container || !video) return;
 
-    if (document.fullscreenElement) {
-      await document.exitFullscreen();
-      return;
-    }
-
-    if (container.requestFullscreen) {
-      await container.requestFullscreen();
-      return;
-    }
-
+    const doc = document as Document & {
+      webkitFullscreenElement?: Element;
+      webkitExitFullscreen?: () => Promise<void> | void;
+    };
+    const el = container as HTMLDivElement & {
+      webkitRequestFullscreen?: () => Promise<void> | void;
+    };
     const webkitVideo = video as HTMLVideoElement & {
       webkitEnterFullscreen?: () => void;
     };
+
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        return;
+      }
+      if (doc.webkitFullscreenElement) {
+        await doc.webkitExitFullscreen?.();
+        return;
+      }
+      if (el.requestFullscreen) {
+        await el.requestFullscreen();
+        return;
+      }
+      if (el.webkitRequestFullscreen) {
+        await el.webkitRequestFullscreen();
+        return;
+      }
+    } catch {
+      // Element fullscreen refused (iOS) — fall back to the native player.
+    }
     webkitVideo.webkitEnterFullscreen?.();
   }, []);
 
@@ -447,40 +548,67 @@ function NativeVideoPlayer({
         />
       ) : null}
 
-      {/* Center play / pause — the only surface control that pauses. */}
-      {!isPlaying ? (
+      {/* Dim when paused — visual only; the coral control owns the hit target. */}
+      {!isPlaying && !playError ? (
+        <div
+          className="pointer-events-none absolute inset-0 z-20 rounded-xl bg-black/40"
+          aria-hidden
+        />
+      ) : null}
+
+      {/* Center play / pause — large hit box (≥80px), same toggle as chrome. */}
+      {playError ? (
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 rounded-xl bg-black/70 px-4 text-center">
+          <p className="max-w-xs text-sm text-white/90">{playError}</p>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                void playWithSound();
+              }}
+              className="touch-manipulation rounded-full bg-[var(--neuma-coral)] px-4 py-2 text-sm font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+            >
+              Tentar novamente
+            </button>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-full border border-white/20 px-4 py-2 text-sm text-white/90 hover:bg-white/10"
+            >
+              Abrir vídeo
+            </a>
+          </div>
+        </div>
+      ) : isBuffering && isPlaying ? (
+        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
+          <span className="grid size-14 place-items-center rounded-full bg-black/50 text-white">
+            <Loader2 className="size-7 animate-spin" aria-label="A carregar" />
+          </span>
+        </div>
+      ) : !isPlaying || showChrome ? (
         <button
           type="button"
           onClick={(event) => {
             event.stopPropagation();
-            void playWithSound();
+            void togglePlay();
           }}
-          className="absolute inset-0 z-30 flex size-full items-center justify-center rounded-xl bg-black/40 outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-          aria-label="Reproduzir vídeo"
+          onPointerDown={(event) => event.stopPropagation()}
+          onTouchStart={(event) => event.stopPropagation()}
+          className="absolute top-1/2 left-1/2 z-30 flex size-20 -translate-x-1/2 -translate-y-1/2 touch-manipulation items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+          aria-label={isPlaying ? "Pausar vídeo" : "Reproduzir vídeo"}
         >
-          <span className="grid size-14 place-items-center rounded-full bg-[var(--neuma-coral)] text-white">
-            <Play className="ml-0.5 size-7 fill-current" />
+          <span className="grid size-14 place-items-center rounded-full bg-[var(--neuma-coral)] text-white shadow-lg">
+            {isBuffering ? (
+              <Loader2 className="size-7 animate-spin" aria-hidden />
+            ) : isPlaying ? (
+              <Pause className="size-7 fill-current" />
+            ) : (
+              <Play className="ml-0.5 size-7 fill-current" />
+            )}
           </span>
         </button>
-      ) : showChrome ? (
-        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              pauseVideo();
-            }}
-            onTouchEnd={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              pauseVideo();
-            }}
-            className="pointer-events-auto grid size-14 place-items-center rounded-full bg-[var(--neuma-coral)] text-white outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-            aria-label="Pausar vídeo"
-          >
-            <Pause className="size-7 fill-current" />
-          </button>
-        </div>
       ) : null}
 
       {/* Bottom chrome: play/pause, timeline, fullscreen (+ volume on desktop). */}
@@ -703,6 +831,7 @@ export function MediaVideoPlayer({
   return (
     <div className={shellClass} data-orientation={orientation}>
       <NativeVideoPlayer
+        key={url}
         url={url}
         title={title}
         isPortrait={isPortrait}

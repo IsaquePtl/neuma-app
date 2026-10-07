@@ -10,7 +10,10 @@ import {
 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
-import { hasVisibleCheckInFeedback } from "@/lib/feedbacks/student";
+import {
+  hasVisibleCheckInFeedback,
+  levelCheckInsHref,
+} from "@/lib/feedbacks/student";
 import { firstNameFromFullName } from "@/lib/profile/greeting";
 import { loadMentorCalUsername } from "@/lib/students/queries";
 import { Button } from "@/components/ui/button";
@@ -24,22 +27,12 @@ import {
 import { cn } from "@/lib/utils";
 import type {
   CheckInKind,
-  CheckInStatus,
   NodeKind,
 } from "@/lib/types/database.types";
 
-function studentCheckInHref(checkIn: {
-  id: string;
-  node_id: string | null;
-  status: CheckInStatus;
-}) {
+function studentCheckInHref(checkIn: { id: string; node_id: string | null }) {
   if (!checkIn.node_id) return `/checkins/${checkIn.id}`;
-
-  const params = new URLSearchParams({ checkIn: checkIn.id });
-  if (checkIn.status === "pending" || checkIn.status === "needs_revision") {
-    params.set("focus", "checkin");
-  }
-  return `/path/${checkIn.node_id}?${params.toString()}`;
+  return levelCheckInsHref(checkIn.node_id, { checkIn: checkIn.id });
 }
 
 function kindIconEl(kind: NodeKind | CheckInKind | null | undefined) {

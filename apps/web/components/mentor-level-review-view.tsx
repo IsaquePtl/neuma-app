@@ -118,6 +118,95 @@ function SubmissionVideo({
   );
 }
 
+function hasMentorFeedback(feedback: JourneyCheckIn["feedback"]) {
+  return Boolean(
+    feedback &&
+      (feedback.notes?.trim() ||
+        feedback.next_steps?.trim() ||
+        feedback.video_url?.trim()),
+  );
+}
+
+/** Round picker when the student sent more than one check-in for the level. */
+function MentorCheckInRounds({
+  pathId,
+  nodeId,
+  nodeCheckIns,
+  selectedCheckInId,
+}: {
+  pathId: string;
+  nodeId: string;
+  nodeCheckIns: JourneyCheckIn[];
+  selectedCheckInId: string | null;
+}) {
+  if (nodeCheckIns.length < 2) return null;
+
+  const chronological = [...nodeCheckIns].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  );
+  const roundById = new Map(chronological.map((c, i) => [c.id, i + 1]));
+  const newestFirst = [...chronological].reverse();
+
+  return (
+    <nav aria-label="Rondas de check-in" className="min-w-0 space-y-2">
+      <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+        {nodeCheckIns.length} rondas neste nível
+      </p>
+      <ul className="-mx-1 flex min-w-0 snap-x gap-2 overflow-x-auto px-1 pb-1">
+        {newestFirst.map((c) => {
+          const selected = selectedCheckInId === c.id;
+          const withFeedback = hasMentorFeedback(c.feedback);
+          return (
+            <li key={c.id} className="shrink-0 snap-start">
+              <Link
+                href={mentorLevelReviewHref(pathId, nodeId, { checkin: c.id })}
+                aria-current={selected ? "true" : undefined}
+                className={cn(
+                  "flex w-52 flex-col gap-1.5 rounded-2xl border px-3.5 py-3 text-sm transition-colors",
+                  selected
+                    ? "border-[var(--neuma-coral)]/60 bg-[var(--neuma-coral)]/10"
+                    : "border-white/10 bg-black/20 hover:bg-white/5",
+                )}
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <span className="font-heading text-base font-bold tracking-tight">
+                    Ronda {roundById.get(c.id)}
+                  </span>
+                  {c.status === "approved" ? (
+                    <span className="text-xs font-medium text-emerald-400">
+                      Aprovado
+                    </span>
+                  ) : (
+                    <CheckInStatusBadge status={c.status} />
+                  )}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {checkInKindLabel[c.kind]} · {formatDateTime(c.created_at)}
+                </span>
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 text-xs",
+                    withFeedback ? "text-foreground/80" : "text-[var(--neuma-orange)]",
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "size-1.5 rounded-full",
+                      withFeedback ? "bg-emerald-400" : "bg-[var(--neuma-orange)]",
+                    )}
+                  />
+                  {withFeedback ? "Feedback enviado" : "Falta o teu feedback"}
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
 const LEVEL_TABS: { id: MentorLevelTab; label: string }[] = [
   { id: "feedback", label: "Feedback" },
   { id: "nivel", label: "Nível" },
@@ -260,30 +349,12 @@ function SubmissionSectionWithFeedback({
   return (
     <MentorFeedbackProvider {...feedbackPanelProps}>
       <section className="space-y-4">
-        {nodeCheckIns.length > 1 ? (
-          <ul className="flex flex-wrap gap-2">
-            {nodeCheckIns.map((c) => (
-              <li key={c.id}>
-                <Link
-                  href={mentorLevelReviewHref(pathId, nodeId, {
-                    checkin: c.id,
-                  })}
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors",
-                    selectedCheckInId === c.id
-                      ? "border-white/20 bg-white/10"
-                      : "border-white/10 bg-black/20 hover:bg-white/5",
-                  )}
-                >
-                  <span>
-                    {checkInKindLabel[c.kind]} · {formatDateTime(c.created_at)}
-                  </span>
-                  <CheckInStatusBadge status={c.status} />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        <MentorCheckInRounds
+          pathId={pathId}
+          nodeId={nodeId}
+          nodeCheckIns={nodeCheckIns}
+          selectedCheckInId={selectedCheckInId}
+        />
 
         {/* Mobile: separate submission card + feedback card */}
         <div className="space-y-4 desktop:hidden">
@@ -401,30 +472,12 @@ function SubmissionSection({
 
   return (
     <section className="space-y-4">
-      {nodeCheckIns.length > 1 ? (
-        <ul className="flex flex-wrap gap-2">
-          {nodeCheckIns.map((c) => (
-            <li key={c.id}>
-              <Link
-                href={mentorLevelReviewHref(pathId, nodeId, {
-                  checkin: c.id,
-                })}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors",
-                  selectedCheckInId === c.id
-                    ? "border-white/20 bg-white/10"
-                    : "border-white/10 bg-black/20 hover:bg-white/5",
-                )}
-              >
-                <span>
-                  {checkInKindLabel[c.kind]} · {formatDateTime(c.created_at)}
-                </span>
-                <CheckInStatusBadge status={c.status} />
-              </Link>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <MentorCheckInRounds
+        pathId={pathId}
+        nodeId={nodeId}
+        nodeCheckIns={nodeCheckIns}
+        selectedCheckInId={selectedCheckInId}
+      />
 
       <Card className="space-y-5 p-6">
         <SubmissionHeader checkInDetail={checkInDetail} />

@@ -11,6 +11,7 @@ import { appUrl, sendEmail } from "@/lib/email";
 import { generateCheckInDraft } from "@/lib/ai/draft-feedback";
 import { assertCanSubmitCheckIn } from "@/lib/checkins/allowance";
 import { nodeRequiresCheckIn } from "@/lib/nodes/pass-rule";
+import { levelCheckInsHref } from "@/lib/feedbacks/student-shared";
 import type { CheckInKind } from "@/lib/types/database.types";
 import {
   MAX_VIDEO_BYTES,
@@ -198,6 +199,11 @@ export async function submitCheckIn(formData: FormData) {
   revalidatePath("/studio/journeys");
   revalidatePath("/studio/journeys/checkins");
   revalidatePath("/studio/journeys/onboardings");
+  if (nodeId) {
+    revalidatePath(`/path/${nodeId}`);
+    revalidatePath(`/path/${nodeId}/checkins`);
+    redirect(levelCheckInsHref(nodeId, { checkIn: checkInId }));
+  }
   redirect("/session");
 }
 export async function submitMentorshipMessage(formData: FormData) {
