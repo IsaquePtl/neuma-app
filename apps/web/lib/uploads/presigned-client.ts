@@ -19,11 +19,14 @@ export async function uploadViaPresignedPut(
   file: File,
   presigned: { uploadUrl: string; publicUrl: string },
 ): Promise<string> {
+  const contentType = (file.type || "application/octet-stream")
+    .split(";")[0]
+    ?.trim() || "application/octet-stream";
   const res = await fetch(presigned.uploadUrl, {
     method: "PUT",
     body: file,
     headers: {
-      "Content-Type": file.type || "application/octet-stream",
+      "Content-Type": contentType,
     },
   });
 
