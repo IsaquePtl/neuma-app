@@ -12,12 +12,12 @@ import {
   createPresignedUploadPartUrl,
   getPublicUrl,
   multipartPartCount,
-  R2_MULTIPART_PART_BYTES,
-  R2_MULTIPART_THRESHOLD_BYTES,
 } from "@/lib/storage/r2";
 import {
   MAX_LIBRARY_FILE_BYTES,
   MAX_VIDEO_BYTES,
+  R2_MULTIPART_PART_BYTES,
+  R2_MULTIPART_THRESHOLD_BYTES,
   libraryFileTooLargeMessage,
   videoTooLargeMessage,
 } from "@/lib/uploads/video-limits";
@@ -99,16 +99,21 @@ async function buildUploadPlan(
   key: string,
   contentType: string,
   size: number,
+  forceMultipart = false,
 ): Promise<PresignedPutUpload | PresignedMultipartUpload> {
   const publicUrl = getPublicUrl(key);
+  const bytes = Number(size);
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    throw new Error("Ficheiro inválido");
+  }
 
-  if (size <= R2_MULTIPART_THRESHOLD_BYTES) {
+  if (!forceMultipart && bytes <= R2_MULTIPART_THRESHOLD_BYTES) {
     const uploadUrl = await createPresignedPutUrl(key, contentType);
     return { ok: true, mode: "put", uploadUrl, publicUrl, key };
   }
 
   const { uploadId } = await createMultipartUpload(key, contentType);
-  const partCount = multipartPartCount(size);
+  const partCount = multipartPartCount(bytes);
   const parts = await Promise.all(
     Array.from({ length: partCount }, async (_, i) => {
       const partNumber = i + 1;
@@ -132,9 +137,11 @@ async function buildUploadPlan(
   };
 }
 
+type UploadMetaOpts = UploadMeta & { forceMultipart?: boolean };
+
 /** Presigned upload for check-in student videos (browser → R2). */
 export async function getCheckInVideoUploadUrl(
-  meta: UploadMeta,
+  meta: UploadMetaOpts,
 ): Promise<PresignedUploadOutcome> {
   const user = await requireUser();
   if (!user.ok) return user;
@@ -143,12 +150,24 @@ export async function getCheckInVideoUploadUrl(
   if (invalid) return { ok: false, error: invalid };
 
   const key = buildCheckInKey(user.id, meta.filename);
-  return buildUploadPlan(key, meta.contentType, meta.size);
+  try {
+    return await buildUploadPlan(
+      key,
+      meta.contentType,
+      meta.size,
+      Boolean(meta.forceMultipart),
+    );
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Falha a preparar o upload",
+    };
+  }
 }
 
 /** Presigned upload for mentor feedback videos. */
 export async function getMentorFeedbackVideoUploadUrl(
-  meta: UploadMeta,
+  meta: UploadMetaOpts,
 ): Promise<PresignedUploadOutcome> {
   const user = await requireMentor();
   if (!user.ok) return user;
@@ -157,12 +176,24 @@ export async function getMentorFeedbackVideoUploadUrl(
   if (invalid) return { ok: false, error: invalid };
 
   const key = buildMentorFeedbackKey(user.id, meta.filename);
-  return buildUploadPlan(key, meta.contentType, meta.size);
+  try {
+    return await buildUploadPlan(
+      key,
+      meta.contentType,
+      meta.size,
+      Boolean(meta.forceMultipart),
+    );
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Falha a preparar o upload",
+    };
+  }
 }
 
 /** Presigned upload for library assets (video, image, file). */
 export async function getLibraryAssetUploadUrl(
-  meta: UploadMeta & { categoryId?: string | null },
+  meta: UploadMetaOpts & { categoryId?: string | null },
 ): Promise<PresignedUploadOutcome> {
   const user = await requireMentor();
   if (!user.ok) return user;
@@ -171,7 +202,19 @@ export async function getLibraryAssetUploadUrl(
   if (invalid) return { ok: false, error: invalid };
 
   const key = buildLibraryKey(meta.categoryId ?? "", user.id, meta.filename);
-  return buildUploadPlan(key, meta.contentType, meta.size);
+  try {
+    // Biblioteca: vídeos longos — multipart cedo (acima de 5 MiB, mínimo
+    // de parte R2) para nunca bater no 413 do proxy Cloudflare (~100 MB).
+    const force =
+      Boolean(meta.forceMultipart) ||
+      Number(meta.size) > 5 * 1024 * 1024;
+    return await buildUploadPlan(key, meta.contentType, meta.size, force);
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Falha a preparar o upload",
+    };
+  }
 }
 
 export async function finishMultipartUpload(input: {

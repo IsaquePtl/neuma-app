@@ -1,9 +1,16 @@
 import {
   cancelMultipartUpload,
   finishMultipartUpload,
+  getCheckInVideoUploadUrl,
+  getLibraryAssetUploadUrl,
+  getMentorFeedbackVideoUploadUrl,
   type PresignedMultipartUpload,
   type PresignedPutUpload,
+  type PresignedUploadOutcome,
 } from "@/lib/actions/r2-uploads";
+import { R2_MULTIPART_THRESHOLD_BYTES } from "@/lib/uploads/video-limits";
+
+export type R2UploadKind = "library" | "check-in" | "mentor-feedback";
 
 /**
  * Upload a file directly to R2 via a presigned PUT URL (bypasses Next.js body limits).
@@ -21,8 +28,19 @@ export async function uploadViaPresignedPut(
   });
 
   if (!res.ok) {
+    let host = "R2";
+    try {
+      host = new URL(presigned.uploadUrl).host;
+    } catch {
+      /* ignore */
+    }
+    if (res.status === 413) {
+      throw new Error(
+        `Ficheiro demasiado grande para um único pedido (413 em ${host}). A tentar multipart…`,
+      );
+    }
     throw new Error(
-      `Falha no upload (${res.status}). Verifica CORS no bucket R2 e as credenciais.`,
+      `Falha no upload (${res.status} em ${host}). Verifica CORS no bucket R2.`,
     );
   }
 
@@ -33,7 +51,6 @@ function normalizeEtag(raw: string | null): string | null {
   if (!raw) return null;
   const trimmed = raw.trim();
   if (!trimmed) return null;
-  // R2/S3 devolvem ETag com aspas; CompleteMultipartUpload aceita com ou sem.
   return trimmed;
 }
 
@@ -48,7 +65,6 @@ export async function uploadViaPresignedMultipart(
   const completed: { partNumber: number; etag: string }[] = [];
 
   try {
-    // Até 3 partes em paralelo — equilíbrio entre velocidade e o browser.
     const concurrency = 3;
     let next = 0;
 
@@ -65,8 +81,17 @@ export async function uploadViaPresignedMultipart(
         body: blob,
       });
       if (!res.ok) {
+        let host = "R2";
+        try {
+          host = new URL(part.uploadUrl).host;
+        } catch {
+          /* ignore */
+        }
         throw new Error(
-          `Falha na parte ${part.partNumber} (${res.status}). Verifica CORS no bucket R2.`,
+          `Falha na parte ${part.partNumber} (${res.status} em ${host}).` +
+            (res.status === 413
+              ? " Parte ainda demasiado grande."
+              : " Verifica CORS no bucket R2."),
         );
       }
       const etag = normalizeEtag(res.headers.get("etag"));
@@ -108,12 +133,66 @@ export async function uploadViaPresignedMultipart(
   }
 }
 
+async function requestUploadPlan(
+  kind: R2UploadKind,
+  file: File,
+  opts: { categoryId?: string | null; forceMultipart?: boolean },
+): Promise<PresignedUploadOutcome> {
+  const meta = {
+    filename: file.name,
+    contentType: file.type || "application/octet-stream",
+    size: file.size,
+    forceMultipart: opts.forceMultipart,
+  };
+  if (kind === "library") {
+    return getLibraryAssetUploadUrl({ ...meta, categoryId: opts.categoryId });
+  }
+  if (kind === "mentor-feedback") {
+    return getMentorFeedbackVideoUploadUrl(meta);
+  }
+  return getCheckInVideoUploadUrl(meta);
+}
+
+/**
+ * Escolhe PUT ou multipart. Se o PUT devolver 413 (teto Cloudflare ~100 MB),
+ * repete automaticamente em multipart.
+ */
 export async function uploadToR2Presigned(
   file: File,
   plan: PresignedPutUpload | PresignedMultipartUpload,
+  opts?: { kind?: R2UploadKind; categoryId?: string | null },
 ): Promise<string> {
-  if (plan.mode === "put") {
-    return uploadViaPresignedPut(file, plan);
+  const preferMultipart =
+    file.size > R2_MULTIPART_THRESHOLD_BYTES || plan.mode === "multipart";
+
+  if (preferMultipart && plan.mode === "put" && opts?.kind) {
+    const forced = await requestUploadPlan(opts.kind, file, {
+      categoryId: opts.categoryId,
+      forceMultipart: true,
+    });
+    if (!forced.ok) throw new Error(forced.error);
+    if (forced.mode !== "multipart") {
+      throw new Error("Não foi possível iniciar upload multipart.");
+    }
+    return uploadViaPresignedMultipart(file, forced);
   }
-  return uploadViaPresignedMultipart(file, plan);
+
+  if (plan.mode === "multipart") {
+    return uploadViaPresignedMultipart(file, plan);
+  }
+
+  try {
+    return await uploadViaPresignedPut(file, plan);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    if (!message.includes("413") || !opts?.kind) throw err;
+
+    const forced = await requestUploadPlan(opts.kind, file, {
+      categoryId: opts.categoryId,
+      forceMultipart: true,
+    });
+    if (!forced.ok) throw new Error(forced.error);
+    if (forced.mode !== "multipart") throw err;
+    return uploadViaPresignedMultipart(file, forced);
+  }
 }
