@@ -14,7 +14,6 @@ import { SessionBookingSection } from "@/components/session-booking-section";
 import { SupportMediaToggle } from "@/components/support-media-toggle";
 import { PhaseReviewChecklist } from "@/components/phase-review-checklist";
 import type { PhaseReview } from "@/lib/nodes/phase-review";
-import { markNodeSeen } from "@/lib/actions/journey-level";
 import { MarkSeenButton } from "@/components/mark-seen-button";
 import { formatDate, nodeKindLabel, phaseKeyLabel } from "@/lib/labels";
 import {
@@ -182,10 +181,7 @@ export function CheckInActions({
         Já visto
       </Button>
     ) : (
-      <form action={markNodeSeen} className="flex min-w-0 flex-col gap-2">
-        <input type="hidden" name="node_id" value={node.id} />
-        <MarkSeenButton />
-      </form>
+      <MarkSeenButton nodeId={node.id} />
     )
   ) : null;
 

@@ -71,49 +71,62 @@ export async function advanceLevel(formData: FormData) {
  * Aluno marca um nível `pass_rule=none` como visto e avança.
  * Check-in e quiz têm os seus próprios gates. Mentor continua a poder usar advanceLevel.
  */
-export async function markNodeSeen(formData: FormData) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Não autenticado");
+export async function markNodeSeen(
+  formData: FormData,
+): Promise<{ error: string } | void> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { error: "Não autenticado" };
 
-  const nodeId = String(formData.get("node_id") ?? "");
-  if (!nodeId) throw new Error("Dados em falta");
+    const nodeId = String(formData.get("node_id") ?? "");
+    if (!nodeId) return { error: "Dados em falta" };
 
-  const { data: node } = await supabase
-    .from("nodes")
-    .select(
-      "id, path_id, kind, status, pass_rule, path:paths!inner(id, student_id, status)",
-    )
-    .eq("id", nodeId)
-    .maybeSingle();
-  if (!node) throw new Error("Nível não encontrado");
+    const { data: node } = await supabase
+      .from("nodes")
+      .select(
+        "id, path_id, kind, status, pass_rule, path:paths!inner(id, student_id, status)",
+      )
+      .eq("id", nodeId)
+      .maybeSingle();
+    if (!node) return { error: "Nível não encontrado" };
 
-  const path = Array.isArray(node.path) ? node.path[0] : node.path;
-  if (!path || path.student_id !== user.id) {
-    throw new Error("Este nível não pertence ao teu percurso.");
-  }
-  if (path.status !== "active") {
-    throw new Error(
-      path.status === "paused"
-        ? "Este percurso está em pausa."
-        : "Este percurso ainda não está activo.",
-    );
-  }
-  if (node.status !== "active") {
-    throw new Error("Só podes concluir o nível activo.");
-  }
-  if (!nodeAllowsMarkSeen(node.pass_rule)) {
-    throw new Error(
-      nodeRequiresCheckIn(node.pass_rule)
-        ? "Este nível pede check-in — envia o check-in em vez de marcar visto."
-        : "Este nível não se conclui só com «visto».",
-    );
-  }
+    const path = Array.isArray(node.path) ? node.path[0] : node.path;
+    if (!path || path.student_id !== user.id) {
+      return { error: "Este nível não pertence ao teu percurso." };
+    }
+    // Um percurso já concluído pode ainda ter o nível activo (visto) por fechar.
+    if (path.status === "paused" || path.status === "draft") {
+      return {
+        error:
+          path.status === "paused"
+            ? "Este percurso está em pausa."
+            : "Este percurso ainda não está activo.",
+      };
+    }
+    if (node.status !== "active") {
+      return { error: "Só podes concluir o nível activo." };
+    }
+    if (!nodeAllowsMarkSeen(node.pass_rule)) {
+      return {
+        error: nodeRequiresCheckIn(node.pass_rule)
+          ? "Este nível pede check-in — envia o check-in em vez de marcar visto."
+          : "Este nível não se conclui só com «visto».",
+      };
+    }
 
-  await completeCurrentAndActivateNext(supabase, node.id, path.id);
-  await revalidateJourney(supabase, path.id, user.id, node.id);
+    await completeCurrentAndActivateNext(supabase, node.id, path.id);
+    await revalidateJourney(supabase, path.id, user.id, node.id);
+  } catch (err) {
+    return {
+      error:
+        err instanceof Error
+          ? err.message
+          : "Não foi possível marcar como visto.",
+    };
+  }
 }
 
 function resolveExtensionWeeks(formData: FormData): number {
