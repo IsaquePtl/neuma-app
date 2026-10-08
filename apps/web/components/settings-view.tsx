@@ -18,8 +18,19 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { profileInitials } from "@/components/user-avatar";
 
-/** ~43–51 chars/line at max-w-sm (384px); 3 lines → ~130–150 chars */
 const BIO_MAX_CHARS = 150;
+const BIO_MAX_LINES = 3;
+const BIO_LINE_HEIGHT = 1.625;
+
+function bioLineBox(el: HTMLTextAreaElement) {
+  const fontSize = parseFloat(getComputedStyle(el).fontSize) || 15;
+  const computed = parseFloat(getComputedStyle(el).lineHeight);
+  const lineHeight =
+    Number.isFinite(computed) && computed < fontSize * 3
+      ? computed
+      : fontSize * BIO_LINE_HEIGHT;
+  return { lineHeight, maxPx: lineHeight * BIO_MAX_LINES };
+}
 
 export function SettingsView({
   name,
@@ -49,6 +60,7 @@ export function SettingsView({
   const [draftName, setDraftName] = useState(name ?? "");
   const [savedBio, setSavedBio] = useState(bio ?? "");
   const [draftBio, setDraftBio] = useState(bio ?? "");
+  const [editingBio, setEditingBio] = useState(false);
   const [instagram, setInstagram] = useState(
     normalizeInstagramHandle(initialInstagram ?? ""),
   );
@@ -64,7 +76,6 @@ export function SettingsView({
   const [editingSocial, setEditingSocial] = useState<
     null | "instagram" | "whatsapp"
   >(null);
-  const [editingBio, setEditingBio] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const socialInputRef = useRef<HTMLInputElement>(null);
@@ -100,12 +111,21 @@ export function SettingsView({
   function syncBioHeight() {
     const el = bioRef.current;
     if (!el) return;
+    const { maxPx } = bioLineBox(el);
     el.style.height = "auto";
-    const maxPx =
-      parseFloat(getComputedStyle(el).fontSize) *
-      parseFloat(getComputedStyle(el).lineHeight) *
-      3;
     el.style.height = `${Math.min(el.scrollHeight, maxPx)}px`;
+  }
+
+  function bioFits(el: HTMLTextAreaElement, value: string) {
+    const previous = el.value;
+    const previousHeight = el.style.height;
+    el.value = value;
+    el.style.height = "auto";
+    const { maxPx } = bioLineBox(el);
+    const fits = el.scrollHeight <= maxPx + 1;
+    el.value = previous;
+    el.style.height = previousHeight;
+    return fits;
   }
 
   useEffect(() => {
@@ -244,7 +264,7 @@ export function SettingsView({
         </p>
       </header>
 
-      <div className="mt-8 flex min-h-0 shrink flex-col items-center gap-2 desktop:mt-0">
+      <div className="mt-8 flex shrink-0 flex-col items-center gap-2 desktop:mt-0">
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
@@ -287,82 +307,94 @@ export function SettingsView({
           {avatarPending ? "A carregar foto…" : "Toca para alterar a fotografia"}
         </p>
 
-        <div className="w-full max-w-sm space-y-1.5 text-center">
+        <div className="w-full max-w-sm text-center">
           <p className="text-xl font-bold tracking-tight sm:text-2xl">
             {displayName ?? "Sem nome"}
           </p>
           {status ? (
             <p
               aria-live="polite"
-              className="text-xs leading-tight text-emerald-400/90"
+              className="mt-1.5 text-xs leading-tight text-emerald-400/90"
             >
               {status}
             </p>
           ) : null}
-
-          <div
-            ref={bioSectionRef}
-            className="flex w-full max-w-sm flex-col items-center"
-          >
-            <textarea
-              ref={bioRef}
-              id="bio"
-              name="bio"
-              value={draftBio}
-              onChange={(e) => setDraftBio(e.target.value)}
-              onBlur={onBioBlur}
-              onClick={() => !editingBio && startBioEdit()}
-              onFocus={() => !editingBio && startBioEdit()}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  e.preventDefault();
-                  onCancelBio();
-                }
-              }}
-              readOnly={!editingBio}
-              placeholder="Uma linha sobre ti…"
-              maxLength={BIO_MAX_CHARS}
-              rows={1}
-              aria-label="Bio"
-              className={cn(
-                "block w-full resize-none overflow-hidden bg-transparent",
-                "text-center text-[0.9375rem] leading-relaxed outline-none",
-                "placeholder:text-muted-foreground/45 cursor-text",
-                editingBio ? "text-foreground" : "text-muted-foreground",
-              )}
-            />
-            {editingBio ? (
-              <div className="mt-1.5 flex w-full items-center justify-between px-1">
-                <button
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={onCancelBio}
-                  className="text-xs text-muted-foreground/80 transition-colors hover:text-foreground"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={onSaveBio}
-                  disabled={bioPending}
-                  aria-label={bioPending ? "A guardar bio" : "Guardar bio"}
-                  className={cn(
-                    "grid size-7 place-items-center rounded-full",
-                    "border border-white/10 bg-white/[0.06] text-muted-foreground",
-                    "transition-colors hover:bg-white/[0.1] hover:text-foreground",
-                    "disabled:cursor-not-allowed disabled:opacity-50",
-                  )}
-                >
-                  <Check className="size-3.5" strokeWidth={2.5} />
-                </button>
-              </div>
-            ) : null}
-          </div>
         </div>
       </div>
 
-      <div className="mt-auto shrink-0 space-y-3 pt-2 desktop:mt-0 desktop:pt-2">
+      <div
+        ref={bioSectionRef}
+        className="mx-auto mt-6 flex w-full max-w-sm shrink-0 flex-col items-center"
+      >
+        <textarea
+          ref={bioRef}
+          id="bio"
+          name="bio"
+          value={draftBio}
+          onChange={(e) => {
+            const next = e.target.value;
+            if (!bioFits(e.target, next)) {
+              e.target.value = draftBio;
+              syncBioHeight();
+              return;
+            }
+            setDraftBio(next);
+          }}
+          onBlur={onBioBlur}
+          onClick={() => !editingBio && startBioEdit()}
+          onFocus={() => !editingBio && startBioEdit()}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              onCancelBio();
+              return;
+            }
+            if (e.key === "Enter" && !bioFits(e.currentTarget, `${draftBio}\n`)) {
+              e.preventDefault();
+            }
+          }}
+          readOnly={!editingBio}
+          placeholder="Uma linha sobre ti…"
+          maxLength={BIO_MAX_CHARS}
+          rows={1}
+          aria-label="Bio"
+          className={cn(
+            "block w-full max-h-[4.875em] resize-none overflow-hidden bg-transparent",
+            "text-center text-[0.9375rem] leading-relaxed outline-none",
+            "placeholder:text-muted-foreground/45 cursor-text",
+            editingBio ? "text-foreground" : "text-muted-foreground",
+          )}
+        />
+        {editingBio ? (
+          <div className="mt-1.5 flex w-full items-center justify-between px-1">
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={onCancelBio}
+              className="text-xs text-muted-foreground/80 transition-colors hover:text-foreground"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={onSaveBio}
+              disabled={bioPending}
+              aria-label={bioPending ? "A guardar bio" : "Guardar bio"}
+              className={cn(
+                "grid size-7 place-items-center rounded-full",
+                "border border-white/10 bg-white/[0.06] text-muted-foreground",
+                "transition-colors hover:bg-white/[0.1] hover:text-foreground",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+              )}
+            >
+              <Check className="size-3.5" strokeWidth={2.5} />
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-6 shrink-0 space-y-3 desktop:mt-6">
         <div className="space-y-2">
           <div className="space-y-2">
             <Input

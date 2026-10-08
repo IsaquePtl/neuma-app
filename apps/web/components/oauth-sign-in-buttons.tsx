@@ -62,6 +62,37 @@ function AppleIcon({ className }: { className?: string }) {
 const OAUTH_BUTTON_CLASS =
   "h-11 flex-1 border border-white/12 bg-white/[0.06] text-foreground hover:bg-white/12";
 
+/** Fundo da app, para a folha não nascer branca enquanto o URL do Google chega. */
+function paintSheetPlaceholder(sheet: Window) {
+  try {
+    sheet.document.open();
+    sheet.document.write(
+      '<!DOCTYPE html><html><head><meta name="color-scheme" content="dark"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Google</title><style>html,body{margin:0;height:100%;background:#161616}</style></head><body></body></html>',
+    );
+    sheet.document.close();
+  } catch {
+    // A folha já está noutra origem.
+  }
+}
+
+function requestGoogleOauthUrl(
+  intent: "login" | "signup",
+  nextPath: string,
+  forSheet: boolean,
+) {
+  const redirectTo = `${getBrowserAppOrigin()}/auth/callback?intent=${intent}&next=${encodeURIComponent(nextPath)}${forSheet ? "&sheet=1" : ""}`;
+  return createClient()
+    .auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo,
+        skipBrowserRedirect: true,
+        queryParams: { prompt: "select_account" },
+      },
+    })
+    .then(({ data, error }) => (error || !data?.url ? null : data.url));
+}
+
 /**
  * No iPad/iOS o toque no Google faz o visualViewport (barra do Safari) deslocar
  * o documento para cima. A parede é absolute, por isso vai atrás e deixa de
@@ -198,6 +229,9 @@ export function OAuthSignInButtons({
   const navigating = useRef(false);
   const sheetWatch = useRef<number | null>(null);
   const sheetChannel = useRef<BroadcastChannel | null>(null);
+  const sheetUrl = useRef<string | null>(null);
+  const sheetUrlTask = useRef<Promise<string | null> | null>(null);
+  const refreshSheetUrl = useRef<() => Promise<string | null>>(async () => null);
 
   function stopSheetWatch() {
     if (sheetWatch.current != null) {
@@ -224,12 +258,44 @@ export function OAuthSignInButtons({
     return () => window.removeEventListener("pageshow", onPageShow);
   }, []);
 
+  // O URL do Google prepara-se antes do toque. Assim a folha abre já no
+  // ecrã de contas, em vez de accounts.google.com em branco.
+  useEffect(() => {
+    if (!prefersOauthSheet()) return;
+    let alive = true;
+    let task: Promise<string | null> | null = null;
+
+    const run = () => {
+      sheetUrl.current = null;
+      task = requestGoogleOauthUrl(intent, nextPath, true);
+      sheetUrlTask.current = task;
+      void task.then((url) => {
+        if (!alive || sheetUrlTask.current !== task) return;
+        sheetUrl.current = url;
+        if (!url) sheetUrlTask.current = null;
+      });
+      return task;
+    };
+
+    refreshSheetUrl.current = run;
+    run();
+
+    return () => {
+      alive = false;
+      if (sheetUrlTask.current === task) {
+        sheetUrlTask.current = null;
+        sheetUrl.current = null;
+      }
+    };
+  }, [intent, nextPath]);
+
   function failSignIn(sheet: Window | null, message: string) {
     navigating.current = false;
     setPending(null);
     releaseAuthBackground();
     sheet?.close();
     setError(message);
+    void refreshSheetUrl.current();
   }
 
   function watchOauthSheet(sheet: Window, fallbackNext: string) {
@@ -267,6 +333,7 @@ export function OAuthSignInButtons({
         navigating.current = false;
         setPending(null);
         releaseAuthBackground();
+        void refreshSheetUrl.current();
       }, 400);
     }, 400);
   }
@@ -294,42 +361,40 @@ export function OAuthSignInButtons({
     // Um URL externo faz o iOS mostrar a aba por cima da app, em vez de
     // substituir o ecrã. No desktop continua na mesma janela.
     const useSheet = prefersOauthSheet();
+    const ready = useSheet ? sheetUrl.current : null;
     const sheet = useSheet
-      ? window.open("https://accounts.google.com/", OAUTH_SHEET_WINDOW)
+      ? window.open(ready ?? "about:blank", OAUTH_SHEET_WINDOW)
       : null;
+
+    if (sheet && !ready) paintSheetPlaceholder(sheet);
+    if (ready) {
+      sheetUrl.current = null;
+      sheetUrlTask.current = null;
+    }
 
     navigating.current = true;
     setPending(provider);
     if (!sheet) freezeAuthBackground();
 
-    const supabase = createClient();
-    const redirectTo = `${getBrowserAppOrigin()}/auth/callback?intent=${intent}&next=${encodeURIComponent(nextPath)}${sheet ? "&sheet=1" : ""}`;
+    const url =
+      ready ??
+      (await (useSheet
+        ? (sheetUrlTask.current ?? requestGoogleOauthUrl(intent, nextPath, true))
+        : requestGoogleOauthUrl(intent, nextPath, false)));
 
-    const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo,
-        skipBrowserRedirect: true,
-        ...(provider === "google"
-          ? { queryParams: { prompt: "select_account" } }
-          : {}),
-        ...(provider === "apple" ? { scopes: "name email" } : {}),
-      },
-    });
-
-    if (oauthError || !data?.url) {
+    if (!url) {
       failSignIn(sheet, "Não foi possível iniciar sessão. Tenta outra opção.");
       return;
     }
 
     if (sheet) {
-      sheet.location.replace(data.url);
+      if (!ready) sheet.location.replace(url);
       watchOauthSheet(sheet, nextPath);
       return;
     }
 
     requestAnimationFrame(() => {
-      window.location.assign(data.url);
+      window.location.assign(url);
     });
   }
 
