@@ -8,11 +8,11 @@ export default function LegalLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <div className="legal-shell absolute inset-0 z-10 flex flex-col overflow-hidden bg-[#161616] text-foreground">
-      <div className="legal-back shrink-0 px-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
+      <div className="legal-back flex h-[calc(4rem+env(safe-area-inset-top,0px))] shrink-0 items-center px-2 pt-[env(safe-area-inset-top,0px)]">
         <LegalBackButton />
       </div>
       <div className="legal-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
-        <div className="mx-auto w-full max-w-2xl px-5 pt-4 pb-[max(2.5rem,env(safe-area-inset-bottom,0px))]">
+        <div className="mx-auto w-full max-w-2xl px-5 pt-10 pb-[max(2.5rem,env(safe-area-inset-bottom,0px))]">
           <Link href="/login" className="mb-10 inline-flex items-center gap-3">
             <Image
               src="/brand/mark-white.png"

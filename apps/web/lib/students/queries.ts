@@ -4,6 +4,7 @@ import {
   ORPHAN_CHECKIN_LABEL,
 } from "@/lib/labels";
 import { defaultPassRule, effectivePassRule } from "@/lib/nodes/pass-rule";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import type {
@@ -351,7 +352,7 @@ export async function loadMyPathWithNodes(studentId: string): Promise<{
 
 /** Liga a capa do item da biblioteca ao nível que usa o mesmo vídeo. */
 export async function attachLibraryPosters<T extends { resource_url: string | null }>(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  _supabase: Awaited<ReturnType<typeof createClient>>,
   nodes: T[],
 ): Promise<Array<T & { poster_url: string | null }>> {
   const urls = [
@@ -365,7 +366,9 @@ export async function attachLibraryPosters<T extends { resource_url: string | nu
     return nodes.map((node) => ({ ...node, poster_url: null }));
   }
 
-  const { data } = await supabase
+  // A biblioteca só é legível pelo mentor. O aluno já tem o URL do vídeo no
+  // nível; aqui só se busca a capa desses URLs.
+  const { data } = await createAdminClient()
     .from("library_assets")
     .select("url, cover_url")
     .in("url", urls)
@@ -373,12 +376,15 @@ export async function attachLibraryPosters<T extends { resource_url: string | nu
 
   const byUrl = new Map<string, string>();
   for (const row of data ?? []) {
-    if (row.url && row.cover_url) byUrl.set(row.url, row.cover_url);
+    const key = row.url?.trim();
+    if (key && row.cover_url) byUrl.set(key, row.cover_url);
   }
 
   return nodes.map((node) => ({
     ...node,
-    poster_url: node.resource_url ? (byUrl.get(node.resource_url) ?? null) : null,
+    poster_url: node.resource_url
+      ? (byUrl.get(node.resource_url.trim()) ?? null)
+      : null,
   }));
 }
 

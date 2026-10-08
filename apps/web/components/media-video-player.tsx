@@ -45,10 +45,13 @@ const chromeBtnClass =
 /**
  * Native `<video>` with custom controls.
  *
- * Before the first play: cover (if any), black shade, and only the center
- * play button — no timeline. After that, chrome shows on hover (desktop)
- * or after play/pause, and hides after 2.5s. A click or tap anywhere on
- * the picture toggles play. The timeline and the other controls do not.
+ * Before the first play: the cover is the picture (the video file stays
+ * unloaded so it cannot paint black over it). Play hides the cover.
+ * Desktop: a click anywhere on the picture toggles play. Mobile: only the
+ * center button does, with a larger hit area than the orange circle.
+ * After the first play, chrome shows on hover (desktop) or after
+ * play/pause, and hides after 2.5s. The timeline and the other controls
+ * do not toggle playback.
  *
  * Mobile volume (iOS silent switch): video starts muted; first play gesture
  * unmute before play(). playsInline avoids forced fullscreen on iPhone.
@@ -241,7 +244,10 @@ function NativeVideoPlayer({
     if (playRequestRef.current) return playRequestRef.current;
 
     setPlayError(null);
-    if (video.error) {
+    if (!video.getAttribute("src")) {
+      video.preload = "auto";
+      video.src = url;
+    } else if (video.error) {
       // Retry after a failed load (e.g. network blip).
       video.load();
     }
@@ -279,7 +285,7 @@ function NativeVideoPlayer({
     })();
     playRequestRef.current = request;
     return request;
-  }, []);
+  }, [url]);
 
   const togglePlay = useCallback(async () => {
     const video = videoRef.current;
@@ -527,18 +533,33 @@ function NativeVideoPlayer({
       onKeyDown={handleContainerKeyDown}
       onMouseEnter={revealControlsFromHover}
       onMouseMove={revealControlsFromHover}
+      style={
+        poster && !hasStarted
+          ? {
+              backgroundImage: `url("${poster.replaceAll('"', "%22")}")`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+            }
+          : undefined
+      }
     >
+      {poster ? (
+        <link rel="preload" as="image" href={poster} fetchPriority="high" />
+      ) : null}
       <video
         ref={videoRef}
-        src={url}
+        src={poster ? undefined : url}
         poster={poster ?? undefined}
         playsInline
         muted
-        preload="metadata"
+        preload={poster ? "none" : "metadata"}
         tabIndex={-1}
         onLoadedMetadata={onLoadedMetadata}
         onClick={(event) => event.preventDefault()}
-        className="pointer-events-none absolute inset-0 size-full object-contain outline-none"
+        className={cn(
+          "pointer-events-none absolute inset-0 size-full object-contain outline-none",
+          poster && !hasStarted && "invisible",
+        )}
         aria-label={title ?? "Vídeo"}
       >
         <track kind="captions" />
@@ -548,21 +569,19 @@ function NativeVideoPlayer({
         <img
           src={poster}
           alt=""
+          fetchPriority="high"
+          loading="eager"
+          decoding="async"
           className="pointer-events-none absolute inset-0 z-[5] size-full object-cover"
         />
       ) : null}
 
-      {/* Whole picture is play/pause. Chrome and the center button sit above. */}
-      {!playError ? (
+      {/* Desktop: the whole picture toggles play. Mobile uses the center button. */}
+      {isFinePointer && !playError ? (
         <button
           type="button"
           tabIndex={-1}
           onClick={handleSurfaceActivate}
-          onTouchEnd={(event) => {
-            // Touch: avoid 300ms quirks; don't let it also fire as pause.
-            event.preventDefault();
-            handleSurfaceActivate(event);
-          }}
           className="absolute inset-0 z-10 size-full cursor-pointer border-0 bg-transparent p-0 outline-none"
           aria-hidden={!isPlaying || showChrome ? true : undefined}
           aria-label={isPlaying ? "Pausar vídeo" : "Reproduzir vídeo"}
@@ -572,7 +591,10 @@ function NativeVideoPlayer({
       {/* Dim when paused — visual only; the coral control owns the hit target. */}
       {!isPlaying && !playError ? (
         <div
-          className="pointer-events-none absolute inset-0 z-20 rounded-xl bg-black/40"
+          className={cn(
+            "pointer-events-none absolute inset-0 z-20 rounded-xl",
+            poster && !hasStarted ? "bg-black/20" : "bg-black/40",
+          )}
           aria-hidden
         />
       ) : null}
@@ -608,7 +630,7 @@ function NativeVideoPlayer({
             <Loader2 className="size-7 animate-spin" aria-label="A carregar" />
           </span>
         </div>
-      ) : !isPlaying || showChrome ? (
+      ) : !isPlaying || showChrome || !isFinePointer ? (
         <button
           type="button"
           onClick={(event) => {
@@ -616,19 +638,23 @@ function NativeVideoPlayer({
             void togglePlay();
           }}
           onPointerDown={(event) => event.stopPropagation()}
-          onTouchStart={(event) => event.stopPropagation()}
-          className="absolute top-1/2 left-1/2 z-30 flex size-44 -translate-x-1/2 -translate-y-1/2 touch-manipulation items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-white/40 sm:size-28"
+          className={cn(
+            "absolute top-1/2 left-1/2 z-30 flex -translate-x-1/2 -translate-y-1/2 touch-manipulation items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-white/40",
+            isFinePointer ? "size-28" : "size-56",
+          )}
           aria-label={isPlaying ? "Pausar vídeo" : "Reproduzir vídeo"}
         >
-          <span className="grid size-14 place-items-center rounded-full bg-[color-mix(in_srgb,var(--neuma-coral)_82%,transparent)] text-white shadow-lg">
-            {isBuffering ? (
-              <Loader2 className="size-7 animate-spin" aria-hidden />
-            ) : isPlaying ? (
-              <Pause className="size-7 fill-current" />
-            ) : (
-              <Play className="ml-0.5 size-7 fill-current" />
-            )}
-          </span>
+          {!isPlaying || showChrome ? (
+            <span className="grid size-14 place-items-center rounded-full bg-[color-mix(in_srgb,var(--neuma-coral)_82%,transparent)] text-white shadow-lg">
+              {isBuffering ? (
+                <Loader2 className="size-7 animate-spin" aria-hidden />
+              ) : isPlaying ? (
+                <Pause className="size-7 fill-current" />
+              ) : (
+                <Play className="ml-0.5 size-7 fill-current" />
+              )}
+            </span>
+          ) : null}
         </button>
       ) : null}
 

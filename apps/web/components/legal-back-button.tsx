@@ -17,10 +17,9 @@ export function LegalBackButton() {
         router.push("/login");
       }}
       aria-label="Voltar"
-      className="inline-flex items-center gap-0.5 rounded-full py-1 pr-2 pl-0.5 text-sm text-muted-foreground transition-colors active:text-foreground"
+      className="ml-0.5 grid size-12 place-items-center rounded-full text-foreground transition-colors active:bg-white/10"
     >
-      <ChevronLeft className="size-4" strokeWidth={2} aria-hidden />
-      Voltar
+      <ChevronLeft className="size-8" strokeWidth={2.25} aria-hidden />
     </button>
   );
 }
