@@ -44,11 +44,11 @@ function mentorWhatsAppUrl(whatsapp: string | null | undefined) {
 }
 
 /**
- * Mobile/tablet: coluna centrada no ecrã (ligeiramente mais abaixo do centro),
- * como em Geral. Desktop: coluna de leitura centrada na área ao lado da sidebar.
+ * Mobile/tablet: coluna centrada na área acima da menubar flutuante.
+ * Desktop: coluna de leitura centrada na área ao lado da sidebar.
  */
 const SESSION_VIEWPORT =
-  "neuma-mobile-viewport flex w-full flex-col justify-center gap-3 overflow-hidden overscroll-none pb-2 " +
+  "neuma-mobile-viewport flex w-full flex-col justify-center gap-3 overflow-hidden overscroll-none pb-[calc(5rem+2.75rem)] " +
   "desktop:mx-auto desktop:max-w-3xl desktop:min-h-0 desktop:flex-1 desktop:justify-center desktop:gap-6 desktop:overflow-visible desktop:pb-4";
 
 /** Gradient discreto no botão de feedback (activo e vazio). */

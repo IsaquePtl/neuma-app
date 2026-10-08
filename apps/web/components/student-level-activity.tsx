@@ -127,10 +127,12 @@ function CheckInSubmission({ checkIn }: { checkIn: StudentNodeCheckIn }) {
 
 function CheckInFeedback({
   checkIn,
+  mentorName,
   pathNodes,
   currentNodeId,
 }: {
   checkIn: StudentNodeCheckIn;
+  mentorName: string;
   pathNodes?: NextLevelNode[];
   currentNodeId?: string;
 }) {
@@ -159,7 +161,10 @@ function CheckInFeedback({
         />
       }
     >
-      {feedback.notes ? <FeedbackNotesCard notes={feedback.notes} /> : null}
+      <div className="flex min-w-0 flex-col gap-3">
+        <FeedbackMark mentorName={mentorName} />
+        {feedback.notes ? <FeedbackNotesCard notes={feedback.notes} /> : null}
+      </div>
     </StudentFeedbackCardBody>
   );
 }
@@ -466,9 +471,7 @@ export function StudentLevelCheckIns({
               preview={checkInPreview(checkIn)}
               cornerNotice={hasFeedback && unviewed}
               feedbackLine={
-                hasFeedback && unviewed ? null : hasFeedback ? (
-                  <FeedbackMark mentorName={mentorName} />
-                ) : (
+                hasFeedback ? null : (
                   <span className="text-sm text-muted-foreground/80">
                     A aguardar feedback
                   </span>
@@ -493,6 +496,7 @@ export function StudentLevelCheckIns({
                 {hasFeedback ? (
                   <CheckInFeedback
                     checkIn={checkIn}
+                    mentorName={mentorName}
                     pathNodes={pathNodes}
                     currentNodeId={currentNodeId}
                   />

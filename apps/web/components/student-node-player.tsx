@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Video, FileText, Phone } from "lucide-react";
+import { Check, Video, FileText, Phone } from "lucide-react";
 
 import type {
   StudentNode,
@@ -170,15 +170,25 @@ export function CheckInActions({
 }) {
   if (preview || node.kind === "call") return null;
 
-  const markSeen =
-    node.status !== "completed" && nodeAllowsMarkSeen(node.pass_rule) ? (
+  const markSeen = nodeAllowsMarkSeen(node.pass_rule) ? (
+    node.status === "completed" ? (
+      <Button
+        type="button"
+        disabled
+        className="h-14 w-full gap-2 text-base font-semibold"
+      >
+        <Check />
+        Já visto
+      </Button>
+    ) : (
       <form action={markNodeSeen} className="flex min-w-0 flex-col gap-2">
         <input type="hidden" name="node_id" value={node.id} />
         <Button type="submit" className="h-14 w-full gap-2 text-base font-semibold">
           Marcar como visto
         </Button>
       </form>
-    ) : null;
+    )
+  ) : null;
 
   if (checkInSlot !== undefined) {
     return (
@@ -190,7 +200,7 @@ export function CheckInActions({
   }
 
   if (node.status === "completed") {
-    return null;
+    return markSeen;
   }
 
   if (markSeen) return markSeen;
