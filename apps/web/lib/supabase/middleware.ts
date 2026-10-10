@@ -82,7 +82,11 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/auth/") ||
     path.startsWith("/.well-known/") ||
     path.startsWith("/1-1/") ||
-    isOneToOneInvitePath(path);
+    isOneToOneInvitePath(path) ||
+    // Local/test harness for the custom player (page + media). Not on Vercel.
+    (path.startsWith("/dev/player-fixture") &&
+      process.env.VERCEL_ENV !== "production" &&
+      process.env.VERCEL_ENV !== "preview");
 
   if (!user && !isPublic) {
     // APIs devem devolver JSON — nunca HTML do /login (quebra fetch().json()).
