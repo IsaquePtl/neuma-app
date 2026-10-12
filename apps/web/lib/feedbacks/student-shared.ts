@@ -1,4 +1,5 @@
 import type { TallyAnswerView } from "@/components/tally-answers";
+import { isLevelOpen, levelStartMonday } from "@/lib/nodes/level-open";
 import type { StudentNode } from "@/lib/students/queries";
 import type {
   CheckInKind,
@@ -209,18 +210,23 @@ export type NextLevelPreview = {
   kind: NodeKind;
   week_number: number | null;
   levelNumber: number;
+  /** Monday the level opens, when that day is still ahead. Null if it can open now. */
+  opensOn: string | null;
 };
 
 /** Next level preview after approval, or null if this is the last level. */
 export function resolveNextLevel(
   nodes: NextLevelNode[],
   currentNodeId: string,
+  pathStartDate?: string | null,
 ): NextLevelPreview | null {
   const sorted = [...nodes].sort((a, b) => a.order_index - b.order_index);
   const currentIndex = sorted.findIndex((node) => node.id === currentNodeId);
   if (currentIndex < 0 || currentIndex >= sorted.length - 1) return null;
 
   const nextNode = sorted[currentIndex + 1]!;
+  const opensOn = levelStartMonday(pathStartDate, nextNode.week_number);
+  const waiting = Boolean(opensOn && !isLevelOpen(pathStartDate, nextNode.week_number));
 
   return {
     href: `/path/${nextNode.id}`,
@@ -230,6 +236,7 @@ export function resolveNextLevel(
     kind: nextNode.kind,
     week_number: nextNode.week_number,
     levelNumber: currentIndex + 2,
+    opensOn: waiting ? opensOn : null,
   };
 }
 
@@ -238,5 +245,7 @@ export function resolveNextLevelHref(
   nodes: Pick<StudentNode, "id" | "order_index" | "status">[],
   currentNodeId: string,
 ): string | null {
-  return resolveNextLevel(nodes as NextLevelNode[], currentNodeId)?.href ?? null;
+  const next = resolveNextLevel(nodes as NextLevelNode[], currentNodeId);
+  if (!next || next.opensOn) return null;
+  return next.href;
 }

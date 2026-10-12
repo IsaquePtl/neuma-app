@@ -13,6 +13,7 @@ import {
 
 import type { StudentNode } from "@/lib/students/queries";
 import { formatDate, nodeKindLabel, phaseKeyLabel } from "@/lib/labels";
+import { findUpcomingLevel, levelAvailableLabel } from "@/lib/nodes/level-open";
 import { normalizePhaseKey, resolvePhaseCheckpointIds } from "@/lib/nodes/phases";
 import { cn } from "@/lib/utils";
 import type { NodeKind } from "@/lib/types/database.types";
@@ -67,18 +68,32 @@ export type PathMapReview = {
   total: number;
 };
 
+function centerLevel(el: HTMLElement) {
+  const scrollRoot = nearestScrollRoot(el);
+  if (scrollRoot) scrollRoot.scrollTop = 0;
+  else window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+
+  return window.setTimeout(() => {
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, 100);
+}
+
 export function StudentPathMap({
   nodes,
+  pathStartDate = null,
   unviewedByNodeId = new Map<string, number>(),
   review = null,
 }: {
   nodes: StudentNode[];
+  pathStartDate?: string | null;
   unviewedByNodeId?: Map<string, number>;
   /** Failed phase checkpoint: levels still to revisit before the retry. */
   review?: PathMapReview | null;
 }) {
   const activeIndex = nodes.findIndex((n) => n.status === "active");
-  const activeRef = useRef<HTMLLIElement | null>(null);
+  const upcoming = findUpcomingLevel(nodes, pathStartDate);
+  const focusIndex = activeIndex >= 0 ? activeIndex : (upcoming?.index ?? -1);
+  const focusRef = useRef<HTMLLIElement | null>(null);
 
   const checkpointIds = resolvePhaseCheckpointIds(nodes);
   const keys = nodes.map((n) => normalizePhaseKey(n.phase_key));
@@ -97,35 +112,34 @@ export function StudentPathMap({
   const pendingReview = new Set(review?.pendingIds ?? []);
 
   useEffect(() => {
-    // Só a partir do nível 5 (índice 4): topo → centrar o actual.
-    if (activeIndex < 4) return;
-    const el = activeRef.current;
+    // A partir do 3.º nível: a página abre no topo e depois centra o actual.
+    if (focusIndex < 2) return;
+    const el = focusRef.current;
     if (!el) return;
-
-    const scrollRoot = nearestScrollRoot(el);
-    if (scrollRoot) scrollRoot.scrollTop = 0;
-    else window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-
-    const timeout = window.setTimeout(() => {
-      el.scrollIntoView({ block: "center", behavior: "smooth" });
-    }, 100);
-
+    const timeout = centerLevel(el);
     return () => window.clearTimeout(timeout);
-  }, [activeIndex]);
+  }, [focusIndex]);
 
   return (
     <ol className="student-path-journey relative w-full list-none pl-0">
       {nodes.map((node, i) => {
+        const isUpcoming = upcoming?.index === i;
         const isActive =
-          node.status === "active" ||
-          (activeIndex < 0 && i === 0 && node.status !== "locked");
+          !isUpcoming &&
+          (node.status === "active" ||
+            (!upcoming &&
+              activeIndex < 0 &&
+              i === 0 &&
+              node.status !== "locked"));
         // Passado = antes do activo (ou completed). Futuro = depois do activo.
         const isPast =
-          node.status === "completed" ||
-          (activeIndex >= 0 && i < activeIndex);
+          !isUpcoming &&
+          (node.status === "completed" ||
+            (activeIndex >= 0 && i < activeIndex));
         const isFuture =
           !isActive &&
           !isPast &&
+          !isUpcoming &&
           (activeIndex < 0 ? node.status === "locked" : i > activeIndex);
         const openable = isActive || isPast;
         const unviewedCount = unviewedByNodeId.get(node.id) ?? 0;
@@ -143,7 +157,13 @@ export function StudentPathMap({
         const reviewOnThis = review?.checkpointId === node.id ? review : null;
         const progress = key ? phaseProgress.get(key) : undefined;
 
-        const markerSize = isActive ? "size-14" : isPast ? "size-11" : "size-10";
+        const markerSize = isActive
+          ? "size-14"
+          : isUpcoming
+            ? "size-12"
+            : isPast
+              ? "size-11"
+              : "size-10";
         const marker = (
           <span
             className={cn(
@@ -164,6 +184,8 @@ export function StudentPathMap({
                 isPast &&
                   !isActive &&
                   "neuma-gradient text-white/90 opacity-45",
+                isUpcoming &&
+                  "border-2 border-[color-mix(in_oklch,var(--neuma-coral)_55%,white)] bg-white/[0.06] text-[#ffffe9] shadow-[0_0_24px_-8px_color-mix(in_oklch,var(--neuma-coral)_45%,transparent)]",
                 isFuture &&
                   "border-2 border-white/10 bg-white/[0.03] text-muted-foreground/50",
               )}
@@ -174,7 +196,7 @@ export function StudentPathMap({
                 <span
                   className={cn(
                     "font-semibold tabular-nums",
-                    isActive ? "text-base" : "text-sm",
+                    isActive || isUpcoming ? "text-base" : "text-sm",
                   )}
                 >
                   {levelNum}
@@ -189,6 +211,7 @@ export function StudentPathMap({
             className={cn(
               "student-path-step relative min-w-0 flex-1",
               isActive && "student-path-step--active",
+              isUpcoming && "student-path-step--upcoming",
               isPast && !isActive && "student-path-step--done",
               isFuture && "student-path-step--locked",
             )}
@@ -212,7 +235,7 @@ export function StudentPathMap({
                     className={cn(
                       "inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em]",
                       isFuture || !accent
-                        ? isActive
+                        ? isActive || isUpcoming
                           ? "text-[#ffffe9]"
                           : "text-muted-foreground"
                         : accent === "practice"
@@ -237,13 +260,15 @@ export function StudentPathMap({
                     "leading-snug",
                     isActive
                       ? "font-heading text-lg font-bold tracking-tight sm:text-xl"
-                      : "font-heading font-medium",
+                      : isUpcoming
+                        ? "font-heading text-base font-semibold"
+                        : "font-heading font-medium",
                     isFuture && "text-muted-foreground",
                   )}
                 >
                   {node.title}
                 </p>
-                {node.due_date && !isFuture ? (
+                {node.due_date && !isFuture && !isUpcoming ? (
                   <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                     <CalendarClock className="size-3" />
                     Até {formatDate(node.due_date)}
@@ -277,6 +302,11 @@ export function StudentPathMap({
                 {node.status === "completed" ? "Concluído" : "Já disponível"}
               </p>
             ) : null}
+            {isUpcoming && upcoming ? (
+              <p className="mt-2 text-xs font-medium text-[var(--neuma-coral)]">
+                {levelAvailableLabel(upcoming.opensOn)}
+              </p>
+            ) : null}
             {isFuture ? (
               <p className="mt-2 text-xs text-muted-foreground">Bloqueado</p>
             ) : null}
@@ -307,8 +337,9 @@ export function StudentPathMap({
               </li>
             ) : null}
             <li
-              ref={isActive ? activeRef : undefined}
+              ref={i === focusIndex ? focusRef : undefined}
               data-student-path-active={isActive ? "" : undefined}
+              data-student-path-upcoming={isUpcoming ? "" : undefined}
               className={cn(
                 "relative flex gap-4 sm:gap-5",
                 isActive ? "pb-10" : "pb-8",
@@ -328,7 +359,13 @@ export function StudentPathMap({
                 style={{
                   // pt-0.5 + altura do marcador (+ anel do check-point)
                   top: `calc(0.125rem + ${
-                    isActive ? "3.5rem" : isPast ? "2.75rem" : "2.5rem"
+                    isActive
+                      ? "3.5rem"
+                      : isUpcoming
+                        ? "3rem"
+                        : isPast
+                          ? "2.75rem"
+                          : "2.5rem"
                   }${isPhaseCheckpoint ? " + 0.25rem" : ""})`,
                 }}
               />
@@ -356,7 +393,13 @@ export function StudentPathMap({
                   {body}
                 </Link>
               ) : (
-                <div className="min-w-0 flex-1 cursor-not-allowed opacity-90">
+                <div
+                  className={cn(
+                    "min-w-0 flex-1",
+                    isUpcoming ? "cursor-default" : "cursor-not-allowed opacity-90",
+                  )}
+                  aria-disabled={isUpcoming ? true : undefined}
+                >
                   {body}
                 </div>
               )}

@@ -21,6 +21,11 @@ import type { JourneyPathStudent } from "@/lib/journey-path/load-journey-path";
 import { mentorLevelReviewHref } from "@/lib/journey-path/level-review-url";
 import { studentProfileHref } from "@/lib/journey-path/routes";
 import { formatDate, nodeKindLabel } from "@/lib/labels";
+import {
+  calendarStart,
+  findUpcomingLevel,
+  formatWeekdayDatePt,
+} from "@/lib/nodes/level-open";
 import type { StudentNode, StudentPath } from "@/lib/students/queries";
 import type { NodeKind } from "@/lib/types/database.types";
 import { cn } from "@/lib/utils";
@@ -66,6 +71,10 @@ export function JourneyPathAdminView({
   levelFeedbacks?: unknown[];
 }) {
   const activeIndex = nodes.findIndex((n) => n.status === "active");
+  const upcoming = findUpcomingLevel(
+    nodes,
+    calendarStart(path.start_date, path.created_at),
+  );
   const completed = nodes.filter((n) => n.status === "completed").length;
   const total = nodes.length;
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
@@ -177,15 +186,22 @@ export function JourneyPathAdminView({
       ) : (
         <ol className="student-path-journey relative w-full list-none pl-0">
           {nodes.map((node, i) => {
+            const isUpcoming = upcoming?.index === i;
             const isActive =
-              node.status === "active" ||
-              (activeIndex < 0 && i === 0 && node.status !== "locked");
+              !isUpcoming &&
+              (node.status === "active" ||
+                (!upcoming &&
+                  activeIndex < 0 &&
+                  i === 0 &&
+                  node.status !== "locked"));
             const isPast =
-              node.status === "completed" ||
-              (activeIndex >= 0 && i < activeIndex);
+              !isUpcoming &&
+              (node.status === "completed" ||
+                (activeIndex >= 0 && i < activeIndex));
             const isFuture =
               !isActive &&
               !isPast &&
+              !isUpcoming &&
               (activeIndex < 0
                 ? node.status === "locked"
                 : i > activeIndex);
@@ -201,6 +217,7 @@ export function JourneyPathAdminView({
                 className={cn(
                   "student-path-step relative min-w-0 flex-1",
                   isActive && "student-path-step--active",
+                  isUpcoming && "student-path-step--upcoming",
                   isPast && !isActive && "student-path-step--done",
                   isFuture && "student-path-step--locked",
                 )}
@@ -223,7 +240,7 @@ export function JourneyPathAdminView({
                       className={cn(
                         "inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em]",
                         isFuture || !accent
-                          ? isActive
+                          ? isActive || isUpcoming
                             ? "text-[#ffffe9]"
                             : "text-muted-foreground"
                           : accent === "practice"
@@ -240,15 +257,22 @@ export function JourneyPathAdminView({
                         "leading-snug",
                         isActive
                           ? "font-heading text-lg font-bold tracking-tight sm:text-xl"
-                          : "font-heading font-medium",
+                          : isUpcoming
+                            ? "font-heading font-semibold"
+                            : "font-heading font-medium",
                         isFuture && "text-muted-foreground",
                       )}
                     >
                       {node.title}
                     </p>
-                    {node.due_date && !isFuture ? (
+                    {node.due_date && !isFuture && !isUpcoming ? (
                       <p className="text-xs text-muted-foreground">
                         Até {formatDate(node.due_date)}
+                      </p>
+                    ) : null}
+                    {isUpcoming && upcoming ? (
+                      <p className="text-xs font-medium text-[var(--neuma-coral)]">
+                        O aluno entra na {formatWeekdayDatePt(upcoming.opensOn)}
                       </p>
                     ) : null}
                     {isActive && node.description ? (
@@ -290,9 +314,11 @@ export function JourneyPathAdminView({
                       "student-path-rail absolute bottom-0 left-[2rem] w-px -translate-x-1/2",
                       isActive
                         ? "top-[calc(0.125rem+3.5rem)]"
-                        : isPast
-                          ? "top-[calc(0.125rem+2.75rem)]"
-                          : "top-[calc(0.125rem+2.5rem)]",
+                        : isUpcoming
+                          ? "top-[calc(0.125rem+3rem)]"
+                          : isPast
+                            ? "top-[calc(0.125rem+2.75rem)]"
+                            : "top-[calc(0.125rem+2.5rem)]",
                       isPast || isActive ? "bg-white/20" : "bg-white/15",
                     )}
                   />
@@ -302,7 +328,13 @@ export function JourneyPathAdminView({
                   <span
                     className={cn(
                       "relative z-10 inline-grid shrink-0 place-items-center rounded-full",
-                      isActive ? "size-14" : isPast ? "size-11" : "size-10",
+                      isActive
+                        ? "size-14"
+                        : isUpcoming
+                          ? "size-12"
+                          : isPast
+                            ? "size-11"
+                            : "size-10",
                     )}
                   >
                     <span
@@ -317,6 +349,8 @@ export function JourneyPathAdminView({
                         isPast &&
                           !isActive &&
                           "neuma-gradient text-white/90 opacity-45",
+                        isUpcoming &&
+                          "border-2 border-[color-mix(in_oklch,var(--neuma-coral)_55%,white)] bg-white/[0.06] text-[#ffffe9] shadow-[0_0_24px_-8px_color-mix(in_oklch,var(--neuma-coral)_45%,transparent)]",
                         isFuture &&
                           "border-2 border-white/10 bg-white/[0.03] text-muted-foreground/50",
                       )}
@@ -327,7 +361,7 @@ export function JourneyPathAdminView({
                         <span
                           className={cn(
                             "font-semibold tabular-nums",
-                            isActive ? "text-base" : "text-sm",
+                            isActive || isUpcoming ? "text-base" : "text-sm",
                           )}
                         >
                           {levelNum}

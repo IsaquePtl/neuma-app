@@ -13,6 +13,7 @@ import {
 import { FeedbackNextLevelPreview } from "@/components/feedback-next-level-preview";
 import { Button } from "@/components/ui/button";
 import type { NextLevelPreview } from "@/lib/feedbacks/student-shared";
+import { levelAvailableLabel } from "@/lib/nodes/level-open";
 import { quizScoreTier, type QuizHeadline } from "@/lib/nodes/evaluation";
 import { cn } from "@/lib/utils";
 
@@ -134,7 +135,9 @@ function QuizResults({
             {result.unlocked
               ? result.phase
                 ? `Nota suficiente — fechaste a ${result.phase.label}.`
-                : "Nota suficiente — o nível seguinte já está desbloqueado."
+                : nextLevel?.opensOn
+                  ? `Nota suficiente. ${levelAvailableLabel(nextLevel.opensOn)}.`
+                  : "Nota suficiente — o nível seguinte já está desbloqueado."
               : failedPhase
                 ? `Precisas de ${result.pass_score}% para fechar a ${failedPhase.label}. Revê os ${failedPhase.reviewCount} níveis da fase e tenta de novo.`
                 : result.pass_score != null && result.score < result.pass_score

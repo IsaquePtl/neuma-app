@@ -23,6 +23,11 @@ import {
 } from "@/lib/feedbacks/student";
 import { formatDate } from "@/lib/labels";
 import {
+  calendarStart,
+  findUpcomingLevel,
+  levelAvailableLabel,
+} from "@/lib/nodes/level-open";
+import {
   effectivePassRule,
   nodeRequiresCheckIn,
   nodeUsesVideoCheckInSlot,
@@ -66,17 +71,10 @@ export default async function StudentSessionPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [mentor, { data: activePath }, { data: anyPath }, { data: checkIns }, { data: me }] =
+  const [mentor, pathBundle, { data: anyPath }, { data: checkIns }, { data: me }] =
     await Promise.all([
       loadMyMentor(user!.id),
-      supabase
-        .from("paths")
-        .select("id, title, status")
-        .eq("student_id", user!.id)
-        .eq("status", "active")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+      loadMyPathWithNodes(user!.id),
       supabase
         .from("paths")
         .select("id")
@@ -99,15 +97,18 @@ export default async function StudentSessionPage({
   const WHATSAPP_URL = mentorWhatsAppUrl(mentor?.whatsapp);
   const hasPath = Boolean(anyPath?.id);
   const canBookSessions = me?.can_book_sessions !== false;
-
-  const { data: activeNode } = activePath
-    ? await supabase
-        .from("nodes")
-        .select("id, title, due_date, status, kind, pass_rule, check_in_kind")
-        .eq("path_id", activePath.id)
-        .eq("status", "active")
-        .maybeSingle()
-    : { data: null };
+  const { path: studentPath, nodes } = pathBundle;
+  const activePath = studentPath?.status === "active" ? studentPath : null;
+  const activeNode = nodes.find((node) => node.status === "active") ?? null;
+  const upcoming = findUpcomingLevel(
+    nodes,
+    calendarStart(studentPath?.start_date, studentPath?.created_at),
+  );
+  const idleCheckInLabel = upcoming
+    ? levelAvailableLabel(upcoming.opensOn)
+    : !hasPath
+      ? "O check-in fica disponível quando o percurso estiver ativo."
+      : null;
 
   const calUser =
     mentor?.cal_username ||
@@ -139,8 +140,6 @@ export default async function StudentSessionPage({
   const checkInBlocked = checkInAllowance
     ? checkInBlockedMessage(checkInAllowance)
     : null;
-
-  const { nodes } = await loadMyPathWithNodes(user!.id);
 
   const unviewedFeedback = nodes.length
     ? await loadStudentUnviewedFeedback(supabase, user!.id, nodes)
@@ -256,20 +255,17 @@ export default async function StudentSessionPage({
             Abrir nível
           </Button>
         ) : (
-          <div className="grid gap-1.5">
-            <Button
-              size="lg"
-              disabled
-              className="h-[3.5rem] w-full gap-2 text-base font-semibold"
-            >
-              <Video className="size-5" /> Fazer check-in
-            </Button>
-            <p className="-mt-0.5 text-center text-xs leading-snug text-muted-foreground">
-              {!hasPath
-                ? "O check-in fica disponível quando o teu percurso estiver ativo."
-                : "Este nível não pede check-in."}
-            </p>
-          </div>
+          <Button
+            size="lg"
+            disabled
+            className="h-[3.5rem] w-full gap-2 whitespace-normal! px-4 text-center text-sm font-semibold leading-tight sm:text-base"
+          >
+            {idleCheckInLabel ?? (
+              <>
+                <Video className="size-5" /> Fazer check-in
+              </>
+            )}
+          </Button>
         )}
 
         {unviewedCount > 0 ? (

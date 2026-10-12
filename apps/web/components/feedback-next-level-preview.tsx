@@ -19,6 +19,7 @@ import type {
   StudentFeedbackViewRef,
 } from "@/lib/feedbacks/student-shared";
 import { nodeKindLabel } from "@/lib/labels";
+import { levelAvailableLabel } from "@/lib/nodes/level-open";
 import { requestStudentBadgesRefresh } from "@/lib/student-badges-client";
 import type { NodeKind } from "@/lib/types/database.types";
 
@@ -66,6 +67,7 @@ export function FeedbackNextLevelPreview({
   feedbackRefs?: StudentFeedbackViewRef[];
 }) {
   const [isPending, setIsPending] = useState(false);
+  const waiting = Boolean(nextLevel.opensOn);
 
   const handleNavigate = () => {
     if (isPending) return;
@@ -73,11 +75,58 @@ export function FeedbackNextLevelPreview({
     markFeedbackViewedInBackground(nodeId, feedbackRefs);
   };
 
+  const marker = (
+    <span
+      className="student-path-marker relative z-10 grid size-11 shrink-0 place-items-center rounded-full border-2 border-[color-mix(in_oklch,var(--neuma-coral)_55%,white)] bg-white/[0.06] text-[#ffffe9] shadow-[0_0_24px_-8px_color-mix(in_oklch,var(--neuma-coral)_45%,transparent)] sm:size-12"
+      aria-hidden
+    >
+      <span className="text-sm font-semibold tabular-nums sm:text-base">
+        {nextLevel.levelNumber}
+      </span>
+    </span>
+  );
+
+  const heading = (
+    <div className="min-w-0 flex-1 space-y-1">
+      <span className="inline-flex max-w-full flex-wrap items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em] text-[#ffffe9]">
+        {nextLevelKindIcon(nextLevel.kind)}
+        {nodeKindLabel[nextLevel.kind]}
+        {nextLevel.week_number ? ` · Sem. ${nextLevel.week_number}` : null}
+      </span>
+      <p className="break-words font-heading text-lg font-bold leading-snug tracking-tight">
+        {nextLevel.title}
+      </p>
+      {nextLevel.description && !waiting ? (
+        <p className="line-clamp-2 pt-0.5 text-sm text-muted-foreground">
+          {nextLevel.description}
+        </p>
+      ) : null}
+    </div>
+  );
+
   return (
     <div className="min-w-0 space-y-2">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         Próximo nível
       </p>
+      {waiting ? (
+        <Link
+          href="/path"
+          prefetch
+          onClick={handleNavigate}
+          className="block min-w-0 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
+        >
+          <div className="student-path-step student-path-step--upcoming relative flex min-w-0 w-full items-start gap-3 overflow-hidden rounded-2xl !p-4 sm:gap-4 sm:!p-5">
+            {marker}
+            <div className="min-w-0 flex-1 space-y-3">
+              {heading}
+              <p className="text-xs font-medium tracking-wide text-[var(--neuma-coral)]">
+                {levelAvailableLabel(nextLevel.opensOn!)}
+              </p>
+            </div>
+          </div>
+        </Link>
+      ) : (
       <Link
         href={nextLevel.href}
         prefetch={true}
@@ -122,6 +171,7 @@ export function FeedbackNextLevelPreview({
           </p>
         </div>
       </Link>
+      )}
     </div>
   );
 }

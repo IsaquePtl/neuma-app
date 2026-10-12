@@ -5,6 +5,7 @@ import { ArrowRight, Target, Route } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { loadMyPathWithNodes } from "@/lib/students/queries";
 import { loadStudentUnviewedFeedback } from "@/lib/feedbacks/student";
+import { calendarStart } from "@/lib/nodes/level-open";
 import { loadActivePhaseReview } from "@/lib/nodes/phase-review";
 import { studentHasOnboardingSubmission } from "@/lib/onboarding/submission";
 import { ClearOnboardingQuery } from "@/components/clear-onboarding-query";
@@ -139,6 +140,7 @@ export default async function StudentPathPage() {
         <div className="w-full shrink-0">
           <StudentPathMap
             nodes={nodes}
+            pathStartDate={calendarStart(path.start_date, path.created_at)}
             unviewedByNodeId={unviewedFeedback.unviewedByNodeId}
             review={
               activeReview

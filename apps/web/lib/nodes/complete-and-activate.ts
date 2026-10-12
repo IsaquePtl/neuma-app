@@ -1,12 +1,15 @@
 import type { createClient } from "@/lib/supabase/server";
 
+import { calendarStart, isLevelOpen } from "@/lib/nodes/level-open";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 type WriteClient = Supabase | ReturnType<typeof createAdminClient>;
 
 /**
- * Completa o nível actual e activa o seguinte (ou conclui o percurso).
+ * Completa o nível actual. O seguinte só fica activo se a segunda de início
+ * já chegou (ou o percurso não tem calendário). Antes disso fica locked, à
+ * espera. Sem seguinte, o percurso conclui-se.
  * Internal helper — not a server action. Callers must already authorize.
  *
  * Students only have SELECT on nodes/paths (0001_init.sql). A user-scoped
@@ -36,15 +39,31 @@ export async function completeCurrentAndActivateNext(
       .maybeSingle(),
   );
 
-  const { data: next, error: nextError } = await supabase
-    .from("nodes")
-    .select("id")
-    .eq("path_id", pathId)
-    .gt("order_index", node.order_index)
-    .order("order_index", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const [{ data: next, error: nextError }, { data: pathRow, error: pathError }] =
+    await Promise.all([
+      supabase
+        .from("nodes")
+        .select("id, week_number")
+        .eq("path_id", pathId)
+        .gt("order_index", node.order_index)
+        .order("order_index", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("paths")
+        .select("start_date, created_at")
+        .eq("id", pathId)
+        .maybeSingle(),
+    ]);
   if (nextError) throw new Error(nextError.message);
+  if (pathError) throw new Error(pathError.message);
+
+  const openNext = next
+    ? isLevelOpen(
+        calendarStart(pathRow?.start_date, pathRow?.created_at),
+        next.week_number,
+      )
+    : false;
 
   if (next) {
     const { data: siblings, error: siblingsError } = await supabase
@@ -58,7 +77,7 @@ export async function completeCurrentAndActivateNext(
         await persist(supabase, (client) =>
           client
             .from("nodes")
-            .update({ status: "active" })
+            .update({ status: openNext ? "active" : "locked" })
             .eq("id", s.id)
             .select("id")
             .maybeSingle(),

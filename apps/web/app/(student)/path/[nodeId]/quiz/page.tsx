@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { CheckpointQuizPanel } from "@/components/checkpoint-quiz-panel";
 import { getQuizForStudent } from "@/lib/actions/quiz";
 import { resolveNextLevel } from "@/lib/feedbacks/student-shared";
+import { calendarStart } from "@/lib/nodes/level-open";
 import { createClient } from "@/lib/supabase/server";
 import { loadMyPathWithNodes } from "@/lib/students/queries";
 import { nodeUsesQuizGate } from "@/lib/nodes/pass-rule";
@@ -73,7 +74,11 @@ export default async function CheckpointQuizPage({
     getQuizForStudent(nodeId),
   ]);
 
-  const nextLevel = resolveNextLevel(nodes, nodeId);
+  const nextLevel = resolveNextLevel(
+    nodes,
+    nodeId,
+    calendarStart(path.start_date, path.created_at),
+  );
 
   return (
     <CheckpointQuizPanel

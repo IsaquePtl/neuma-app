@@ -24,6 +24,7 @@ import {
   type StudentTodoItem,
 } from "@/components/student-todo-list";
 import { formatDate, nodeKindLabel } from "@/lib/labels";
+import { calendarStart, findUpcomingLevel, levelAvailableLabel } from "@/lib/nodes/level-open";
 import { studentHasOnboardingSubmission } from "@/lib/onboarding/submission";
 import { loadActivePhaseReview } from "@/lib/nodes/phase-review";
 import {
@@ -66,7 +67,7 @@ function todoTagLabel(key: string) {
  * Desktop: centrado na coluna principal (ao lado da sidebar).
  */
 const HOME_VIEWPORT =
-  "neuma-mobile-viewport flex flex-col justify-center gap-5 overflow-hidden overscroll-none pb-5 " +
+  "neuma-mobile-viewport flex flex-col justify-center gap-5 overflow-hidden overscroll-none pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] " +
   "desktop:min-h-0 desktop:flex-1 desktop:justify-center desktop:gap-3 desktop:overflow-visible desktop:pb-4";
 
 export default async function StudentHomePage() {
@@ -96,6 +97,10 @@ export default async function StudentHomePage() {
 
   // Only the single active level is visible to students — never locked future nodes.
   const activeNode = nodes.find((n) => n.status === "active") ?? null;
+  const upcoming = findUpcomingLevel(
+    nodes,
+    calendarStart(path?.start_date, path?.created_at),
+  );
 
   const activeCall = activeNode?.kind === "call" ? activeNode : null;
   const activeContent =
@@ -282,6 +287,30 @@ export default async function StudentHomePage() {
           className="neuma-enter-up neuma-enter-delay-2 relative z-[1] block min-w-0 shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
         >
           <PathPausedCard compact />
+        </Link>
+      ) : upcoming ? (
+        <Link
+          href="/path"
+          prefetch
+          className="neuma-enter-up neuma-enter-delay-2 relative z-[1] block min-w-0 shrink-0 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
+        >
+          <div className="student-path-step student-path-step--upcoming !p-4 sm:!p-5">
+            <div className="min-w-0 space-y-1">
+              <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-[0.14em] text-[var(--neuma-coral)]">
+                {kindIconEl(upcoming.node.kind)}
+                Próximo nível
+                {upcoming.node.week_number
+                  ? ` · Sem. ${upcoming.node.week_number}`
+                  : null}
+              </span>
+              <p className="font-heading truncate text-lg font-bold tracking-tight sm:text-xl">
+                {upcoming.node.title}
+              </p>
+              <p className="text-sm font-medium text-[var(--neuma-coral)]">
+                {levelAvailableLabel(upcoming.opensOn)}
+              </p>
+            </div>
+          </div>
         </Link>
       ) : (
         <Link

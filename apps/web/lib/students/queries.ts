@@ -3,6 +3,8 @@ import {
   checkInLevelTitle,
   ORPHAN_CHECKIN_LABEL,
 } from "@/lib/labels";
+import { calendarStart, dueLevelToOpen, earlyActiveLevel } from "@/lib/nodes/level-open";
+import { reconcileLevelSchedule } from "@/lib/nodes/open-due-level";
 import { defaultPassRule, effectivePassRule } from "@/lib/nodes/pass-rule";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -34,6 +36,7 @@ export type StudentPath = {
   goal: string | null;
   duration_label: string | null;
   start_date: string | null;
+  created_at: string;
   end_date: string | null;
   status: PathStatus;
 };
@@ -276,6 +279,7 @@ export function mapPath(path: NonNullable<Awaited<ReturnType<typeof loadStudentP
     goal: path.goal,
     duration_label: path.duration_label,
     start_date: path.start_date,
+    created_at: path.created_at,
     end_date: path.end_date,
     status: path.status,
   };
@@ -344,9 +348,23 @@ export async function loadMyPathWithNodes(studentId: string): Promise<{
     .eq("path_id", pathRow.id)
     .order("order_index", { ascending: true });
 
+  const mapped = (nodes ?? []).map(mapNode);
+  const scheduleStart = calendarStart(pathRow.start_date, pathRow.created_at);
+  const scheduleNeedsWrite =
+    pathRow.status === "active" &&
+    (earlyActiveLevel(mapped, scheduleStart) ||
+      dueLevelToOpen(mapped, scheduleStart, pathRow.status));
+  if (scheduleNeedsWrite) {
+    await reconcileLevelSchedule(createAdminClient(), mapped, {
+      id: pathRow.id,
+      status: pathRow.status,
+      startDate: scheduleStart,
+    });
+  }
+
   return {
     path: mapPath(pathRow),
-    nodes: await attachLibraryPosters(supabase, (nodes ?? []).map(mapNode)),
+    nodes: await attachLibraryPosters(supabase, mapped),
   };
 }
 

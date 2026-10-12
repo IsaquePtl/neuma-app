@@ -23,6 +23,7 @@ import {
   levelCheckInsHref,
   resolveNextLevel,
 } from "@/lib/feedbacks/student-shared";
+import { calendarStart } from "@/lib/nodes/level-open";
 import { loadMyPathWithNodes } from "@/lib/students/queries";
 import { cn } from "@/lib/utils";
 
@@ -47,7 +48,7 @@ export default async function CheckInDetailPage({
 
   if (!checkIn || checkIn.student_id !== user!.id) notFound();
 
-  const { nodes } = await loadMyPathWithNodes(user!.id);
+  const { path, nodes } = await loadMyPathWithNodes(user!.id);
   if (checkIn.node_id && nodes.some((n) => n.id === checkIn.node_id)) {
     redirect(levelCheckInsHref(checkIn.node_id, { checkIn: checkIn.id }));
   }
@@ -72,7 +73,11 @@ export default async function CheckInDetailPage({
 
   const nextLevel =
     checkIn.status === "approved" && checkIn.node_id
-      ? resolveNextLevel(nodes, checkIn.node_id)
+      ? resolveNextLevel(
+          nodes,
+          checkIn.node_id,
+          calendarStart(path?.start_date, path?.created_at),
+        )
       : null;
 
   return (

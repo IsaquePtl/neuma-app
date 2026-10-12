@@ -8,6 +8,7 @@ import {
   type LevelCheckInState,
 } from "@/lib/feedbacks/student";
 import { firstNameFromFullName } from "@/lib/profile/greeting";
+import { calendarStart } from "@/lib/nodes/level-open";
 import { nodeRequiresCheckIn } from "@/lib/nodes/pass-rule";
 import { loadMentorCalUsername, loadMyPathWithNodes } from "@/lib/students/queries";
 import {
@@ -107,6 +108,7 @@ export default async function LevelCheckInsPage({
               mentorName={mentorName}
               pathNodes={nodes}
               currentNodeId={nodeId}
+              pathStartDate={calendarStart(path.start_date, path.created_at)}
               focusCheckInId={focusCheckInId ?? null}
               focusLevelFeedbackId={focusLevelFeedbackId ?? null}
             />

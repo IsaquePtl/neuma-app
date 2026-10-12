@@ -291,6 +291,10 @@ html[data-neuma-bg="neon"] {
       0 1px 0 0 rgb(255 255 233 / 7%) inset,
       0 18px 40px -28px rgb(0 0 0 / 55%);
   }
+  /* Aberto: border, não ring. O overflow do cartão cortava a sombra. */
+  .student-path-step--open {
+    border: 1px solid oklch(1 0 0 / 12%);
+  }
   a:hover .student-path-step--active {
     transform: translateY(-1px);
     background: rgb(28 28 28);
@@ -309,6 +313,16 @@ html[data-neuma-bg="neon"] {
     backdrop-filter: blur(16px) saturate(140%);
     -webkit-backdrop-filter: blur(16px) saturate(140%);
     opacity: 0.58;
+  }
+  /* Próximo nível já concluído o anterior, à espera da segunda de início.
+     O contorno é border: o overflow do cartão cortava a sombra no iOS. */
+  .student-path-step--upcoming {
+    background: rgb(22 22 22 / 78%);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid color-mix(in oklch, var(--neuma-coral) 55%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--neuma-coral) 18%, transparent);
+    opacity: 1;
   }
   .student-path-marker {
     flex-shrink: 0;

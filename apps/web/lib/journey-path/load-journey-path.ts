@@ -1,3 +1,5 @@
+import { calendarStart, dueLevelToOpen, earlyActiveLevel } from "@/lib/nodes/level-open";
+import { reconcileLevelSchedule } from "@/lib/nodes/open-due-level";
 import { createClient } from "@/lib/supabase/server";
 import { playableVideoUrl } from "@/lib/storage/playable-video";
 import type {
@@ -131,9 +133,23 @@ export async function loadJourneyPathPageData(
     ]),
   );
 
+  const mapped = (nodes ?? []).map(mapNode);
+  const scheduleStart = calendarStart(path.start_date, path.created_at);
+  if (
+    path.status === "active" &&
+    (earlyActiveLevel(mapped, scheduleStart) ||
+      dueLevelToOpen(mapped, scheduleStart, path.status))
+  ) {
+    await reconcileLevelSchedule(supabase, mapped, {
+      id: path.id,
+      status: path.status,
+      startDate: scheduleStart,
+    });
+  }
+
   const mappedNodes: StudentNode[] = await attachLibraryPosters(
     supabase,
-    (nodes ?? []).map(mapNode),
+    mapped,
   );
 
   const journeyCheckIns: JourneyCheckIn[] = await Promise.all(

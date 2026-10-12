@@ -130,18 +130,20 @@ function CheckInFeedback({
   mentorName,
   pathNodes,
   currentNodeId,
+  pathStartDate = null,
 }: {
   checkIn: StudentNodeCheckIn;
   mentorName: string;
   pathNodes?: NextLevelNode[];
   currentNodeId?: string;
+  pathStartDate?: string | null;
 }) {
   const feedback = checkIn.feedback;
   if (!feedback) return null;
 
   const nextLevel =
     checkIn.status === "approved" && pathNodes && currentNodeId
-      ? resolveNextLevel(pathNodes, currentNodeId)
+      ? resolveNextLevel(pathNodes, currentNodeId, pathStartDate)
       : null;
 
   return (
@@ -223,7 +225,7 @@ function RoundCard({
         highlight || expanded
           ? "student-path-step--active"
           : "student-path-step--done",
-        expanded && "ring-1 ring-white/12",
+        expanded && "student-path-step--open",
       )}
     >
       {cornerNotice ? (
@@ -333,6 +335,7 @@ export function StudentLevelCheckIns({
   mentorName,
   pathNodes,
   currentNodeId,
+  pathStartDate = null,
   focusCheckInId = null,
   focusLevelFeedbackId = null,
 }: {
@@ -340,6 +343,7 @@ export function StudentLevelCheckIns({
   mentorName: string;
   pathNodes?: NextLevelNode[];
   currentNodeId?: string;
+  pathStartDate?: string | null;
   focusCheckInId?: string | null;
   focusLevelFeedbackId?: string | null;
 }) {
@@ -499,6 +503,7 @@ export function StudentLevelCheckIns({
                     mentorName={mentorName}
                     pathNodes={pathNodes}
                     currentNodeId={currentNodeId}
+                    pathStartDate={pathStartDate}
                   />
                 ) : (
                   <AwaitingFeedback mentorName={mentorName} />
