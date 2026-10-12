@@ -430,6 +430,8 @@ export function NodeEditorForm({
           }
         />
 
+        <input type="hidden" name="library_asset_id" value={pickedAssetId} />
+
         <LibraryAssetPicker
           nodeKind={kind}
           categories={categories}
@@ -445,7 +447,7 @@ export function NodeEditorForm({
             }
             setPickedAssetId(sel.assetId);
             setResourceUrl(sel.url ?? "");
-            if (sel.body) setContentBody(sel.body);
+            setContentBody(sel.body ?? "");
             if (!title.trim()) setTitle(sel.title);
           }}
         />
@@ -472,6 +474,7 @@ export function NodeEditorForm({
               id={fieldId("content")}
               value={contentBody}
               onChange={(e) => setContentBody(e.target.value)}
+              readOnly={Boolean(pickedAssetId)}
               rows={4}
               placeholder={
                 kind === "call"
@@ -480,6 +483,12 @@ export function NodeEditorForm({
               }
               className={inputClass}
             />
+            {pickedAssetId ? (
+              <p className="text-xs text-muted-foreground">
+                Este texto e o vídeo vêm da biblioteca. Edita-os lá; o nível
+                usa o item.
+              </p>
+            ) : null}
           </div>
         ) : null}
 

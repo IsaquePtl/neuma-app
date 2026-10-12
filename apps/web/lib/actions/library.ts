@@ -105,39 +105,55 @@ function revalidateLibrary() {
   revalidatePath("/studio/library", "layout");
   revalidatePath("/studio/agent");
   revalidatePath("/path", "layout");
+  revalidatePath("/home");
+  revalidatePath("/session");
 }
 
 /**
- * Percursos que não devem ser reescritos quando um item da biblioteca muda.
- * O ficheiro antigo fica no R2 enquanto estes níveis ainda o usam.
+ * The library item is the object. Every level and template that uses it
+ * receives the current file and text, including copies of an older file.
  */
-const PROTECTED_PATH_IDS = [
-  "b2c498a9-436c-4721-83ff-62f90641a37d",
-  "e2389334-62d2-46cb-a321-91baa5ee78f6",
-  "7db4ea45-d7ee-4ec6-b50e-179e02581425",
-];
-
-async function propagateReplacedMedia(
+async function syncLibraryAssetToLevels(
   supabase: Awaited<ReturnType<typeof createClient>>,
+  assetId: string,
   previousUrl: string | null | undefined,
-  nextUrl: string | null | undefined,
+  next: { url: string | null; body: string | null },
 ) {
+  const url = next.url?.trim() || null;
+  const body = next.body?.trim() || null;
   const from = previousUrl?.trim() ?? "";
-  const to = nextUrl?.trim() ?? "";
-  if (!from || !to || from === to) return;
 
-  const { error: templateError } = await supabase
-    .from("path_template_nodes")
-    .update({ default_resource_url: to })
-    .eq("default_resource_url", from);
-  if (templateError) throw new Error(templateError.message);
-
-  const { error: nodeError } = await supabase
+  const { error: linkedNodesError } = await supabase
     .from("nodes")
-    .update({ resource_url: to })
+    .update({ resource_url: url, content_body: body })
+    .eq("library_asset_id", assetId);
+  if (linkedNodesError) throw new Error(linkedNodesError.message);
+
+  const { error: linkedTemplatesError } = await supabase
+    .from("path_template_nodes")
+    .update({ default_resource_url: url })
+    .eq("library_asset_id", assetId);
+  if (linkedTemplatesError) throw new Error(linkedTemplatesError.message);
+
+  if (!from) return;
+
+  const { error: copiedNodesError } = await supabase
+    .from("nodes")
+    .update({
+      library_asset_id: assetId,
+      resource_url: url,
+      content_body: body,
+    })
     .eq("resource_url", from)
-    .not("path_id", "in", `(${PROTECTED_PATH_IDS.join(",")})`);
-  if (nodeError) throw new Error(nodeError.message);
+    .is("library_asset_id", null);
+  if (copiedNodesError) throw new Error(copiedNodesError.message);
+
+  const { error: copiedTemplatesError } = await supabase
+    .from("path_template_nodes")
+    .update({ library_asset_id: assetId, default_resource_url: url })
+    .eq("default_resource_url", from)
+    .is("library_asset_id", null);
+  if (copiedTemplatesError) throw new Error(copiedTemplatesError.message);
 }
 
 export async function upsertLibraryAsset(formData: FormData) {
@@ -183,7 +199,10 @@ export async function upsertLibraryAsset(formData: FormData) {
       .eq("id", id);
     if (error) throw new Error(error.message);
 
-    await propagateReplacedMedia(supabase, previous?.url, payload.url);
+    await syncLibraryAssetToLevels(supabase, id, previous?.url, {
+      url: payload.url,
+      body: payload.body,
+    });
 
     const previousKey = libraryObjectKey(
       previous?.storage_path,
@@ -294,7 +313,7 @@ export async function replaceLibraryAssetMedia(input: {
 
     const { data: previous, error: readError } = await supabase
       .from("library_assets")
-      .select("storage_path, url")
+      .select("storage_path, url, body")
       .eq("id", id)
       .maybeSingle();
     if (readError) return { ok: false, error: readError.message };
@@ -310,7 +329,10 @@ export async function replaceLibraryAssetMedia(input: {
       .eq("id", id);
     if (error) return { ok: false, error: error.message };
 
-    await propagateReplacedMedia(supabase, previous.url, url);
+    await syncLibraryAssetToLevels(supabase, id, previous.url, {
+      url,
+      body: previous.body,
+    });
 
     const previousKey = libraryObjectKey(previous.storage_path, previous.url);
     if (previousKey && previousKey !== storagePath) {

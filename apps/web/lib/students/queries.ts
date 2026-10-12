@@ -53,6 +53,8 @@ export type StudentNode = {
   status: NodeStatus;
   due_date: string | null;
   resource_url: string | null;
+  /** Item da biblioteca que este nível usa. O conteúdo vem desse item. */
+  library_asset_id?: string | null;
   /** Capa do vídeo na biblioteca, quando o URL do nível coincide com o item. */
   poster_url?: string | null;
   content_body: string | null;
@@ -297,6 +299,7 @@ export function mapNode(n: {
   due_date: string | null;
   resource_url: string | null;
   content_body: string | null;
+  library_asset_id?: string | null;
   order_index: number;
   pass_rule?: NodePassRule | null;
   pass_score?: number | null;
@@ -317,6 +320,7 @@ export function mapNode(n: {
     due_date: n.due_date,
     resource_url: n.resource_url,
     content_body: n.content_body ?? null,
+    library_asset_id: n.library_asset_id ?? null,
     order_index: n.order_index,
     pass_rule: effectivePassRule(n.kind, n.pass_rule ?? defaultPassRule(n.kind)),
     pass_score: n.pass_score ?? null,
@@ -343,7 +347,7 @@ export async function loadMyPathWithNodes(studentId: string): Promise<{
   const { data: nodes } = await supabase
     .from("nodes")
     .select(
-      "id, title, description, week_number, duration_weeks, extended_weeks, kind, status, due_date, resource_url, content_body, order_index, pass_rule, pass_score, check_in_kind, phase_key, node_code, is_phase_checkpoint",
+      "id, title, description, week_number, duration_weeks, extended_weeks, kind, status, due_date, resource_url, content_body, library_asset_id, order_index, pass_rule, pass_score, check_in_kind, phase_key, node_code, is_phase_checkpoint",
     )
     .eq("path_id", pathRow.id)
     .order("order_index", { ascending: true });
@@ -368,11 +372,31 @@ export async function loadMyPathWithNodes(studentId: string): Promise<{
   };
 }
 
-/** Liga a capa do item da biblioteca ao nível que usa o mesmo vídeo. */
-export async function attachLibraryPosters<T extends { resource_url: string | null }>(
+type LibrarySource = {
+  id: string;
+  url: string | null;
+  body: string | null;
+  cover_url: string | null;
+};
+
+/** O nível mostra o item da biblioteca, não a cópia que ficou gravada. */
+export async function attachLibraryPosters<
+  T extends {
+    resource_url: string | null;
+    content_body?: string | null;
+    library_asset_id?: string | null;
+  },
+>(
   _supabase: Awaited<ReturnType<typeof createClient>>,
   nodes: T[],
 ): Promise<Array<T & { poster_url: string | null }>> {
+  const ids = [
+    ...new Set(
+      nodes
+        .map((node) => node.library_asset_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
   const urls = [
     ...new Set(
       nodes
@@ -380,30 +404,52 @@ export async function attachLibraryPosters<T extends { resource_url: string | nu
         .filter((url): url is string => Boolean(url)),
     ),
   ];
-  if (urls.length === 0) {
+  if (ids.length === 0 && urls.length === 0) {
     return nodes.map((node) => ({ ...node, poster_url: null }));
   }
 
   // A biblioteca só é legível pelo mentor. O aluno já tem o URL do vídeo no
-  // nível; aqui só se busca a capa desses URLs.
-  const { data } = await createAdminClient()
-    .from("library_assets")
-    .select("url, cover_url")
-    .in("url", urls)
-    .not("cover_url", "is", null);
+  // nível; aqui o item vivo substitui essa cópia.
+  const admin = createAdminClient();
+  const [byIdResult, byUrlResult] = await Promise.all([
+    ids.length
+      ? admin
+          .from("library_assets")
+          .select("id, url, body, cover_url")
+          .in("id", ids)
+      : Promise.resolve({ data: [] as LibrarySource[] }),
+    urls.length
+      ? admin
+          .from("library_assets")
+          .select("id, url, body, cover_url")
+          .in("url", urls)
+      : Promise.resolve({ data: [] as LibrarySource[] }),
+  ]);
 
-  const byUrl = new Map<string, string>();
-  for (const row of data ?? []) {
+  const byId = new Map<string, LibrarySource>();
+  for (const row of byIdResult.data ?? []) byId.set(row.id, row);
+  const byUrl = new Map<string, LibrarySource>();
+  for (const row of byUrlResult.data ?? []) {
     const key = row.url?.trim();
-    if (key && row.cover_url) byUrl.set(key, row.cover_url);
+    if (key) byUrl.set(key, row);
   }
 
-  return nodes.map((node) => ({
-    ...node,
-    poster_url: node.resource_url
-      ? (byUrl.get(node.resource_url.trim()) ?? null)
-      : null,
-  }));
+  return nodes.map((node) => {
+    const linked = node.library_asset_id
+      ? byId.get(node.library_asset_id)
+      : undefined;
+    const copied = node.resource_url
+      ? byUrl.get(node.resource_url.trim())
+      : undefined;
+    const asset = linked ?? copied;
+    if (!asset) return { ...node, poster_url: null };
+    return {
+      ...node,
+      resource_url: asset.url ?? node.resource_url,
+      content_body: linked ? asset.body : (node.content_body ?? asset.body),
+      poster_url: asset.cover_url ?? null,
+    };
+  });
 }
 
 export type StudentMentor = {

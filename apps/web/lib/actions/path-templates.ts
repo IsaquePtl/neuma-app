@@ -521,6 +521,7 @@ export async function applyPathTemplate(formData: FormData) {
         status,
         resource_url: asset?.url ?? n.default_resource_url ?? null,
         content_body: asset?.body ?? null,
+        library_asset_id: n.library_asset_id ?? null,
         check_in_kind: n.check_in_kind ?? (n.kind === "practice" ? "video" : null),
         pass_rule: n.pass_rule ?? defaultPassRule(n.kind),
         pass_score: n.pass_score,

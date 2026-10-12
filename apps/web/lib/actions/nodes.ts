@@ -162,6 +162,8 @@ export async function createNode(formData: FormData) {
     resource_url: ((formData.get("resource_url") as string) || "").trim() || null,
     content_body:
       ((formData.get("content_body") as string) || "").trim() || null,
+    library_asset_id:
+      ((formData.get("library_asset_id") as string) || "").trim() || null,
     pass_rule: passRule,
     pass_score: parsePassScore((formData.get("pass_score") as string) || ""),
     check_in_kind: parseCheckInKind(
@@ -231,6 +233,8 @@ export async function updateNode(formData: FormData) {
       resource_url: ((formData.get("resource_url") as string) || "").trim() || null,
       content_body:
         ((formData.get("content_body") as string) || "").trim() || null,
+      library_asset_id:
+        ((formData.get("library_asset_id") as string) || "").trim() || null,
       pass_rule: passRule,
       pass_score: parsePassScore((formData.get("pass_score") as string) || ""),
       check_in_kind: parseCheckInKind(

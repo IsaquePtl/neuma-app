@@ -240,6 +240,7 @@ export interface Database {
           due_date: string | null;
           resource_url: string | null;
           content_body: string | null;
+          library_asset_id: string | null;
           week_extensions: number;
           extended_weeks: number;
           pass_rule: NodePassRule;
@@ -263,6 +264,7 @@ export interface Database {
           due_date?: string | null;
           content_body?: string | null;
           resource_url?: string | null;
+          library_asset_id?: string | null;
           week_extensions?: number;
           extended_weeks?: number;
           pass_rule?: NodePassRule;
@@ -286,6 +288,7 @@ export interface Database {
           due_date?: string | null;
           resource_url?: string | null;
           content_body?: string | null;
+          library_asset_id?: string | null;
           week_extensions?: number;
           extended_weeks?: number;
           pass_rule?: NodePassRule;
