@@ -17,6 +17,7 @@ export type PathTemplateRow = {
   description: string | null;
   goal: string | null;
   duration_label: string | null;
+  period_months?: number | null;
 };
 
 export function PathTemplateRowActions({

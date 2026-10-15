@@ -50,8 +50,14 @@ const chromeBtnClass =
 /**
  * Native `<video>` with custom controls.
  *
- * Before the first play: the cover is the picture (the video file stays
- * unloaded so it cannot paint black over it). Play hides the cover.
+ * Before the first play the cover is the picture and the file stays unloaded
+ * so it cannot paint black over the cover. The cover stays until the video
+ * has presented more than one frame (or the clock has moved). Taking it down
+ * on the `play` event, or starting playback while the element is
+ * `visibility: hidden`, leaves mobile Safari and Chrome stuck on that frame
+ * with the button already showing pause. The native poster attribute is
+ * omitted so WebKit cannot pin that bitmap after play().
+ *
  * Desktop (fine pointer / mouse): a click anywhere on the picture toggles
  * play. Touch (coarse pointer, including iPad): a tap on the picture only
  * shows or hides the controls. The center button is the only play/pause
@@ -59,8 +65,10 @@ const chromeBtnClass =
  * first tap reveals them. Controls hide after 2.5s of playback and stay up
  * while paused. The timeline and the other controls do not toggle playback.
  *
- * Mobile volume (iOS silent switch): video starts muted; first play gesture
- * unmute before play(). playsInline avoids forced fullscreen on iPhone.
+ * Mobile volume (iOS silent switch): video starts muted; the play gesture
+ * unmutes before attaching src and calling play(). playsInline avoids forced
+ * fullscreen on iPhone. If the load aborts that first play(), it is retried
+ * when the media can play, without seeking away from the current second.
  */
 function NativeVideoPlayer({
   url,
@@ -100,11 +108,19 @@ function NativeVideoPlayer({
   const [isTimelinePointerActive, setIsTimelinePointerActive] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [playError, setPlayError] = useState<string | null>(null);
+  const [coverOn, setCoverOn] = useState(Boolean(poster));
   const scrubbingRef = useRef(false);
   const isSeekingRef = useRef(false);
   const playRequestRef = useRef<Promise<void> | null>(null);
   const hasStartedRef = useRef(false);
   const isPlayingRef = useRef(false);
+  const coverOnRef = useRef(Boolean(poster));
+  /** User asked to play and has not paused since. Survives a load abort. */
+  const wantsPlayRef = useRef(false);
+  const frameTokenRef = useRef(0);
+  const frameCallbackRef = useRef<number | null>(null);
+  const stallTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const retryListenerRef = useRef<(() => void) | null>(null);
   const controlsVisibleRef = useRef(true);
   const isFinePointerRef = useRef(false);
   const lastPointerTypeRef = useRef<string>("mouse");
@@ -166,9 +182,42 @@ function NativeVideoPlayer({
     revealControls();
   }, [isFinePointer, revealControls]);
 
+  const revealPicture = useCallback(() => {
+    if (!coverOnRef.current) return;
+    coverOnRef.current = false;
+    setCoverOn(false);
+  }, []);
+
+  const clearPlaybackWatchers = useCallback(() => {
+    if (stallTimerRef.current !== null) {
+      clearInterval(stallTimerRef.current);
+      stallTimerRef.current = null;
+    }
+    frameTokenRef.current += 1;
+    const video = videoRef.current;
+    if (
+      video &&
+      frameCallbackRef.current !== null &&
+      typeof video.cancelVideoFrameCallback === "function"
+    ) {
+      video.cancelVideoFrameCallback(frameCallbackRef.current);
+    }
+    frameCallbackRef.current = null;
+    if (video && retryListenerRef.current) {
+      video.removeEventListener("canplay", retryListenerRef.current);
+      retryListenerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => clearPlaybackWatchers();
+  }, [clearPlaybackWatchers]);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+
+    video.setAttribute("webkit-playsinline", "true");
 
     const syncDuration = () =>
       setDuration(Number.isFinite(video.duration) ? video.duration : 0);
@@ -180,6 +229,8 @@ function NativeVideoPlayer({
     };
     const onReady = () => setIsBuffering(false);
     const onError = () => {
+      wantsPlayRef.current = false;
+      clearPlaybackWatchers();
       setIsBuffering(false);
       setIsPlaying(false);
       setChromeVisible(true);
@@ -201,6 +252,13 @@ function NativeVideoPlayer({
       scheduleHideControls();
     };
     const onPause = () => {
+      // Attaching src aborts the first play() on mobile. That pause is not
+      // the user; a retry is already scheduled while wantsPlay stays set.
+      if (wantsPlayRef.current) {
+        setIsBuffering(true);
+        return;
+      }
+      clearPlaybackWatchers();
       isPlayingRef.current = false;
       setIsPlaying(false);
       setIsBuffering(false);
@@ -208,6 +266,8 @@ function NativeVideoPlayer({
       setChromeVisible(true);
     };
     const onEnded = () => {
+      wantsPlayRef.current = false;
+      clearPlaybackWatchers();
       isPlayingRef.current = false;
       setIsPlaying(false);
       setIsBuffering(false);
@@ -239,7 +299,12 @@ function NativeVideoPlayer({
     return () => {
       for (const [name, fn] of listeners) video.removeEventListener(name, fn);
     };
-  }, [clearHideControlsTimeout, scheduleHideControls, setChromeVisible]);
+  }, [
+    clearHideControlsTimeout,
+    clearPlaybackWatchers,
+    scheduleHideControls,
+    setChromeVisible,
+  ]);
 
   useEffect(() => {
     const doc = document as Document & { webkitFullscreenElement?: Element };
@@ -298,65 +363,215 @@ function NativeVideoPlayer({
     };
   }, []);
 
+  const watchPresentedFrames = useCallback(
+    (video: HTMLVideoElement) => {
+      if (!poster || !coverOnRef.current) return;
+      const token = ++frameTokenRef.current;
+      const origin = video.currentTime;
+      let seen = 0;
+      const step = () => {
+        frameCallbackRef.current = null;
+        if (token !== frameTokenRef.current || !coverOnRef.current) return;
+        if (!wantsPlayRef.current) return;
+        // A load abort pauses the element before any real frame. Stay armed
+        // so the next presented frame still counts after play() is retried.
+        if (video.paused) {
+          if (typeof video.requestVideoFrameCallback === "function") {
+            frameCallbackRef.current = video.requestVideoFrameCallback(step);
+          }
+          return;
+        }
+        seen += 1;
+        // One callback is the still WebKit paints when play() is accepted.
+        // A second frame, or a clock that has moved, means it is not stuck.
+        if (seen >= 2 || video.currentTime > origin + 0.05) {
+          revealPicture();
+          return;
+        }
+        if (typeof video.requestVideoFrameCallback === "function") {
+          frameCallbackRef.current = video.requestVideoFrameCallback(step);
+        }
+      };
+      if (typeof video.requestVideoFrameCallback === "function") {
+        frameCallbackRef.current = video.requestVideoFrameCallback(step);
+        return;
+      }
+      const onTime = () => {
+        if (video.currentTime > origin + 0.05) revealPicture();
+      };
+      video.addEventListener("timeupdate", onTime, { once: true });
+    },
+    [poster, revealPicture],
+  );
+
+  const watchClock = useCallback(
+    (video: HTMLVideoElement) => {
+      if (stallTimerRef.current !== null) {
+        clearInterval(stallTimerRef.current);
+      }
+      const origin = video.currentTime;
+      const startedAt = performance.now();
+      let retried = false;
+      stallTimerRef.current = setInterval(() => {
+        if (!wantsPlayRef.current || video.ended) {
+          if (stallTimerRef.current !== null) {
+            clearInterval(stallTimerRef.current);
+            stallTimerRef.current = null;
+          }
+          return;
+        }
+        if (video.currentTime > origin + 0.05) {
+          revealPicture();
+          if (stallTimerRef.current !== null) {
+            clearInterval(stallTimerRef.current);
+            stallTimerRef.current = null;
+          }
+          return;
+        }
+        // Load abort leaves the element paused on the first frame. Retry once
+        // the bytes are here. Do not seek — a startup seek is what freezes iOS.
+        if (!retried && video.paused && video.readyState >= 2) {
+          retried = true;
+          void video.play().catch((err) => {
+            const name = err instanceof DOMException ? err.name : "";
+            if (name !== "NotAllowedError" || video.muted) return;
+            video.muted = true;
+            setMuted(true);
+            void video.play().catch(() => {
+              wantsPlayRef.current = false;
+              setIsBuffering(false);
+              setIsPlaying(false);
+            });
+          });
+        }
+        if (performance.now() - startedAt > 8000 && stallTimerRef.current !== null) {
+          clearInterval(stallTimerRef.current);
+          stallTimerRef.current = null;
+        }
+      }, 150);
+    },
+    [revealPicture],
+  );
+
   const playWithSound = useCallback(() => {
     const video = videoRef.current;
     if (!video) return Promise.resolve();
     if (playRequestRef.current) return playRequestRef.current;
 
     setPlayError(null);
+    wantsPlayRef.current = true;
+    // Unmute before src. Flipping mute after the load starts makes mobile
+    // Safari restart the resource and freeze on the first decoded frame.
+    video.muted = false;
+    setMuted(false);
     if (!video.getAttribute("src")) {
       video.preload = "auto";
       video.src = url;
     } else if (video.error) {
-      // Retry after a failed load (e.g. network blip).
       video.load();
     }
     if (video.ended) video.currentTime = 0;
-    video.muted = false;
-    setMuted(false);
     if (video.readyState < 3) setIsBuffering(true);
+    watchPresentedFrames(video);
+
+    const fail = (name: string) => {
+      wantsPlayRef.current = false;
+      setIsBuffering(false);
+      setIsPlaying(false);
+      setPlayError(
+        name === "NotSupportedError"
+          ? "Este browser não consegue reproduzir este formato de vídeo."
+          : "Não foi possível reproduzir o vídeo.",
+      );
+    };
+
+    const retryWhenReady = () => {
+      const retry = () => {
+        retryListenerRef.current = null;
+        if (!wantsPlayRef.current || !video.paused) {
+          if (!video.paused) watchClock(video);
+          return;
+        }
+        void video.play().then(() => {
+          if (!wantsPlayRef.current) {
+            video.pause();
+            return;
+          }
+          watchClock(video);
+        }).catch((err) => {
+          const name = err instanceof DOMException ? err.name : "";
+          if (name === "AbortError") return;
+          if (name === "NotAllowedError") {
+            video.muted = true;
+            setMuted(true);
+            void video.play().then(() => watchClock(video)).catch(() => {
+              fail("NotAllowedError");
+            });
+            return;
+          }
+          fail(name);
+        });
+      };
+      if (video.readyState >= 3) {
+        retry();
+        return;
+      }
+      retryListenerRef.current = retry;
+      video.addEventListener("canplay", retry, { once: true });
+    };
 
     const request = (async () => {
       try {
         await video.play();
+        if (!wantsPlayRef.current) {
+          video.pause();
+          return;
+        }
+        watchClock(video);
       } catch (err) {
         const name = err instanceof DOMException ? err.name : "";
-        if (name === "AbortError") return;
+        if (!wantsPlayRef.current) return;
+        if (name === "AbortError") {
+          retryWhenReady();
+          return;
+        }
         if (name === "NotAllowedError") {
-          // Browser blocked sound: start muted so playback still works.
           video.muted = true;
           setMuted(true);
           try {
             await video.play();
+            if (!wantsPlayRef.current) {
+              video.pause();
+              return;
+            }
+            watchClock(video);
             return;
           } catch {
             // fall through to error state
           }
         }
-        setIsBuffering(false);
-        setPlayError(
-          name === "NotSupportedError"
-            ? "Este browser não consegue reproduzir este formato de vídeo."
-            : "Não foi possível reproduzir o vídeo.",
-        );
+        fail(name);
       } finally {
         playRequestRef.current = null;
       }
     })();
     playRequestRef.current = request;
     return request;
-  }, [url]);
+  }, [url, watchClock, watchPresentedFrames]);
 
   const togglePlay = useCallback(async () => {
     const video = videoRef.current;
     if (!video) return;
 
     if (video.paused) {
+      wantsPlayRef.current = true;
       await playWithSound();
     } else {
+      wantsPlayRef.current = false;
+      clearPlaybackWatchers();
       video.pause();
     }
-  }, [playWithSound]);
+  }, [clearPlaybackWatchers, playWithSound]);
 
   const handleSurfacePointerDown = useCallback(
     (event: React.PointerEvent<HTMLButtonElement>) => {
@@ -684,7 +899,7 @@ function NativeVideoPlayer({
       onMouseEnter={revealControlsFromHover}
       onMouseMove={revealControlsFromHover}
       style={
-        poster && !hasStarted
+        poster && coverOn
           ? {
               backgroundImage: `url("${poster.replaceAll('"', "%22")}")`,
               backgroundSize: "cover",
@@ -700,23 +915,19 @@ function NativeVideoPlayer({
         ref={videoRef}
         data-testid="player-video"
         src={poster ? undefined : url}
-        poster={poster ?? undefined}
         playsInline
-        muted
+        muted={muted}
         preload={poster ? "none" : "metadata"}
         tabIndex={-1}
         onLoadedMetadata={onLoadedMetadata}
         onClick={(event) => event.preventDefault()}
-        className={cn(
-          "pointer-events-none absolute inset-0 size-full object-contain outline-none",
-          poster && !hasStarted && "invisible",
-        )}
+        className="pointer-events-none absolute inset-0 size-full object-contain outline-none"
         aria-label={title ?? "Vídeo"}
       >
         <track kind="captions" />
       </video>
 
-      {poster && !hasStarted ? (
+      {poster && coverOn ? (
         <img
           src={poster}
           alt=""
@@ -762,7 +973,7 @@ function NativeVideoPlayer({
         <div
           className={cn(
             "pointer-events-none absolute inset-0 z-20 rounded-xl",
-            poster && !hasStarted ? "bg-black/20" : "bg-black/40",
+            poster && coverOn ? "bg-black/20" : "bg-black/40",
           )}
           aria-hidden
         />
@@ -793,7 +1004,7 @@ function NativeVideoPlayer({
             </a>
           </div>
         </div>
-      ) : isBuffering && isPlaying && !showChrome ? (
+      ) : (isBuffering || (coverOn && Boolean(poster))) && isPlaying && !showChrome ? (
         <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
           <span className="grid size-14 place-items-center rounded-full bg-black/50 text-white">
             <Loader2 className="size-7 animate-spin" aria-label="A carregar" />
@@ -810,7 +1021,7 @@ function NativeVideoPlayer({
           aria-label={isPlaying ? "Pausar vídeo" : "Reproduzir vídeo"}
         >
           <span className="grid size-14 place-items-center rounded-full bg-[color-mix(in_srgb,var(--neuma-coral)_82%,transparent)] text-white shadow-lg">
-            {isBuffering ? (
+            {isBuffering || (coverOn && Boolean(poster) && isPlaying) ? (
               <Loader2 className="size-7 animate-spin" aria-hidden />
             ) : isPlaying ? (
               <Pause className="size-7 fill-current" />

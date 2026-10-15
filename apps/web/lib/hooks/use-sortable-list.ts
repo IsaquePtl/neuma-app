@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 const INTERACTIVE =
   "button, a, input, textarea, select, label, [role='button'], [role='menuitem'], [contenteditable='true'], [data-no-drag]";
-const MOUSE_THRESHOLD = 6;
-const TOUCH_HOLD_MS = 260;
-const TOUCH_SLOP = 8;
+const MOUSE_THRESHOLD = 4;
+const TOUCH_HOLD_MS = 140;
+const TOUCH_SLOP = 10;
 const EDGE = 72;
 const MAX_SCROLL_SPEED = 18;
 
@@ -34,6 +34,9 @@ type Session = {
   scroller: HTMLElement;
   /** Document-space (scroller content) geometry captured on activation. */
   rest: Array<{ top: number; bottom: number; mid: number }>;
+  /** Every row, including the one being dragged. Index matches `ids`. */
+  geom: Array<{ top: number; height: number; mid: number }>;
+  slot: number;
   listTop: number;
   fromIndex: number;
   raf: number | null;
@@ -50,6 +53,10 @@ function scrollParent(el: HTMLElement): HTMLElement {
     node = node.parentElement;
   }
   return (document.scrollingElement as HTMLElement) ?? document.documentElement;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function scrollerTop(scroller: HTMLElement): number {
@@ -76,6 +83,7 @@ export function useSortableList({
   const [drag, setDrag] = useState<SortableDragState | null>(null);
   const items = useRef(new Map<string, HTMLElement>());
   const listRef = useRef<HTMLElement | null>(null);
+  const indicatorRef = useRef<HTMLLIElement | null>(null);
   const session = useRef<Session | null>(null);
   const latest = useRef({ ids, onDrop });
   useEffect(() => {
@@ -92,6 +100,52 @@ export function useSortableList({
 
   const teardown = useRef<() => void>(() => {});
 
+  const paint = useCallback(() => {
+    const s = session.current;
+    const list = listRef.current;
+    const ids = latest.current.ids;
+    if (!s?.active || !list) {
+      for (const el of items.current.values()) el.style.transform = "";
+      list
+        ?.querySelectorAll<HTMLElement>("[data-sort-follow]")
+        .forEach((el) => {
+          el.style.transform = "";
+        });
+      return;
+    }
+    const { geom, fromIndex, slot } = s;
+    const scroll = s.scroller.scrollTop;
+    const pointer = s.lastY - scrollerTop(s.scroller) + scroll;
+    const dy = s.lastY - s.startY + (scroll - s.startScroll);
+    ids.forEach((id, i) => {
+      const el = items.current.get(id);
+      if (!el || !geom[i]) return;
+      let y = dy;
+      if (i > fromIndex) {
+        const start = geom[i - 1].mid;
+        const end = geom[i].mid;
+        const t = clamp((pointer - start) / (end - start || 1), 0, 1);
+        y = -slot * t;
+      } else if (i < fromIndex) {
+        const start = geom[i + 1].mid;
+        const end = geom[i].mid;
+        const t = clamp((start - pointer) / (start - end || 1), 0, 1);
+        y = slot * t;
+      }
+      el.style.transform = `translate3d(0, ${y}px, 0)`;
+      const follow = list.querySelector<HTMLElement>(
+        `[data-sort-follow="${CSS.escape(id)}"]`,
+      );
+      if (follow) {
+        // The dragged card lifts on its own. Its phase label stays put.
+        follow.style.transform = i === fromIndex ? "" : el.style.transform;
+      }
+    });
+    if (indicatorRef.current && s.state) {
+      indicatorRef.current.style.top = `${Math.max(0, s.state.indicatorTop - 16)}px`;
+    }
+  }, []);
+
   const update = useCallback((clientY: number) => {
     const s = session.current;
     if (!s?.active) return;
@@ -106,15 +160,19 @@ export function useSortableList({
         : toIndex < s.rest.length
           ? s.rest[toIndex].top
           : s.rest[s.rest.length - 1].bottom;
-    s.state = {
+    const next: SortableDragState = {
       id: s.id,
       fromIndex: s.fromIndex,
       toIndex,
       dy: clientY - s.startY + (scroll - s.startScroll),
       indicatorTop: indicator - s.listTop,
     };
-    setDrag(s.state);
-  }, []);
+    const indexChanged = s.state?.toIndex !== next.toIndex;
+    s.state = next;
+    paint();
+    if (!indexChanged) return;
+    setDrag(next);
+  }, [paint]);
 
   const autoScroll = useCallback(() => {
     const tick = () => {
@@ -149,14 +207,20 @@ export function useSortableList({
     if (fromIndex < 0) return;
     const scroll = s.scroller.scrollTop;
     const offset = scrollerTop(s.scroller);
-    s.rest = order
-      .filter((id) => id !== s.id)
-      .map((id) => {
-        const rect = items.current.get(id)?.getBoundingClientRect();
-        const top = (rect?.top ?? 0) - offset + scroll;
-        const bottom = (rect?.bottom ?? 0) - offset + scroll;
-        return { top, bottom, mid: (top + bottom) / 2 };
-      });
+    s.geom = order.map((id) => {
+      const rect = items.current.get(id)?.getBoundingClientRect();
+      const top = (rect?.top ?? 0) - offset + scroll;
+      const height = rect?.height ?? 0;
+      return { top, height, mid: top + height / 2 };
+    });
+    s.slot = s.geom[fromIndex]?.height ?? 0;
+    s.rest = s.geom
+      .filter((_, index) => index !== fromIndex)
+      .map((row) => ({
+        top: row.top,
+        bottom: row.top + row.height,
+        mid: row.mid,
+      }));
     s.listTop = list.getBoundingClientRect().top - offset + scroll;
     s.startScroll = scroll;
     s.fromIndex = fromIndex;
@@ -188,6 +252,8 @@ export function useSortableList({
         holdTimer: null,
         scroller: scrollParent(el),
         rest: [],
+        geom: [],
+        slot: 0,
         listTop: 0,
         fromIndex: -1,
         raf: null,
@@ -243,6 +309,7 @@ export function useSortableList({
         const last = s.state;
         session.current = null;
         teardown.current = () => {};
+        paint();
         setDrag(null);
         if (wasActive && commit && last && last.toIndex !== last.fromIndex) {
           latest.current.onDrop(last.id, last.toIndex);
@@ -274,9 +341,13 @@ export function useSortableList({
 
   useEffect(() => () => teardown.current(), []);
 
+  useLayoutEffect(() => {
+    paint();
+  });
+
   const setList = useCallback((el: HTMLElement | null) => {
     listRef.current = el;
   }, []);
 
-  return { drag, listRef: setList, itemRef, onPointerDown };
+  return { drag, listRef: setList, itemRef, indicatorRef, onPointerDown };
 }

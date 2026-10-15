@@ -1,4 +1,4 @@
-import { FilePenLine } from "lucide-react";
+import { FilePenLine, LayoutTemplate } from "lucide-react";
 
 import { CreatePathButton } from "@/components/create-path-button";
 import {
@@ -6,8 +6,12 @@ import {
   LiveJourneyPaths,
   type JourneyPathListItem,
 } from "@/components/journey-path-list";
+import { PathTemplateList } from "@/components/path-template-list";
 import { Card } from "@/components/ui/card";
-import { pathListSnapshot } from "@/lib/journey-path/list-snapshot";
+import {
+  pathListSnapshot,
+  type PathListSnapshot,
+} from "@/lib/journey-path/list-snapshot";
 import { createClient } from "@/lib/supabase/server";
 import type {
   CheckInStatus,
@@ -15,6 +19,7 @@ import type {
   NodePassRule,
   NodeStatus,
   PathStatus,
+  PathTemplateStatus,
 } from "@/lib/types/database.types";
 
 type PathNode = {
@@ -43,7 +48,26 @@ type PathRow = {
   nodes: PathNode[] | null;
 };
 
-function listItem(path: PathRow, snapshot: string | null): JourneyPathListItem {
+type TemplateRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  goal: string | null;
+  duration_label: string | null;
+  period_months: number | null;
+  status: PathTemplateStatus;
+  path_template_nodes: { count?: number }[] | { count?: number } | null;
+};
+
+function templateNodeCount(countRaw: TemplateRow["path_template_nodes"]) {
+  if (Array.isArray(countRaw)) return countRaw[0]?.count ?? 0;
+  return countRaw?.count ?? 0;
+}
+
+function listItem(
+  path: PathRow,
+  snapshot: PathListSnapshot | null,
+): JourneyPathListItem {
   const student = Array.isArray(path.student)
     ? (path.student[0] ?? null)
     : path.student;
@@ -70,6 +94,8 @@ export default async function JourneysListPage() {
     { data: paths },
     { data: students },
     { data: pendingCheckIns },
+    { data: activeCheckInRows, error: checkInError },
+    { data: templateRows },
   ] = await Promise.all([
     supabase
       .from("paths")
@@ -86,6 +112,17 @@ export default async function JourneysListPage() {
       .from("check_ins")
       .select("student_id")
       .eq("status", "pending"),
+    supabase
+      .from("check_ins")
+      .select("node_id, status, created_at, node:nodes!inner(status)")
+      .eq("node.status", "active"),
+    supabase
+      .from("path_templates")
+      .select(
+        "id, title, description, goal, duration_label, period_months, status, path_template_nodes(count)",
+      )
+      .neq("status", "archived")
+      .order("title", { ascending: true }),
   ]);
 
   const list = (paths as PathRow[] | null) ?? [];
@@ -131,37 +168,21 @@ export default async function JourneysListPage() {
     a.title.localeCompare(b.title, "pt"),
   );
 
-  const activeNodeIds = [
-    ...new Set(
-      sortedLivePaths.flatMap((path) =>
-        (path.nodes ?? [])
-          .filter((node) => node.status === "active")
-          .map((node) => node.id),
-      ),
-    ),
-  ];
-
   const checkInsByNode = new Map<
     string,
     { status: CheckInStatus; created_at: string }[]
   >();
   let checkInsLoaded = true;
-  if (activeNodeIds.length > 0) {
-    const { data: checkInRows, error: checkInError } = await supabase
-      .from("check_ins")
-      .select("node_id, status, created_at")
-      .in("node_id", activeNodeIds);
-    if (checkInError) {
-      console.error("[journeys] check-ins for path list", checkInError.message);
-      checkInsLoaded = false;
-    } else {
-      for (const row of checkInRows ?? []) {
-        if (!row.node_id) continue;
-        const bucket = checkInsByNode.get(row.node_id);
-        const entry = { status: row.status, created_at: row.created_at };
-        if (bucket) bucket.push(entry);
-        else checkInsByNode.set(row.node_id, [entry]);
-      }
+  if (checkInError) {
+    console.error("[journeys] check-ins for path list", checkInError.message);
+    checkInsLoaded = false;
+  } else {
+    for (const row of activeCheckInRows ?? []) {
+      if (!row.node_id) continue;
+      const bucket = checkInsByNode.get(row.node_id);
+      const entry = { status: row.status, created_at: row.created_at };
+      if (bucket) bucket.push(entry);
+      else checkInsByNode.set(row.node_id, [entry]);
     }
   }
 
@@ -178,6 +199,19 @@ export default async function JourneysListPage() {
     ),
   );
   const draftItems = sortedDraftPaths.map((path) => listItem(path, null));
+  const templateItems = ((templateRows as TemplateRow[] | null) ?? [])
+    .filter((template) => template.status !== "archived")
+    .sort((a, b) => a.title.localeCompare(b.title, "pt"))
+    .map((template) => ({
+      id: template.id,
+      title: template.title,
+      description: template.description,
+      goal: template.goal,
+      duration_label: template.duration_label,
+      period_months: template.period_months,
+      status: template.status,
+      nodeCount: templateNodeCount(template.path_template_nodes),
+    }));
 
   return (
     <div className="space-y-10">
@@ -202,6 +236,30 @@ export default async function JourneysListPage() {
           </Card>
         ) : (
           <JourneyPathList paths={draftItems} students={studentOptions} />
+        )}
+      </section>
+
+      <section id="templates" className="scroll-mt-24 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <LayoutTemplate className="size-5" />
+            Templates
+            <span className="font-normal text-muted-foreground">
+              ({templateItems.length})
+            </span>
+          </h2>
+        </div>
+
+        {templateItems.length === 0 ? (
+          <Card className="p-8 text-center text-sm text-muted-foreground">
+            Ainda não há templates. Os percursos que guardares com o botão
+            Template ficam nesta zona.
+          </Card>
+        ) : (
+          <PathTemplateList
+            templates={templateItems}
+            students={studentOptions}
+          />
         )}
       </section>
     </div>

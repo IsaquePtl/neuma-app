@@ -299,6 +299,31 @@ function weekRange(first: number, count: number) {
   return count > 1 ? `Sem. ${first}–${first + count - 1}` : `Sem. ${first}`;
 }
 
+const MONTHS_SHORT = [
+  "jan",
+  "fev",
+  "mar",
+  "abr",
+  "mai",
+  "jun",
+  "jul",
+  "ago",
+  "set",
+  "out",
+  "nov",
+  "dez",
+] as const;
+
+/** Same "9 abr 2027" style as the start-date button. */
+function formatCalendarDate(iso: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!match) return null;
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return `${day} ${MONTHS_SHORT[month - 1]} ${match[1]}`;
+}
+
 export function PathCalendarPanel({
   months,
   onMonthsChange,
@@ -395,6 +420,24 @@ export function PathCalendarPanel({
               className="h-10 w-44"
               onValueChange={onStartDateChange}
             />
+          </div>
+          <div className="space-y-1">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Conclusão
+            </p>
+            <div
+              aria-label="Data de conclusão"
+              className="flex h-10 w-44 items-center rounded-lg border border-input bg-transparent px-2.5 text-left text-sm dark:bg-input/30"
+            >
+              <span
+                className={cn(
+                  "truncate",
+                  !endDate && "text-muted-foreground",
+                )}
+              >
+                {endDate ? formatCalendarDate(endDate) ?? endDate : "—"}
+              </span>
+            </div>
           </div>
         </div>
       </div>

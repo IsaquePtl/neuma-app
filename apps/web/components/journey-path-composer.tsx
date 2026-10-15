@@ -209,16 +209,6 @@ export function JourneyPathComposer({
     assets: libraryAssets,
   });
   const catalogRequested = useRef(libraryAssets.length > 0);
-
-  useEffect(() => {
-    if (catalogRequested.current) return;
-    catalogRequested.current = true;
-    void loadLibraryPickerCatalog()
-      .then((next) => setCatalog(next))
-      .catch(() => {
-        catalogRequested.current = false;
-      });
-  }, []);
   const { reportUnsaved, acknowledgeSaved } = useJourneyEditDirty();
   // Dropped automatically once the server sends a fresh `nodes` array.
   const [optimistic, setOptimistic] = useState<{
@@ -238,6 +228,17 @@ export function JourneyPathComposer({
   const levelSave = useRef<(() => Promise<boolean>) | null>(null);
   const [savingAll, setSavingAll] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+
+  useEffect(() => {
+    if (catalogRequested.current) return;
+    if (!expanded && !createOpen) return;
+    catalogRequested.current = true;
+    void loadLibraryPickerCatalog()
+      .then((next) => setCatalog(next))
+      .catch(() => {
+        catalogRequested.current = false;
+      });
+  }, [createOpen, expanded]);
   const [createWeeks, setCreateWeeks] = useState<number | undefined>();
   const phases = useMemo(() => phaseOptions(nodes), [nodes]);
   const phaseByKey = useMemo(() => new Map(phases.map((p) => [p.key, p])), [phases]);
@@ -265,7 +266,7 @@ export function JourneyPathComposer({
       }
     });
   };
-  const { drag, listRef, itemRef, onPointerDown } = useSortableList({
+  const { drag, listRef, itemRef, indicatorRef, onPointerDown } = useSortableList({
     ids: nodeIds,
     canDrag: canDragLevel,
     onDrop: dropLevel,
@@ -614,21 +615,22 @@ export function JourneyPathComposer({
         </div>
       </div>
 
-      <NodeDialog
-        pathId={path.id}
-        categories={catalog.categories}
-        topics={catalog.topics}
-        assets={catalog.assets}
-        phases={phases}
-        weeksMax={budget.free ?? undefined}
-        defaultWeeks={createWeeks}
-        open={createOpen}
-        onOpenChange={(next) => {
-          setCreateOpen(next);
-          if (!next) setCreateWeeks(undefined);
-        }}
-        showTrigger={false}
-      />
+      {createOpen ? (
+        <NodeDialog
+          pathId={path.id}
+          categories={catalog.categories}
+          topics={catalog.topics}
+          assets={catalog.assets}
+          weeksMax={budget.free ?? undefined}
+          defaultWeeks={createWeeks}
+          open
+          onOpenChange={(next) => {
+            setCreateOpen(next);
+            if (!next) setCreateWeeks(undefined);
+          }}
+          showTrigger={false}
+        />
+      ) : null}
 
       <PathCalendarPanel
         months={periodMonths}
@@ -752,6 +754,7 @@ export function JourneyPathComposer({
         <ol ref={listRef} className="student-path-journey relative list-none pl-0">
           {drag && dropPreview ? (
             <li
+              ref={indicatorRef}
               aria-hidden
               className="pointer-events-none absolute right-0 left-[4.25rem] z-30 -translate-y-1/2 sm:left-[5.25rem]"
               style={{ top: Math.max(0, drag.indicatorTop - 16) }}
@@ -788,7 +791,10 @@ export function JourneyPathComposer({
             return (
               <Fragment key={node.id}>
                 {isPhaseStart && phase ? (
-                  <li className="relative list-none pb-3 pt-1 first:pt-0">
+                  <li
+                    data-sort-follow={node.id}
+                    className="relative list-none pb-3 pt-1 first:pt-0"
+                  >
                     {i > 0 ? (
                       <span
                         aria-hidden
@@ -812,13 +818,11 @@ export function JourneyPathComposer({
                 id={`level-${node.id}`}
                 ref={itemRef(node.id)}
                 onPointerDown={onPointerDown(node.id)}
-                style={isDragging ? { transform: `translateY(${drag?.dy ?? 0}px)` } : undefined}
                 className={cn(
                   "relative flex min-w-0 gap-3 pb-8 [-webkit-touch-callout:none] sm:gap-5",
                   draggable && !drag && "cursor-grab",
-                  drag && "select-none",
+                  drag && "select-none will-change-transform",
                   isDragging && "z-40 cursor-grabbing",
-                  drag && !isDragging && "transition-opacity",
                 )}
               >
                 <span
@@ -1091,7 +1095,6 @@ export function JourneyPathComposer({
                         assets={catalog.assets}
                         inline
                         idPrefix={node.id}
-                        phases={phases}
                         onDirtyChange={setLevelDirty}
                         saveHandleRef={levelSave}
                         hideWeeks
@@ -1132,7 +1135,8 @@ export function JourneyPathComposer({
             <Button
               type="button"
               variant="ghost"
-              size="sm"
+              size="lg"
+              className="px-3.5"
               disabled={savingAll}
               onClick={discardAll}
             >
@@ -1140,7 +1144,8 @@ export function JourneyPathComposer({
             </Button>
             <Button
               type="button"
-              size="sm"
+              size="lg"
+              className="px-3.5"
               disabled={savingAll}
               onClick={() => void saveAll()}
             >

@@ -188,3 +188,170 @@ export async function syncCalBookingsFromApi(): Promise<{
 
   return { ok: true, upserted };
 }
+
+export type RescheduledCalBooking = {
+  uid: string;
+  id: number | null;
+  title: string | null;
+  status: CalBookingStatus;
+  start: string;
+  end: string;
+  meetUrl: string | null;
+};
+
+function publicCalError(status: number, body: string) {
+  let message = "";
+  try {
+    const json = JSON.parse(body) as {
+      message?: unknown;
+      error?: { message?: unknown } | string;
+    };
+    const raw =
+      typeof json.error === "string"
+        ? json.error
+        : json.error && typeof json.error.message === "string"
+          ? json.error.message
+          : typeof json.message === "string"
+            ? json.message
+            : "";
+    message = raw.replace(/cal_[A-Za-z0-9_]+/g, "…").trim().slice(0, 180);
+  } catch {
+    message = "";
+  }
+  if (message) return `O Cal.com recusou: ${message}`;
+  if (status === 404) return "O Cal.com não encontrou esta marcação.";
+  if (status === 401 || status === 403) return "O Cal.com recusou o acesso.";
+  return "O Cal.com recusou esta hora.";
+}
+
+function unwrapBooking(json: unknown): CalApiBooking | null {
+  if (!json || typeof json !== "object") return null;
+  const root = json as { data?: unknown };
+  const data = root.data ?? root;
+  if (Array.isArray(data)) {
+    return (data[0] as CalApiBooking | undefined) ?? null;
+  }
+  if (!data || typeof data !== "object") return null;
+  const record = data as CalApiBooking & {
+    booking?: CalApiBooking;
+    startTime?: string | null;
+    endTime?: string | null;
+  };
+  if (record.booking?.uid || record.booking?.start) return record.booking;
+  if (record.uid || record.start || record.startTime) {
+    return {
+      ...record,
+      start: record.start ?? record.startTime ?? null,
+      end: record.end ?? record.endTime ?? null,
+    };
+  }
+  return null;
+}
+
+/**
+ * POST /v2/bookings/{uid}/reschedule (cal-api-version 2024-08-13).
+ * Does not write the database. A non-ok result means Cal.com did not confirm.
+ */
+export async function rescheduleCalBookingRequest(input: {
+  bookingUid: string;
+  startIso: string;
+  rescheduledBy?: string | null;
+  previousEndIso?: string | null;
+  previousStartIso?: string | null;
+}): Promise<
+  { ok: true; booking: RescheduledCalBooking } | { ok: false; error: string }
+> {
+  const apiKey = getCalApiKey();
+  if (!apiKey) return { ok: false, error: "O Cal.com não está configurado." };
+
+  const uid = input.bookingUid.trim();
+  const startIso = input.startIso.trim();
+  if (!uid || !startIso) {
+    return { ok: false, error: "Faltam dados da marcação." };
+  }
+
+  const body: {
+    start: string;
+    reschedulingReason: string;
+    rescheduledBy?: string;
+  } = {
+    start: startIso,
+    reschedulingReason: "Reagendado no calendário do estúdio",
+  };
+  const rescheduledBy = input.rescheduledBy?.trim();
+  if (rescheduledBy) body.rescheduledBy = rescheduledBy;
+
+  let res: Response;
+  try {
+    res = await fetch(
+      `${CAL_API}/bookings/${encodeURIComponent(uid)}/reschedule`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "cal-api-version": CAL_API_VERSION,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        cache: "no-store",
+      },
+    );
+  } catch {
+    return { ok: false, error: "Não foi possível contactar o Cal.com." };
+  }
+
+  const text = await res.text().catch(() => "");
+  if (!res.ok) return { ok: false, error: publicCalError(res.status, text) };
+
+  let booking: CalApiBooking | null = null;
+  try {
+    booking = unwrapBooking(JSON.parse(text) as unknown);
+  } catch {
+    booking = null;
+  }
+  const nextUid = booking?.uid?.trim();
+  const nextStart = booking?.start?.trim();
+  if (!booking || !nextUid || !nextStart) {
+    return {
+      ok: false,
+      error:
+        "O Cal.com respondeu sem a nova marcação. Recarrega o calendário antes de tentar outra vez.",
+    };
+  }
+
+  let nextEnd = booking.end?.trim() || "";
+  if (!nextEnd && input.previousStartIso && input.previousEndIso) {
+    const duration =
+      new Date(input.previousEndIso).getTime() -
+      new Date(input.previousStartIso).getTime();
+    if (Number.isFinite(duration) && duration > 0) {
+      nextEnd = new Date(new Date(nextStart).getTime() + duration).toISOString();
+    }
+  }
+  if (!nextEnd) {
+    return {
+      ok: false,
+      error:
+        "O Cal.com não devolveu a hora de fim. Recarrega o calendário antes de tentar outra vez.",
+    };
+  }
+
+  const meetUrl =
+    booking.meetingUrl?.trim() ||
+    (typeof booking.location === "string" && booking.location.startsWith("http")
+      ? booking.location.trim()
+      : null);
+
+  return {
+    ok: true,
+    booking: {
+      uid: nextUid,
+      id: typeof booking.id === "number" ? booking.id : null,
+      title: booking.title?.trim() || null,
+      status: mapStatus(booking.status),
+      start: nextStart,
+      end: nextEnd,
+      meetUrl,
+    },
+  };
+}

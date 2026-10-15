@@ -109,7 +109,7 @@ export function JourneyPathRowActions({
     <>
       <div className="hidden shrink-0 flex-wrap items-center justify-end gap-1 desktop:flex">
         <Button
-          render={<IntentLink href={editHref} prefetch />}
+          render={<IntentLink href={editHref} />}
           nativeButton={false}
           size="sm"
           variant="ghost"

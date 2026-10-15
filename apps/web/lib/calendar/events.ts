@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import { studentProfileHref } from "@/lib/journey-path/routes";
+import type { NodeKind, NodePassRule } from "@/lib/types/database.types";
 
 /** App calendar day / display timezone */
 export const APP_TIMEZONE = "Europe/Lisbon";
@@ -31,10 +32,19 @@ export type CalendarEvent = {
   /** Raw mentor_calendar_events.id when editable */
   editableEventId?: string | null;
   startsAtIso?: string | null;
+  endsAtIso?: string | null;
   notes?: string | null;
   pathId?: string | null;
+  pathTitle?: string | null;
   nodeId?: string | null;
   nodeTitle?: string | null;
+  nodeKind?: NodeKind | null;
+  passRule?: NodePassRule | null;
+  /** Level sits on a path start date, so the due date is a Friday in the week model. */
+  scheduleAnchored?: boolean;
+  calBookingUid?: string | null;
+  /** Set when the item must stay read-only. One short PT-PT sentence. */
+  readOnlyReason?: string | null;
 };
 
 function toDateKey(value: string | Date) {
@@ -95,7 +105,7 @@ export async function loadCalendarEvents(
     supabase
       .from("cal_bookings")
       .select(
-        "id, start_time, end_time, title, attendee_name, attendee_email, meet_url, status, student_id",
+        "id, cal_booking_uid, start_time, end_time, title, attendee_name, attendee_email, meet_url, status, student_id",
       )
       .in("status", ["accepted", "pending", "rescheduled"])
       .gte("start_time", fromIso)
@@ -104,7 +114,7 @@ export async function loadCalendarEvents(
     supabase
       .from("nodes")
       .select(
-        "id, title, due_date, status, kind, path:paths(id, title, student_id, student:profiles!paths_student_id_fkey(full_name, email))",
+        "id, title, due_date, status, kind, pass_rule, week_number, path:paths(id, title, start_date, student_id, student:profiles!paths_student_id_fkey(full_name, email))",
       )
       .not("due_date", "is", null)
       .gte("due_date", fromDate)
@@ -133,6 +143,7 @@ export async function loadCalendarEvents(
     const date = toDateKey(b.start_time);
     if (!date) continue;
     const when = toTimeLabel(b.start_time);
+    const bookingUid = b.cal_booking_uid?.trim() || null;
     events.push({
       id: `session-${b.id}`,
       date,
@@ -145,6 +156,11 @@ export async function loadCalendarEvents(
       meetUrl: b.meet_url,
       meta: when,
       startsAtIso: b.start_time,
+      endsAtIso: b.end_time,
+      calBookingUid: bookingUid,
+      readOnlyReason: bookingUid
+        ? null
+        : "Esta sessão não tem marcação no Cal.com.",
     });
   }
 
@@ -156,6 +172,9 @@ export async function loadCalendarEvents(
         ? path.student[0]
         : path.student
       : null;
+    const anchored = Boolean(
+      path?.start_date && n.week_number != null && n.week_number >= 1,
+    );
     events.push({
       id: `due-${n.id}`,
       date: n.due_date,
@@ -165,6 +184,16 @@ export async function loadCalendarEvents(
       studentId: path?.student_id ?? null,
       href: path?.id ? `/studio/journeys/${path.id}` : null,
       meta: `Prazo · ${n.status}`,
+      pathId: path?.id ?? null,
+      pathTitle: path?.title ?? null,
+      nodeId: n.id,
+      nodeTitle: n.title,
+      nodeKind: n.kind,
+      passRule: n.pass_rule,
+      scheduleAnchored: anchored,
+      readOnlyReason: path?.id
+        ? null
+        : "Este prazo não está ligado a um percurso.",
     });
   }
 
@@ -181,6 +210,9 @@ export async function loadCalendarEvents(
         studentId: p.student_id,
         href: `/studio/journeys/${p.id}`,
         meta: "Início do percurso",
+        pathId: p.id,
+        readOnlyReason:
+          "O início recalcula todos os prazos. Muda-o no percurso.",
       });
     }
     if (p.end_date && p.end_date >= fromDate && p.end_date <= toDate) {
@@ -193,6 +225,9 @@ export async function loadCalendarEvents(
         studentId: p.student_id,
         href: `/studio/journeys/${p.id}`,
         meta: "Fim previsto do percurso",
+        pathId: p.id,
+        readOnlyReason:
+          "O fim previsto vem da duração do percurso. Muda-o no percurso.",
       });
     }
   }

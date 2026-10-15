@@ -52,50 +52,80 @@ function checkInPhrase(node: SnapshotNode, rows: CheckInRow[]): string | null {
   return rule === "check_in" ? "Sem check-in" : null;
 }
 
-/** One line under a path row: current level, check-in state, next level. */
+export type PathListSnapshot = {
+  agora: {
+    title: string;
+    /** Set when a level is active. Absent for "Sem nível ativo". */
+    nodeId: string | null;
+  };
+  /** Check-in state of the active level, when that level uses check-ins. */
+  checkIn: string | null;
+  next: {
+    title: string;
+    nodeId: string;
+    /** "entra na segunda-feira, 19 de outubro" while the level waits for Monday. */
+    waiting: string | null;
+  } | null;
+};
+
+/** Current level, check-in state, and next level under a path row. */
 export function pathListSnapshot(input: {
   nodes: SnapshotNode[];
   startDate: string | null;
   createdAt: string | null;
   checkInsByNode: ReadonlyMap<string, CheckInRow[]>;
   checkInsLoaded: boolean;
-}): string {
+}): PathListSnapshot {
   const nodes = [...input.nodes].sort(
     (a, b) => a.order_index - b.order_index,
   );
   const activeIndex = nodes.findIndex((node) => node.status === "active");
   const active = activeIndex >= 0 ? nodes[activeIndex] : null;
 
-  const parts = [
-    `Agora: ${active ? levelTitle(active) : "Sem nível ativo"}`,
-  ];
-
+  let checkIn: string | null = null;
   if (active && input.checkInsLoaded) {
-    const checkIn = checkInPhrase(
-      active,
-      input.checkInsByNode.get(active.id) ?? [],
-    );
-    if (checkIn) parts.push(checkIn);
+    checkIn = checkInPhrase(active, input.checkInsByNode.get(active.id) ?? []);
   }
 
-  let next: string | null = null;
+  let next: PathListSnapshot["next"] = null;
   if (active) {
     const following = nodes[activeIndex + 1];
-    next = following ? following.title.trim() || "Nível" : null;
+    if (following) {
+      next = {
+        title: following.title.trim() || "Nível",
+        nodeId: following.id,
+        waiting: null,
+      };
+    }
   } else {
     const upcoming = findUpcomingLevel(
       nodes,
       calendarStart(input.startDate, input.createdAt),
     );
     if (upcoming) {
-      const title = upcoming.node.title.trim() || "Nível";
-      next = `${title} · entra na ${formatWeekdayDatePt(upcoming.opensOn)}`;
+      next = {
+        title: upcoming.node.title.trim() || "Nível",
+        nodeId: upcoming.node.id,
+        waiting: `entra na ${formatWeekdayDatePt(upcoming.opensOn)}`,
+      };
     } else {
       const following = nodes.find((node) => node.status !== "completed");
-      next = following ? following.title.trim() || "Nível" : null;
+      if (following) {
+        next = {
+          title: following.title.trim() || "Nível",
+          nodeId: following.id,
+          waiting: null,
+        };
+      }
     }
   }
 
-  if (next) parts.push(`Próximo: ${next}`);
-  return parts.join(" · ");
+  return {
+    agora: {
+      title: active ? levelTitle(active) : "Sem nível ativo",
+      nodeId: active?.id ?? null,
+    },
+    checkIn,
+    next,
+  };
 }

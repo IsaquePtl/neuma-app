@@ -28,8 +28,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { WeekStepper } from "@/components/week-stepper";
 import { nodeKindLabel } from "@/lib/labels";
 import { NodeGateFields } from "@/components/node-gate-fields";
-import { PhaseFields } from "@/components/phase-fields";
-import type { PhaseOption } from "@/lib/nodes/phases";
 import { defaultPassRule } from "@/lib/nodes/pass-rule";
 import { MAX_LEVEL_WEEKS, plannedWeeks } from "@/lib/nodes/week-budget";
 import type { NodeKind, NodePassRule, NodeStatus } from "@/lib/types/database.types";
@@ -186,8 +184,6 @@ const glassFieldClass =
   "rounded-xl border-white/10 bg-black/20 px-3 text-sm focus-visible:border-white/20 focus-visible:ring-white/10";
 const glassInputClass = cn(glassFieldClass, "h-10");
 const glassTextareaClass = cn(glassFieldClass, "min-h-24 py-2.5");
-const glassSelectClass =
-  "h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm";
 
 function LevelTextField({
   id,
@@ -254,7 +250,6 @@ export function NodeEditorForm({
   idPrefix = "",
   onSuccess,
   className,
-  phases = [],
   onDirtyChange,
   saveHandleRef,
   weeksMax,
@@ -272,7 +267,6 @@ export function NodeEditorForm({
   idPrefix?: string;
   onSuccess?: () => void;
   className?: string;
-  phases?: PhaseOption[];
   onDirtyChange?: (dirty: boolean) => void;
   saveHandleRef?: NodeEditorSaveHandle;
   /** Most weeks this level may take (its own + free); omit when the path has no calendar. */
@@ -341,7 +335,7 @@ export function NodeEditorForm({
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   function recheckFields() {
-    // Wait a frame so state-driven hidden inputs (phase, gate fields) are committed.
+    // Wait a frame so state-driven hidden inputs (gate fields) are committed.
     requestAnimationFrame(() => {
       const form = formRef.current;
       if (!form || initialFieldsRef.current == null) return;
@@ -405,9 +399,6 @@ export function NodeEditorForm({
 
   const inputClass = inline ? glassInputClass : undefined;
   const textareaClass = inline ? glassTextareaClass : undefined;
-  const selectClass = inline
-    ? glassSelectClass
-    : "h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm";
 
   return (
     <form
@@ -479,21 +470,7 @@ export function NodeEditorForm({
         checkInKind={node?.check_in_kind}
         passScore={node?.pass_score}
         inputClass={inputClass}
-        selectClass={selectClass}
         idPrefix={idPrefix}
-      />
-
-      <PhaseFields
-        kind={kind}
-        passRule={passRule}
-        phases={phases}
-        nodeId={node?.id}
-        initialPhaseKey={node?.phase_key}
-        initialIsCheckpoint={Boolean(node?.is_phase_checkpoint)}
-        selectClass={selectClass}
-        inputClass={inputClass}
-        idPrefix={idPrefix}
-        inline={inline}
       />
 
       <div className="space-y-2">
@@ -574,11 +551,7 @@ export function NodeEditorForm({
       ) : null}
       </FormSection>
 
-      <FormSection
-        title="Conteúdo"
-        panelId={fieldId("content-panel")}
-        className="border-t border-white/10 pt-5"
-      >
+      <FormSection title="Conteúdo" panelId={fieldId("content-panel")}>
 
         <input type="hidden" name="library_asset_id" value={pickedAssetId} />
 
@@ -601,15 +574,6 @@ export function NodeEditorForm({
             if (!title.trim()) setTitle(sel.title);
           }}
         />
-
-        {allowsContent(kind) && resourceUrl && !pickedAssetId ? (
-          <p className="truncate text-xs text-muted-foreground">
-            {kind === "call" || kind === "milestone"
-              ? "Anexo de apoio: "
-              : "Link: "}
-            {resourceUrl}
-          </p>
-        ) : null}
 
         {allowsContent(kind) ? (
           <LevelTextField
@@ -681,7 +645,6 @@ export function NodeDialog({
   categories = [],
   topics = [],
   assets = [],
-  phases = [],
   weeksMax,
   defaultWeeks,
   open: openProp,
@@ -694,7 +657,6 @@ export function NodeDialog({
   categories?: PickerCategory[];
   topics?: PickerTopic[];
   assets?: PickerAsset[];
-  phases?: PhaseOption[];
   weeksMax?: number;
   defaultWeeks?: number;
   open?: boolean;
@@ -760,7 +722,6 @@ export function NodeDialog({
           categories={categories}
           topics={topics}
           assets={assets}
-          phases={phases}
           weeksMax={weeksMax}
           defaultWeeks={defaultWeeks}
           onSuccess={() => setOpen(false)}

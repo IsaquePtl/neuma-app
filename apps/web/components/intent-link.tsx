@@ -13,7 +13,10 @@ export function warmHref(router: ReturnType<typeof useRouter>, href: string) {
   void router.prefetch(href, { kind: PrefetchKind.FULL });
 }
 
-type IntentLinkProps = ComponentProps<typeof Link>;
+type IntentLinkProps = ComponentProps<typeof Link> & {
+  /** Full route prefetch when the pointer arrives. Off for heavy pages. */
+  prefetchOnIntent?: boolean;
+};
 
 /** Full prefetch on pointer intent. Viewport prefetch stays off so a list does not fetch every row. */
 export function IntentLink({
@@ -21,10 +24,12 @@ export function IntentLink({
   onPointerEnter,
   onFocus,
   prefetch = false,
+  prefetchOnIntent = true,
   ...props
 }: IntentLinkProps) {
   const router = useRouter();
   const warm = useCallback(() => {
+    if (!prefetchOnIntent) return;
     const target =
       typeof href === "string"
         ? href
@@ -33,7 +38,7 @@ export function IntentLink({
           : null;
     if (!target) return;
     warmHref(router, target);
-  }, [href, router]);
+  }, [href, prefetchOnIntent, router]);
 
   return (
     <Link

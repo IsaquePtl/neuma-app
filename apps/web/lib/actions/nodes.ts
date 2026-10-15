@@ -17,6 +17,7 @@ import {
   reorderPathNodes,
 } from "@/lib/nodes/phase-layout";
 import {
+  phaseKeyForPlacement,
   planPhaseAwareDrop,
   planPhaseAwareMove,
   planPhaseRanges,
@@ -129,15 +130,14 @@ export async function createNode(formData: FormData) {
   const durationWeeks = parseDurationWeeks(formData) ?? 1;
   await assertWeeksFit(supabase, pathId, null, durationWeeks);
 
-  const { data: last } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from("nodes")
-    .select("order_index")
+    .select("id, kind, phase_key, is_phase_checkpoint, order_index")
     .eq("path_id", pathId)
-    .order("order_index", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const nextIndex = (last?.order_index ?? -1) + 1;
+    .order("order_index", { ascending: true });
+  if (existingError) throw new Error(existingError.message);
+  const siblings = existing ?? [];
+  const nextIndex = (siblings.at(-1)?.order_index ?? -1) + 1;
 
   // Primeiro node de um percurso comeca ativo; restantes bloqueados.
   const status: NodeStatus = nextIndex === 0 ? "active" : "locked";
@@ -147,7 +147,14 @@ export async function createNode(formData: FormData) {
     (formData.get("pass_rule") as string) || "",
     kind,
   );
-  const { phaseKey, isPhaseCheckpoint } = parsePhaseFields(formData, kind);
+  // The level form does not post a phase. A new level takes the phase its
+  // position implies (the open phase beside it). An explicit phase_key still wins.
+  const phasePosted = formData.has("phase_key") || formData.has("is_phase_checkpoint");
+  const parsedPhase = phasePosted ? parsePhaseFields(formData, kind) : null;
+  const phaseKey = parsedPhase
+    ? parsedPhase.phaseKey
+    : phaseKeyForPlacement(siblings, siblings.length);
+  const isPhaseCheckpoint = parsedPhase?.isPhaseCheckpoint ?? false;
   if (isPhaseCheckpoint && phaseKey) {
     await releasePathPhaseCheckpoint(supabase, pathId, phaseKey);
   }
@@ -219,9 +226,14 @@ export async function updateNode(formData: FormData) {
       };
     }
   }
-  const { phaseKey, isPhaseCheckpoint } = parsePhaseFields(formData, kind);
-  if (isPhaseCheckpoint && phaseKey) {
-    await releasePathPhaseCheckpoint(supabase, pathId, phaseKey, id);
+  // Absent phase fields stay as stored. The level form no longer posts them,
+  // and writing null here would clear the phase the calendar assigned.
+  const phaseKeyPosted = formData.has("phase_key");
+  const checkpointPosted = formData.has("is_phase_checkpoint");
+  const parsedPhase =
+    phaseKeyPosted || checkpointPosted ? parsePhaseFields(formData, kind) : null;
+  if (parsedPhase?.isPhaseCheckpoint && parsedPhase.phaseKey) {
+    await releasePathPhaseCheckpoint(supabase, pathId, parsedPhase.phaseKey, id);
   }
   const { error: updateError } = await supabase
     .from("nodes")
@@ -257,14 +269,22 @@ export async function updateNode(formData: FormData) {
             ),
           }
         : {}),
-      phase_key: phaseKey,
       // The level editor no longer posts node_code. Leave the column as stored.
-      is_phase_checkpoint: isPhaseCheckpoint,
+      ...(phaseKeyPosted ? { phase_key: parsedPhase?.phaseKey ?? null } : {}),
+      ...(checkpointPosted
+        ? { is_phase_checkpoint: parsedPhase?.isPhaseCheckpoint ?? false }
+        : {}),
     })
     .eq("id", id);
   if (updateError) throw new Error(updateError.message);
 
-  await applyPathPhaseLayout(supabase, pathId, isPhaseCheckpoint ? id : null);
+  if (phaseKeyPosted || checkpointPosted) {
+    await applyPathPhaseLayout(
+      supabase,
+      pathId,
+      parsedPhase?.isPhaseCheckpoint ? id : null,
+    );
+  }
   await resegmentPathLevels(supabase, pathId);
   await revalidateAfterNodeChange(supabase, pathId);
 }

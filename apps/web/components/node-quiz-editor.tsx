@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
-import { GripVertical, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, GripVertical, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScreenLoader } from "@/components/screen-loader";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 type DraftQuestion = {
   key: string;
@@ -51,7 +52,9 @@ export function NodeQuizEditor({
   const [questions, setQuestions] = useState<DraftQuestion[]>([]);
   const [attempts, setAttempts] = useState<QuizAttemptSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const panelId = `quiz-panel-${nodeId}`;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -126,14 +129,32 @@ export function NodeQuizEditor({
     });
   }
 
-  if (loading) {
-    return <ScreenLoader className="min-h-[12rem]" />;
-  }
-
   return (
-    <div className="space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-      <p className="text-sm font-medium">Quiz do check-point</p>
-
+    <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((value) => !value)}
+        className={cn(
+          "flex w-full items-center justify-between gap-3 bg-white/5 px-3 py-2.5 text-left transition-colors hover:bg-white/10",
+          open && "border-b border-white/10",
+        )}
+      >
+        <span className="text-sm font-medium">Quiz do check-point</span>
+        <ChevronDown
+          aria-hidden
+          className={cn(
+            "size-3.5 shrink-0 text-muted-foreground transition-transform",
+            !open && "-rotate-90",
+          )}
+        />
+      </button>
+      <div id={panelId} hidden={!open} className="space-y-4 p-3">
+        {loading ? (
+          <ScreenLoader className="min-h-[12rem]" />
+        ) : (
+          <>
       <div className="space-y-4">
         {questions.map((q, qi) => (
           <div
@@ -262,6 +283,9 @@ export function NodeQuizEditor({
           </ul>
         </div>
       ) : null}
+          </>
+        )}
+      </div>
     </div>
   );
 }

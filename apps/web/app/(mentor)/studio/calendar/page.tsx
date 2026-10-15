@@ -4,6 +4,7 @@ import { CalendarToolbar } from "@/components/calendar-toolbar";
 import { MentorCalendar } from "@/components/mentor-calendar";
 import { MentorCalBookButton } from "@/components/mentor-cal-book-panel";
 import { CreateCalendarEventPanel } from "@/components/create-calendar-event-form";
+import { PathPanoramaSection } from "@/components/mentor-dashboard/path-panorama-section";
 import { UpcomingSessionsSection } from "@/components/mentor-dashboard/upcoming-sessions-section";
 import { Button } from "@/components/ui/button";
 import { ScreenLoader } from "@/components/screen-loader";
@@ -14,6 +15,7 @@ import {
   loadCalendarEvents,
   loadUpcomingSessions,
 } from "@/lib/calendar/events";
+import { loadPathPanorama } from "@/lib/calendar/path-panorama";
 import { loadActionNeeded } from "@/lib/mentor/action-needed";
 import type { CalendarEventKind } from "@/lib/calendar/events";
 
@@ -58,13 +60,14 @@ export default async function MentorCalendarPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [events, upcoming, actionNeeded, { data: mentorProfile }, { data: students }, { data: paths }] =
+  const [events, upcoming, actionNeeded, panorama, { data: mentorProfile }, { data: students }, { data: paths }] =
     await Promise.all([
       loadCalendarEvents(safeYear, safeMonth, {
         studentReturnTo: "/studio/calendar",
       }),
       loadUpcomingSessions(7),
       loadActionNeeded(),
+      loadPathPanorama(),
       supabase
         .from("profiles")
         .select("cal_username")
@@ -169,6 +172,8 @@ export default async function MentorCalendarPage({
         sessions={upcoming}
         returnTo="/studio/calendar"
       />
+
+      <PathPanoramaSection model={panorama} />
     </div>
       <div
         aria-hidden

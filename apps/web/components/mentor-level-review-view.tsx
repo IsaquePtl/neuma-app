@@ -19,11 +19,9 @@ import type {
 } from "@/components/journey-path-composer";
 import type { CheckInDetail } from "@/lib/journey-path/load-level-review";
 import { mentorLevelReviewHref } from "@/lib/journey-path/level-review-url";
-import { studentProfileHref } from "@/lib/journey-path/routes";
 import {
   checkInKindLabel,
   formatDateTime,
-  nodeStatusLabel,
   passRuleLabel,
 } from "@/lib/labels";
 import type { StudentNode } from "@/lib/students/queries";
@@ -526,9 +524,7 @@ function SubmissionSection({
 
 export function MentorLevelReviewView({
   pathId,
-  pathTitle,
   studentName,
-  studentId,
   node,
   levelNumber,
   nodeCheckIns,
@@ -577,43 +573,6 @@ export function MentorLevelReviewView({
           O feedback ficou gravado. O email ao aluno não saiu.
         </p>
       ) : null}
-      <header>
-        <p className="text-sm text-muted-foreground">
-          <Link
-            href={`/studio/journeys/${pathId}`}
-            className="hover:text-foreground"
-          >
-            {pathTitle}
-          </Link>
-          {studentId ? (
-            <>
-              {" · "}
-              <Link
-                href={studentProfileHref(studentId, returnTo)}
-                className="hover:text-foreground"
-              >
-                {studentName}
-              </Link>
-            </>
-          ) : (
-            <> · {studentName}</>
-          )}
-        </p>
-        <p className="mt-2 text-sm">
-          Gate {passRuleLabel[node.pass_rule]} · {nodeStatusLabel[node.status]}
-          {node.due_date ? ` · prazo ${node.due_date}` : ""}
-          {" · "}
-          {node.kind === "call"
-            ? "concluis a sessão para fechar"
-            : node.pass_rule === "check_in"
-              ? "fecha ao aprovar o check-in"
-              : node.pass_rule === "quiz"
-                ? "fecha quando o quiz passa"
-                : node.pass_rule === "none"
-                  ? "fecha quando o aluno marca visto"
-                  : "fecha quando o concluis"}
-        </p>
-      </header>
 
       <div className="w-full space-y-5 py-2 desktop:space-y-6 desktop:py-0">
         <div className="flex justify-end">

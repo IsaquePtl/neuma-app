@@ -1,5 +1,3 @@
-"use client";
-
 import { IntentLink } from "@/components/intent-link";
 import {
   Lock,
@@ -100,8 +98,8 @@ export function JourneyPathAdminView({
             )}
             Percurso
           </p>
-          <div className="flex items-center gap-2">
-            <h1 className="min-w-0 flex-1 text-2xl font-bold tracking-tight sm:text-3xl">
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
+            <h1 className="w-full min-w-0 truncate text-2xl font-bold tracking-tight sm:w-auto sm:flex-1 sm:overflow-visible sm:whitespace-normal sm:text-3xl">
               {path.title}
             </h1>
             <div className="flex shrink-0 items-center gap-1.5">
@@ -159,6 +157,8 @@ export function JourneyPathAdminView({
         </div>
         <IntentLink
           href={`/studio/journeys/${pathId}/edit`}
+          prefetch={null}
+          prefetchOnIntent={false}
           aria-label="Editar percurso"
           className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 text-sm transition-colors hover:bg-white/10"
         >

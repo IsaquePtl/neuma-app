@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { lisbonLocalToUtcIso } from "@/lib/calendar/lisbon";
 import { createClient } from "@/lib/supabase/server";
 import type { MentorCalendarEventKind } from "@/lib/types/database.types";
 
@@ -26,12 +27,10 @@ export async function createMentorCalendarEvent(formData: FormData) {
   if (!KINDS.has(kind)) throw new Error("Tipo de evento inválido");
   if (!startsAtLocal) throw new Error("Indica dia e hora");
 
-  const startsAt = new Date(startsAtLocal);
-  if (Number.isNaN(startsAt.getTime())) throw new Error("Data/hora inválida");
-  const endsAt = endsAtLocal ? new Date(endsAtLocal) : null;
-  if (endsAtLocal && endsAt && Number.isNaN(endsAt.getTime())) {
-    throw new Error("Fim inválido");
-  }
+  const startsAt = lisbonLocalToUtcIso(startsAtLocal);
+  if (!startsAt) throw new Error("Data/hora inválida");
+  const endsAt = endsAtLocal ? lisbonLocalToUtcIso(endsAtLocal) : null;
+  if (endsAtLocal && !endsAt) throw new Error("Fim inválido");
 
   const supabase = await createClient();
   const {
@@ -43,8 +42,8 @@ export async function createMentorCalendarEvent(formData: FormData) {
     mentor_id: user.id,
     title,
     kind,
-    starts_at: startsAt.toISOString(),
-    ends_at: endsAt?.toISOString() ?? null,
+    starts_at: startsAt,
+    ends_at: endsAt,
     notes,
     student_id: studentId,
     path_id: pathId,
@@ -69,8 +68,8 @@ export async function updateMentorCalendarEvent(formData: FormData) {
   if (!title) throw new Error("Indica o nome do evento");
   if (!KINDS.has(kind)) throw new Error("Tipo de evento inválido");
 
-  const startsAt = new Date(startsAtLocal);
-  if (Number.isNaN(startsAt.getTime())) throw new Error("Data/hora inválida");
+  const startsAt = lisbonLocalToUtcIso(startsAtLocal);
+  if (!startsAt) throw new Error("Data/hora inválida");
 
   const supabase = await createClient();
   const {
@@ -83,7 +82,7 @@ export async function updateMentorCalendarEvent(formData: FormData) {
     .update({
       title,
       kind,
-      starts_at: startsAt.toISOString(),
+      starts_at: startsAt,
       notes,
       student_id: studentId,
       updated_at: new Date().toISOString(),

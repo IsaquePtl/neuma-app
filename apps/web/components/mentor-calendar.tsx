@@ -1,19 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, Video } from "lucide-react";
 
 import type { CalendarEvent } from "@/lib/calendar/events";
+import { CalendarItemEditor } from "@/components/calendar-item-editor";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ScreenLoader } from "@/components/screen-loader";
 import { cn } from "@/lib/utils";
-import {
-  ManualCalendarEventActions,
-  type EditableManualEvent,
-} from "@/components/manual-calendar-event-actions";
 
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
@@ -85,18 +81,46 @@ function buildWeekCells(weekStart: Date) {
   });
 }
 
-function eventTarget(e: CalendarEvent) {
-  if (e.meetUrl) return { href: e.meetUrl, external: true as const };
-  if (e.href) return { href: e.href, external: false as const };
-  return null;
+const URGENCY: Record<CalendarEvent["kind"], number> = {
+  session: 0,
+  due: 1,
+  meeting: 2,
+  event: 3,
+  reminder: 4,
+  path_start: 5,
+  path_end: 6,
+  misc: 7,
+};
+
+function compareEvents(a: CalendarEvent, b: CalendarEvent) {
+  const rank = URGENCY[a.kind] - URGENCY[b.kind];
+  if (rank !== 0) return rank;
+  const aIso = a.startsAtIso ?? "";
+  const bIso = b.startsAtIso ?? "";
+  if (aIso !== bIso) return aIso.localeCompare(bIso);
+  return a.title.localeCompare(b.title, "pt");
 }
 
-function toDatetimeLocal(iso: string | null | undefined) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function itemKindLabel(event: CalendarEvent) {
+  if (event.kind === "due") {
+    if (event.passRule === "quiz") return "Quiz";
+    if (event.passRule === "check_in") return "Check-in";
+    return "Prazo";
+  }
+  return KIND_LABEL[event.kind];
+}
+
+function whoName(event: CalendarEvent) {
+  const name = event.studentName?.trim();
+  if (name) return name.split(/\s+/)[0] || name;
+  return event.title;
+}
+
+function chipText(event: CalendarEvent) {
+  const kind = itemKindLabel(event);
+  const who = whoName(event);
+  const time = event.kind === "session" ? event.meta : null;
+  return time ? `${kind} · ${who} ${time}` : `${kind} · ${who}`;
 }
 
 export function MentorCalendar({
@@ -121,6 +145,7 @@ export function MentorCalendar({
   });
   const todayKey = dateKey(new Date());
   const [selected, setSelected] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const router = useRouter();
   const [navPending, startTransition] = useTransition();
   const [viewPending, startViewTransition] = useTransition();
@@ -172,6 +197,7 @@ export function MentorCalendar({
       next.setDate(base.getDate() + delta * 7);
       setCursor(next);
       setSelected(null);
+      setEditingId(null);
       startTransition(() => {
         router.push(calendarHref(next));
       });
@@ -180,6 +206,7 @@ export function MentorCalendar({
     const next = new Date(year, monthIndex + delta, 1);
     setCursor(next);
     setSelected(null);
+    setEditingId(null);
     startTransition(() => {
       router.push(calendarHref(next));
     });
@@ -190,6 +217,7 @@ export function MentorCalendar({
     for (const e of events) {
       const list = map.get(e.date) ?? [];
       list.push(e);
+      list.sort(compareEvents);
       map.set(e.date, list);
     }
     return map;
@@ -230,6 +258,26 @@ export function MentorCalendar({
       })
     : null;
   const isToday = selected === todayKey;
+  const editing =
+    editingId != null
+      ? (events.find((event) => event.id === editingId) ?? null)
+      : null;
+  const stackLimit = view === "week" ? 4 : 2;
+
+  function toggleDay(key: string) {
+    setEditingId(null);
+    setSelected((prev) => (prev === key ? null : key));
+  }
+
+  function revealDay(key: string) {
+    if (selected !== key) setEditingId(null);
+    setSelected(key);
+  }
+
+  function openItem(event: CalendarEvent) {
+    setSelected(event.date);
+    setEditingId(event.id);
+  }
 
   return (
     <div className="flex w-full flex-col gap-2">
@@ -238,31 +286,32 @@ export function MentorCalendar({
       ) : (
         <>
           <Card className="w-full space-y-2 p-2.5 sm:p-3">
-            <div className="flex items-center justify-between gap-2">
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                aria-label={view === "week" ? "Semana anterior" : "Mês anterior"}
-                onClick={() => go(-1)}
-              >
-                <ChevronLeft className="size-5" />
-              </Button>
-              <h2 className="text-base font-semibold capitalize sm:text-lg">
-                {headerLabel}
-              </h2>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                aria-label={view === "week" ? "Semana seguinte" : "Mês seguinte"}
-                onClick={() => go(1)}
-              >
-                <ChevronRight className="size-5" />
-              </Button>
-            </div>
-
-            <div className="flex justify-center">
+            <div className="flex flex-nowrap items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-1">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="shrink-0"
+                  aria-label={view === "week" ? "Semana anterior" : "Mês anterior"}
+                  onClick={() => go(-1)}
+                >
+                  <ChevronLeft className="size-5" />
+                </Button>
+                <h2 className="min-w-0 truncate text-left text-base font-semibold capitalize sm:text-lg">
+                  {headerLabel}
+                </h2>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="shrink-0"
+                  aria-label={view === "week" ? "Semana seguinte" : "Mês seguinte"}
+                  onClick={() => go(1)}
+                >
+                  <ChevronRight className="size-5" />
+                </Button>
+              </div>
               <div
                 role="group"
                 aria-label="Vista"
@@ -312,20 +361,20 @@ export function MentorCalendar({
               {cells.map(({ date, inMonth }) => {
                 const key = dateKey(date);
                 const list = byDate.get(key) ?? [];
+                const shown = list.slice(0, stackLimit);
+                const hidden = list.length - shown.length;
                 const isSelected = key === selected;
                 const cellIsToday = key === todayKey;
+                const dayLabel = date.toLocaleDateString("pt-PT", {
+                  day: "numeric",
+                  month: "long",
+                });
                 return (
-                  <button
+                  <div
                     key={key + String(inMonth)}
-                    type="button"
-                    onClick={() =>
-                      setSelected((prev) => (prev === key ? null : key))
-                    }
                     className={cn(
-                      "flex flex-col items-center rounded-lg px-0.5 py-1 text-sm transition-colors",
-                      view === "week"
-                        ? "min-h-[5.5rem] justify-start gap-1 sm:min-h-[6.5rem]"
-                        : "min-h-[2.5rem] sm:min-h-[2.85rem]",
+                      "flex min-w-0 flex-col rounded-lg px-0.5 py-1 text-sm transition-colors",
+                      view === "week" ? "min-h-[7.5rem] gap-0.5" : "min-h-[4.6rem]",
                       inMonth ? "text-foreground" : "text-muted-foreground/40",
                       isSelected
                         ? "bg-white/10 ring-1 ring-white/20"
@@ -335,37 +384,60 @@ export function MentorCalendar({
                         "ring-1 ring-[var(--neuma-coral)]/40",
                     )}
                   >
-                    <span className="grid size-6 place-items-center text-xs tabular-nums">
+                    <button
+                      type="button"
+                      onClick={() => toggleDay(key)}
+                      aria-pressed={isSelected}
+                      aria-label={
+                        list.length
+                          ? `${dayLabel}, ${list.length} itens`
+                          : dayLabel
+                      }
+                      className={cn(
+                        "grid place-items-center self-center text-xs tabular-nums",
+                        list.length === 0 ? "min-h-10 w-full" : "size-6",
+                      )}
+                    >
                       {date.getDate()}
-                    </span>
-                    {list.length > 0 ? (
-                      <span
-                        className={cn(
-                          "flex max-w-full flex-wrap justify-center gap-0.5",
-                          view === "week" && "mt-0.5 gap-1",
-                        )}
-                      >
-                        {list
-                          .slice(0, view === "week" ? 6 : 3)
-                          .map((e) => (
+                    </button>
+                    {shown.length > 0 ? (
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        {shown.map((event) => (
+                          <button
+                            key={event.id}
+                            type="button"
+                            title={`${chipText(event)} — ${event.title}`}
+                            onClick={() => openItem(event)}
+                            className={cn(
+                              "flex min-w-0 items-center gap-1 rounded-md px-0.5 py-0.5 text-left leading-tight hover:bg-white/10",
+                              view === "week" ? "text-[11px]" : "text-[10px]",
+                              editingId === event.id && "bg-white/10",
+                            )}
+                          >
                             <span
-                              key={e.id}
                               className={cn(
-                                "rounded-full",
-                                view === "week" ? "size-2" : "size-1.5",
-                                KIND_DOT[e.kind],
+                                "size-1.5 shrink-0 rounded-full",
+                                KIND_DOT[event.kind],
                               )}
-                              title={e.title}
                             />
-                          ))}
-                        {list.length > (view === "week" ? 6 : 3) ? (
-                          <span className="text-[9px] text-muted-foreground">
-                            +{list.length - (view === "week" ? 6 : 3)}
-                          </span>
+                            <span className="min-w-0 truncate">
+                              {chipText(event)}
+                            </span>
+                          </button>
+                        ))}
+                        {hidden > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => revealDay(key)}
+                            className="px-0.5 text-left text-[10px] text-muted-foreground hover:text-foreground"
+                            aria-label={`Ver mais ${hidden} neste dia`}
+                          >
+                            +{hidden}
+                          </button>
                         ) : null}
-                      </span>
+                      </div>
                     ) : null}
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -392,111 +464,76 @@ export function MentorCalendar({
           </Card>
 
           {selected && selectedLabel ? (
-            <Card className="flex w-full flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:gap-3 sm:px-4">
-              <div className="min-w-0 shrink-0 sm:border-r sm:border-white/10 sm:pr-3">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  {isToday ? "Hoje" : "Dia"}
-                </p>
-                <p className="truncate text-sm font-semibold capitalize leading-tight">
-                  {selectedLabel}
-                </p>
+            <Card className="flex w-full flex-col gap-3 px-3 py-3 sm:px-4">
+              <div className="flex items-baseline justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {isToday ? "Hoje" : "Dia"}
+                  </p>
+                  <p className="truncate text-sm font-semibold capitalize leading-tight">
+                    {selectedLabel}
+                  </p>
+                </div>
+                {dayEvents.length > 0 ? (
+                  <p className="shrink-0 text-xs text-muted-foreground">
+                    {dayEvents.length === 1
+                      ? "1 item"
+                      : `${dayEvents.length} itens`}
+                  </p>
+                ) : null}
               </div>
 
+              {editing ? (
+                <CalendarItemEditor
+                  key={editing.id}
+                  event={editing}
+                  students={students}
+                  onClose={() => setEditingId(null)}
+                />
+              ) : null}
+
               {dayEvents.length === 0 ? (
-                <p className="text-xs text-muted-foreground sm:text-sm">
+                <p className="text-sm text-muted-foreground">
                   Sem eventos neste dia.
                 </p>
               ) : (
-                <div className="flex min-w-0 flex-1 flex-col gap-2 overflow-x-auto pb-0.5 sm:flex-row">
-                  {dayEvents.map((e) => {
-                    const target = eventTarget(e);
-                    const label = [KIND_LABEL[e.kind], e.meta, e.studentName]
+                <ul className="flex max-h-80 flex-col gap-1 overflow-y-auto">
+                  {dayEvents.map((event) => {
+                    const detail = [event.title, event.meta, event.studentName]
                       .filter(Boolean)
                       .join(" · ");
-                    const className = cn(
-                      "inline-flex max-w-[18rem] shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-left transition-colors",
-                      target && !e.editableEventId
-                        ? "hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/25"
-                        : "cursor-default",
-                    );
-                    const editable: EditableManualEvent | null =
-                      e.editableEventId
-                        ? {
-                            id: e.editableEventId,
-                            title: e.title,
-                            kind: e.kind,
-                            startsAtLocal: toDatetimeLocal(e.startsAtIso),
-                            notes: e.notes ?? null,
-                            studentId: e.studentId ?? null,
-                          }
-                        : null;
-                    const inner = (
-                      <>
-                        <span
-                          className={cn(
-                            "size-2 shrink-0 rounded-full",
-                            KIND_DOT[e.kind],
-                          )}
-                        />
-                        <span className="min-w-0">
-                          <span className="block truncate text-xs font-medium">
-                            {e.title}
-                          </span>
-                          {label ? (
-                            <span className="block truncate text-[10px] text-muted-foreground">
-                              {label}
-                            </span>
-                          ) : null}
-                        </span>
-                        {e.meetUrl ? (
-                          <Video className="ml-auto size-3.5 shrink-0 text-muted-foreground" />
-                        ) : null}
-                      </>
-                    );
-
-                    if (editable) {
-                      return (
-                        <div key={e.id} className="shrink-0 space-y-1">
-                          <div className={cn(className, "w-full")}>
-                            {inner}
-                            <ManualCalendarEventActions
-                              event={editable}
-                              students={students}
-                            />
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    if (!target) {
-                      return (
-                        <span key={e.id} className={className}>
-                          {inner}
-                        </span>
-                      );
-                    }
-
-                    if (target.external) {
-                      return (
-                        <a
-                          key={e.id}
-                          href={target.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={className}
-                        >
-                          {inner}
-                        </a>
-                      );
-                    }
-
                     return (
-                      <Link key={e.id} href={target.href} className={className}>
-                        {inner}
-                      </Link>
+                      <li key={event.id}>
+                        <button
+                          type="button"
+                          onClick={() => openItem(event)}
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-left transition-colors hover:bg-white/10",
+                            editingId === event.id && "bg-white/10 ring-1 ring-white/15",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "size-2 shrink-0 rounded-full",
+                              KIND_DOT[event.kind],
+                            )}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-xs font-medium">
+                              {itemKindLabel(event)} · {whoName(event)}
+                            </span>
+                            <span className="block truncate text-[10px] text-muted-foreground">
+                              {detail}
+                            </span>
+                          </span>
+                          {event.meetUrl ? (
+                            <Video className="size-3.5 shrink-0 text-muted-foreground" />
+                          ) : null}
+                        </button>
+                      </li>
                     );
                   })}
-                </div>
+                </ul>
               )}
             </Card>
           ) : null}

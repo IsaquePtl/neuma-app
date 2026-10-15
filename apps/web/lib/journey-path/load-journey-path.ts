@@ -166,9 +166,13 @@ export async function loadJourneyPathPageData(
 
   const [mappedNodes, { data: drafts }, { data: levelFeedbacks }] =
     await Promise.all([
-      attachLibraryPosters(supabase, mapped, {
-        bodyFallback: scope !== "edit",
-      }),
+      // Vista e edição não mostram a capa. O URL do ficheiro já fica
+      // no nível quando o item da biblioteca é guardado.
+      scope === "full"
+        ? attachLibraryPosters(supabase, mapped)
+        : Promise.resolve(
+            mapped.map((node) => ({ ...node, poster_url: null })),
+          ),
       draftsPromise,
       levelFeedbacksPromise,
     ]);

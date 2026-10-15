@@ -253,9 +253,34 @@ export function planPhaseAwareMove(
 }
 
 /**
- * Drag & drop to a final position. The level joins the phase it lands in: the
- * run around it, else its own phase if adjacent, else the open phase above,
- * else what follows. Dropping after a closed phase leaves it. Checkpoints don't move.
+ * Phase a level takes when placed at `at` among `nodes` (the list without that
+ * level). It joins the run around it, else its own phase if adjacent, else the
+ * open phase above, else what follows. A new level has no phase of its own
+ * (`movingKey` null). Landing after a closed phase leaves it unphased.
+ */
+export function phaseKeyForPlacement(
+  nodes: PhaseNodeLike[],
+  at: number,
+  movingKey: string | null = null,
+  checkpointIds: Set<string> = resolvePhaseCheckpointIds(nodes),
+): string | null {
+  const index = Math.max(0, Math.min(Math.trunc(at), nodes.length));
+  const prev = nodes[index - 1];
+  const next = nodes[index];
+  const prevKey = prev ? keyOf(prev) : null;
+  const nextKey = next ? keyOf(next) : null;
+  const prevOpen = Boolean(prev) && !checkpointIds.has(prev.id);
+  if (prev && next && prevKey === nextKey) return prevKey;
+  if (movingKey && ((prevOpen && prevKey === movingKey) || nextKey === movingKey)) {
+    return movingKey;
+  }
+  if (prevOpen && prevKey) return prevKey;
+  return next ? nextKey : null;
+}
+
+/**
+ * Drag & drop to a final position. The level joins the phase it lands in.
+ * Checkpoints don't move.
  */
 export function planPhaseAwareDrop(
   nodes: PhaseNodeLike[],
@@ -270,19 +295,8 @@ export function planPhaseAwareDrop(
   const moving = nodes[from];
   const rest = nodes.filter((n) => n.id !== id);
   const at = Math.max(0, Math.min(Math.trunc(toIndex), rest.length));
-  const prev = rest[at - 1];
-  const next = rest[at];
   const movingKey = keyOf(moving);
-  const prevKey = prev ? keyOf(prev) : null;
-  const nextKey = next ? keyOf(next) : null;
-  const prevOpen = Boolean(prev) && !checkpointIds.has(prev!.id);
-
-  let key: string | null;
-  if (prev && next && prevKey === nextKey) key = prevKey;
-  else if (movingKey && ((prevOpen && prevKey === movingKey) || nextKey === movingKey)) {
-    key = movingKey;
-  } else if (prevOpen && prevKey) key = prevKey;
-  else key = next ? nextKey : null;
+  const key = phaseKeyForPlacement(rest, at, movingKey, checkpointIds);
 
   const simulated = [...rest];
   simulated.splice(at, 0, { ...moving, phase_key: key });

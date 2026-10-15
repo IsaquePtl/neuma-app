@@ -22,6 +22,12 @@ const PASS_RULE_CHOICES: { value: NodePassRule; label: string }[] = [
   { value: "quiz", label: passRuleLabel.quiz },
 ];
 
+const CHECK_IN_CHOICES: { value: "video" | "text" | "call"; label: string }[] = [
+  { value: "video", label: "Vídeo" },
+  { value: "text", label: "Texto" },
+  { value: "call", label: "Chamada" },
+];
+
 const passRuleSelectedClass =
   "border-white/55 bg-white/20 font-medium text-foreground";
 
@@ -32,7 +38,6 @@ export function NodeGateFields({
   checkInKind,
   passScore,
   inputClass,
-  selectClass,
   idPrefix = "",
 }: {
   kind: NodeKind;
@@ -41,11 +46,11 @@ export function NodeGateFields({
   checkInKind?: string | null;
   passScore?: number | null;
   inputClass?: string;
-  selectClass?: string;
   idPrefix?: string;
 }) {
   const fid = (name: string) => (idPrefix ? `${idPrefix}-${name}` : name);
   const passRuleInputRef = useRef<HTMLInputElement>(null);
+  const checkInKindInputRef = useRef<HTMLInputElement>(null);
   const [checkInKindValue, setCheckInKindValue] = useState(() =>
     initialCheckInKind(checkInKind),
   );
@@ -110,20 +115,46 @@ export function NodeGateFields({
 
       {passRule === "check_in" ? (
         <div className="space-y-2">
-          <Label htmlFor={fid("check_in_kind")}>Tipo de check-in</Label>
-          <select
-            id={fid("check_in_kind")}
+          <Label id={fid("check_in_kind-label")}>Tipo de check-in</Label>
+          <input
+            ref={checkInKindInputRef}
+            type="hidden"
             name="check_in_kind"
             value={checkInKindValue}
-            onChange={(e) =>
-              setCheckInKindValue(e.target.value as "video" | "text" | "call")
-            }
-            className={selectClass}
+          />
+          <div
+            role="radiogroup"
+            aria-labelledby={fid("check_in_kind-label")}
+            className="flex gap-2"
           >
-            <option value="video">Vídeo</option>
-            <option value="text">Texto</option>
-            <option value="call">Chamada</option>
-          </select>
+            {CHECK_IN_CHOICES.map((choice) => {
+              const selected = checkInKindValue === choice.value;
+              return (
+                <button
+                  key={choice.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => {
+                    flushSync(() => {
+                      setCheckInKindValue(choice.value);
+                    });
+                    checkInKindInputRef.current?.dispatchEvent(
+                      new Event("change", { bubbles: true }),
+                    );
+                  }}
+                  className={cn(
+                    "h-10 min-w-0 flex-1 rounded-xl border px-2 text-sm whitespace-nowrap",
+                    selected
+                      ? passRuleSelectedClass
+                      : "border-white/10 bg-white/5 text-muted-foreground hover:bg-white/10",
+                  )}
+                >
+                  {choice.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       ) : (
         <input type="hidden" name="check_in_kind" value="none" />

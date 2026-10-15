@@ -161,7 +161,6 @@ export function TemplateNodeEditor({
           onPassRuleChange={setPassRule}
           checkInKind={node?.check_in_kind}
           passScore={node?.pass_score}
-          selectClass="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
         />
 
         <PhaseFields

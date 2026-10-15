@@ -194,7 +194,6 @@ export function StudentPathEditor({
               categories={libraryCategories}
               topics={libraryTopics}
               assets={libraryAssets}
-              phases={phases}
             />
           </div>
 
@@ -325,7 +324,6 @@ export function StudentPathEditor({
                         categories={libraryCategories}
                         topics={libraryTopics}
                         assets={libraryAssets}
-                        phases={phases}
                       />
                       <form action={deleteNode}>
                         <input type="hidden" name="id" value={node.id} />
