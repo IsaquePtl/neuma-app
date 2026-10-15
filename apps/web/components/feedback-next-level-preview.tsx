@@ -111,7 +111,7 @@ export function FeedbackNextLevelPreview({
       </p>
       {waiting ? (
         <Link
-          href="/path"
+          href={nextLevel.href}
           prefetch
           onClick={handleNavigate}
           className="block min-w-0 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"

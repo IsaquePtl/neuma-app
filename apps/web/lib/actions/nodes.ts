@@ -162,6 +162,8 @@ export async function createNode(formData: FormData) {
     resource_url: ((formData.get("resource_url") as string) || "").trim() || null,
     content_body:
       ((formData.get("content_body") as string) || "").trim() || null,
+    preview_text:
+      ((formData.get("preview_text") as string) || "").trim() || null,
     library_asset_id:
       ((formData.get("library_asset_id") as string) || "").trim() || null,
     pass_rule: passRule,
@@ -172,7 +174,6 @@ export async function createNode(formData: FormData) {
       passRule,
     ),
     phase_key: phaseKey,
-    node_code: ((formData.get("node_code") as string) || "").trim() || null,
     is_phase_checkpoint: isPhaseCheckpoint,
     order_index: nextIndex,
     status,
@@ -226,24 +227,38 @@ export async function updateNode(formData: FormData) {
     .from("nodes")
     .update({
       title: (formData.get("title") as string)?.trim() || "Bloco",
-      description: ((formData.get("description") as string) || "").trim() || null,
+      // The level editor no longer posts description. Leave the column as stored.
       ...(durationWeeks != null ? { duration_weeks: durationWeeks } : {}),
       kind,
       status: ((formData.get("status") as NodeStatus) || "locked"),
       resource_url: ((formData.get("resource_url") as string) || "").trim() || null,
       content_body:
         ((formData.get("content_body") as string) || "").trim() || null,
+      preview_text:
+        ((formData.get("preview_text") as string) || "").trim() || null,
       library_asset_id:
         ((formData.get("library_asset_id") as string) || "").trim() || null,
       pass_rule: passRule,
-      pass_score: parsePassScore((formData.get("pass_score") as string) || ""),
-      check_in_kind: parseCheckInKind(
-        (formData.get("check_in_kind") as string) || "",
-        kind,
-        passRule,
-      ),
+      // Absent fields stay as stored. An empty quiz score is null (limiar 60),
+      // not 0 — Number("") is 0, which would let any nota pass.
+      ...(passRule === "quiz"
+        ? {
+            pass_score: parsePassScore(
+              (formData.get("pass_score") as string) || "",
+            ),
+          }
+        : {}),
+      ...(kind !== "call" && passRule === "check_in"
+        ? {
+            check_in_kind: parseCheckInKind(
+              (formData.get("check_in_kind") as string) || "",
+              kind,
+              passRule,
+            ),
+          }
+        : {}),
       phase_key: phaseKey,
-      node_code: ((formData.get("node_code") as string) || "").trim() || null,
+      // The level editor no longer posts node_code. Leave the column as stored.
       is_phase_checkpoint: isPhaseCheckpoint,
     })
     .eq("id", id);

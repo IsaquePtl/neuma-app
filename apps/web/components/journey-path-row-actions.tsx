@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
+import { IntentLink, warmHref } from "@/components/intent-link";
 import { useRouter } from "next/navigation";
 import {
   LayoutTemplate,
@@ -68,15 +68,16 @@ export function JourneyPathRowActions({
   }
 
   function onSaveTemplate() {
+    const toastId = toast.loading("A criar template…");
     startTransition(async () => {
       try {
         const fd = new FormData();
         fd.set("path_id", path.id);
         await savePathAsTemplate(fd);
-        toast.success("Adicionado aos templates");
+        toast.success("Adicionado aos templates", { id: toastId });
         router.refresh();
       } catch {
-        toast.error("Não foi possível criar o template");
+        toast.error("Não foi possível criar o template", { id: toastId });
       }
     });
   }
@@ -108,7 +109,7 @@ export function JourneyPathRowActions({
     <>
       <div className="hidden shrink-0 flex-wrap items-center justify-end gap-1 desktop:flex">
         <Button
-          render={<Link href={editHref} />}
+          render={<IntentLink href={editHref} prefetch />}
           nativeButton={false}
           size="sm"
           variant="ghost"
@@ -160,6 +161,9 @@ export function JourneyPathRowActions({
             render={<Button variant="ghost" size="icon-sm" />}
             aria-label="Ações"
             title="Ações"
+            onPointerEnter={() => {
+              warmHref(router, editHref);
+            }}
           >
             <MoreVertical className="size-4" />
           </DropdownMenuTrigger>

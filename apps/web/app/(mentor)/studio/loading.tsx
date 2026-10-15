@@ -1,5 +1,5 @@
-import { ScreenLoader } from "@/components/screen-loader";
+import { RouteScreenLoader } from "@/components/route-screen-loader";
 
 export default function Loading() {
-  return <ScreenLoader />;
+  return <RouteScreenLoader />;
 }

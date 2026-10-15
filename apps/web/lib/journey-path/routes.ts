@@ -55,7 +55,7 @@ export function journeyPathBackHref(pathname: string): string | null {
   const match = matchJourneyPathPage(pathname);
   if (!match) return null;
   if (match.kind === "quiz" && match.nodeId) {
-    return `/studio/journeys/${match.pathId}/levels/${match.nodeId}?tab=nivel`;
+    return `/studio/journeys/${match.pathId}/levels/${match.nodeId}`;
   }
   if (match.kind === "detail") return "/studio/journeys";
   return `/studio/journeys/${match.pathId}`;

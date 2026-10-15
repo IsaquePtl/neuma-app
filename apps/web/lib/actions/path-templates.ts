@@ -307,7 +307,7 @@ export async function upsertTemplateNode(formData: FormData) {
       passRule,
     ),
     phase_key: phaseKey,
-    node_code: ((formData.get("node_code") as string) || "").trim() || null,
+    // The editor no longer posts node_code. Leave the column as stored.
     is_phase_checkpoint: isPhaseCheckpoint,
   };
 

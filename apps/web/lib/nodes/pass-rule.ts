@@ -55,7 +55,9 @@ export function parsePassRule(
 }
 
 export function parsePassScore(raw: string | null | undefined): number | null {
-  const n = Number(raw ?? "");
+  const value = (raw ?? "").trim();
+  if (!value) return null;
+  const n = Number(value);
   if (!Number.isFinite(n)) return null;
   const rounded = Math.round(n);
   if (rounded < 0 || rounded > 100) return null;

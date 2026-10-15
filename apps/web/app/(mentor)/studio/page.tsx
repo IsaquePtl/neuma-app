@@ -10,7 +10,7 @@ import { loadOnboardingInbox } from "@/lib/mentor/onboardings";
 const DASHBOARD_RETURN_TO = "/studio";
 
 export default async function StudioDashboard() {
-  const [upcomingSessions, pendingCheckIns, { inbox, students }, actionNeeded] =
+  const [upcomingSessions, pendingCheckIns, { inbox }, actionNeeded] =
     await Promise.all([
       loadUpcomingSessions(7),
       loadPendingCheckIns(60),
@@ -39,11 +39,7 @@ export default async function StudioDashboard() {
 
         <PendingCheckinsSection checkIns={pendingCheckIns} limit={5} />
 
-        <OnboardingInboxSection
-          inbox={inbox}
-          students={students}
-          limit={5}
-        />
+        <OnboardingInboxSection inbox={inbox} limit={5} />
       </div>
       </div>
       <div

@@ -75,24 +75,61 @@ export async function upsertPath(formData: FormData) {
     endDate: ((formData.get("end_date") as string) || "").trim() || null,
   });
 
-  const payload = {
-    student_id: studentId,
-    created_by: user.id,
-    title: (formData.get("title") as string)?.trim() || "Percurso",
-    description: ((formData.get("description") as string) || "").trim() || null,
-    goal: ((formData.get("goal") as string) || "").trim() || null,
-    duration_label: schedule.durationLabel,
-    start_date: schedule.startDate,
-    end_date: schedule.endDate,
-    status: ((formData.get("status") as PathStatus) || "draft"),
-  };
+  const title = (formData.get("title") as string)?.trim() || "Percurso";
+  const description =
+    ((formData.get("description") as string) || "").trim() || null;
+  const goal = ((formData.get("goal") as string) || "").trim() || null;
+  const status = ((formData.get("status") as PathStatus) || "draft");
+  const touchesSchedule =
+    formData.has("start_date") ||
+    formData.has("period_months") ||
+    formData.has("duration_label") ||
+    formData.has("end_date");
 
   let pathId = id;
 
   if (id) {
-    await supabase.from("paths").update(payload).eq("id", id);
+    const update: {
+      student_id: string;
+      created_by: string;
+      title: string;
+      description?: string | null;
+      goal?: string | null;
+      status?: PathStatus;
+      duration_label?: string | null;
+      start_date?: string | null;
+      end_date?: string | null;
+    } = {
+      student_id: studentId,
+      created_by: user.id,
+      title,
+    };
+    // Absent keys stay as stored. The edit header no longer posts these.
+    if (formData.has("description")) update.description = description;
+    if (formData.has("goal")) update.goal = goal;
+    if (formData.has("status")) update.status = status;
+    if (touchesSchedule) {
+      update.duration_label = schedule.durationLabel;
+      update.start_date = schedule.startDate;
+      update.end_date = schedule.endDate;
+    }
+    await supabase.from("paths").update(update).eq("id", id);
   } else {
-    const { data } = await supabase.from("paths").insert(payload).select("id").single();
+    const { data } = await supabase
+      .from("paths")
+      .insert({
+        student_id: studentId,
+        created_by: user.id,
+        title,
+        description,
+        goal,
+        duration_label: schedule.durationLabel,
+        start_date: schedule.startDate,
+        end_date: schedule.endDate,
+        status,
+      })
+      .select("id")
+      .single();
     pathId = data?.id ?? null;
   }
 

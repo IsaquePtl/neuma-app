@@ -10,7 +10,7 @@ export default async function JourneyAdminPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const data = await loadJourneyPathPageData(id);
+  const data = await loadJourneyPathPageData(id, { scope: "view" });
 
   if (!data) notFound();
 

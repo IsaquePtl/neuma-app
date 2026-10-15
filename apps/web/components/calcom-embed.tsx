@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Cal, { getCalApi } from "@calcom/embed-react";
 import { Phone } from "lucide-react";
 
@@ -12,11 +12,12 @@ const DEFAULT_CAL_USER = getCalUsername();
 const DEFAULT_CAL_EVENT = getCalEventTypeSlug();
 
 /** Config do botão element-click (oficial Cal.com). */
-const CAL_DATA_CONFIG = JSON.stringify({
-  layout: "month_view",
+const CAL_CONFIG = {
+  layout: "month_view" as const,
   useSlotsViewOnSmallScreen: "true",
-  theme: "dark",
-});
+  theme: "dark" as const,
+};
+const CAL_DATA_CONFIG = JSON.stringify(CAL_CONFIG);
 
 /** UI mínima — alinhada ao snippet Cal + dark para a app. */
 const CAL_UI = {
@@ -259,6 +260,8 @@ type CalBookButtonProps = CalLinkProps & {
   variant?: "default" | "secondary";
   onBookingSuccess?: (data: CalBookingSuccessData) => void | Promise<void>;
   onBookingCancelled?: (data: CalBookingCancelledData) => void | Promise<void>;
+  /** Abre o modal se o URL trouxer `?agendar=1` ou `#agendar`, e limpa esse pedido. */
+  openIfRequested?: boolean;
 };
 
 /**
@@ -276,6 +279,7 @@ export function CalBookButton({
   variant = "default",
   onBookingSuccess,
   onBookingCancelled,
+  openIfRequested = false,
 }: CalBookButtonProps) {
   const reactId = useId().replace(/:/g, "");
   const ns = namespace ?? eventType ?? `cal-${reactId}`;
@@ -284,6 +288,34 @@ export function CalBookButton({
   const onCancelledRef = useRef(onBookingCancelled);
   onSuccessRef.current = onBookingSuccess;
   onCancelledRef.current = onBookingCancelled;
+  const [autoOpen, setAutoOpen] = useState(false);
+
+  useEffect(() => {
+    if (!openIfRequested) return;
+
+    const openFromUrl = () => {
+      const url = new URL(window.location.href);
+      const requested =
+        url.searchParams.get("agendar") === "1" || url.hash === "#agendar";
+      if (!requested) return;
+      url.searchParams.delete("agendar");
+      url.hash = "";
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${url.pathname}${url.search}`,
+      );
+      setAutoOpen(true);
+    };
+
+    openFromUrl();
+    window.addEventListener("hashchange", openFromUrl);
+    const timer = window.setTimeout(openFromUrl, 50);
+    return () => {
+      window.removeEventListener("hashchange", openFromUrl);
+      window.clearTimeout(timer);
+    };
+  }, [openIfRequested]);
 
   useEffect(() => {
     return watchCalModalCloseButtons();
@@ -342,6 +374,29 @@ export function CalBookButton({
       cancelled = true;
     };
   }, [ns]);
+
+  useEffect(() => {
+    if (!autoOpen) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const cal = await getCalApi({ namespace: ns });
+        if (cancelled) return;
+        cal("ui", CAL_UI);
+        cal("modal", {
+          calLink: resolvedLink,
+          config: CAL_CONFIG,
+        });
+      } catch (err) {
+        console.error("[cal:open]", err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [autoOpen, ns, resolvedLink]);
 
   const lg = size === "lg";
 

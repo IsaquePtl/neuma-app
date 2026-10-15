@@ -66,6 +66,7 @@ export function PathStatusMenu({
             className={cn(
               "h-11 min-w-[11rem] justify-between gap-2 px-4 text-sm font-semibold",
               className,
+              "rounded-xl",
             )}
           />
         }

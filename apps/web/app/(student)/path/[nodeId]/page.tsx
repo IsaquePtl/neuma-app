@@ -7,12 +7,14 @@ import {
   loadStudentNodeActivity,
   summarizeLevelCheckIns,
 } from "@/lib/feedbacks/student";
+import { calendarStart, findUpcomingLevel } from "@/lib/nodes/level-open";
 import { nodeRequiresCheckIn } from "@/lib/nodes/pass-rule";
 import {
   loadMyPathWithNodes,
   loadMentorCalUsername,
   loadMyUpcomingBooking,
 } from "@/lib/students/queries";
+import { LevelWaitingView } from "@/components/level-waiting-view";
 import { StudentNodePlayer } from "@/components/student-node-player";
 import { LevelCheckInCta } from "@/components/level-check-in-cta";
 import { PhaseReviewBanner } from "@/components/phase-review-checklist";
@@ -86,10 +88,38 @@ export default async function StudentNodePage({
     node.status === "completed" ||
     (activeIndex >= 0 && nodeIndex >= 0 && nodeIndex < activeIndex);
   const isActive = node.status === "active";
+  const upcoming = findUpcomingLevel(
+    nodes,
+    calendarStart(path.start_date, path.created_at),
+  );
+  const isUpcoming = upcoming?.node.id === nodeId;
 
-  // Só futuros (depois do activo) ficam inacessíveis
-  if (!isActive && !isPast) {
+  // Níveis ainda à frente ficam inacessíveis. O próximo, à espera da segunda, abre só a espera.
+  if (!isActive && !isPast && !isUpcoming) {
     redirect("/path");
+  }
+
+  if (isUpcoming && upcoming) {
+    return (
+      <div
+        className={
+          "neuma-mobile-viewport neuma-mobile-scroll-fade relative flex w-full min-w-0 max-w-full flex-col [justify-content:safe_center] overflow-x-clip overflow-y-auto pb-0 " +
+          "desktop:h-auto desktop:min-h-0 desktop:justify-start desktop:overflow-x-clip desktop:overflow-y-visible desktop:pb-4"
+        }
+      >
+        <div className="w-full min-w-0 max-w-full shrink-0">
+          <LevelWaitingView
+            node={node}
+            levelNumber={nodeIndex + 1}
+            opensOn={upcoming.opensOn}
+          />
+        </div>
+        <div
+          aria-hidden
+          className="h-[calc(5.5rem+env(safe-area-inset-bottom,0px))] shrink-0 desktop:hidden"
+        />
+      </div>
+    );
   }
 
   const [phaseCheckpoint, activeReview] = await Promise.all([

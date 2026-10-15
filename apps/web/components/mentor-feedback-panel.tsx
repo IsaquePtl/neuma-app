@@ -740,12 +740,6 @@ export function MentorDecisionAndSubmit({ className }: { className?: string }) {
             </button>
           ))}
         </div>
-        {form.node.pass_rule === "check_in" && !form.checkInId ? (
-          <p className="text-xs text-muted-foreground">
-            Sem check-in enviado, este nível não avança. Prolongar o prazo
-            mantém o aluno aqui.
-          </p>
-        ) : null}
         {form.node.pass_rule === "quiz" ? (
           <p className="text-xs text-muted-foreground">
             {form.bestQuizScore == null

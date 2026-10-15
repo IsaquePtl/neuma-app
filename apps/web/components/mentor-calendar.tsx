@@ -123,6 +123,7 @@ export function MentorCalendar({
   const [selected, setSelected] = useState<string | null>(null);
   const router = useRouter();
   const [navPending, startTransition] = useTransition();
+  const [viewPending, startViewTransition] = useTransition();
 
   useEffect(() => {
     if (view === "week") {
@@ -151,6 +152,17 @@ export function MentorCalendar({
     if (view === "week") params.set("view", "week");
     else params.delete("view");
     return `/studio/calendar?${params.toString()}`;
+  }
+
+  function pushView(nextView: "month" | "week") {
+    if (nextView === view) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (nextView === "week") params.set("view", "week");
+    else params.delete("view");
+    const qs = params.toString();
+    startViewTransition(() => {
+      router.push(qs ? `/studio/calendar?${qs}` : "/studio/calendar");
+    });
   }
 
   function go(delta: number) {
@@ -248,6 +260,39 @@ export function MentorCalendar({
               >
                 <ChevronRight className="size-5" />
               </Button>
+            </div>
+
+            <div className="flex justify-center">
+              <div
+                role="group"
+                aria-label="Vista"
+                className={cn(
+                  "inline-flex h-9 shrink-0 rounded-lg border border-white/10 bg-black/20 p-0.5",
+                  viewPending && "opacity-70",
+                )}
+              >
+                {(
+                  [
+                    ["month", "Mês"],
+                    ["week", "Semana"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => pushView(value)}
+                    aria-pressed={view === value}
+                    className={cn(
+                      "rounded-md px-3 text-sm font-medium transition-colors",
+                      view === value
+                        ? "bg-white/10 text-[#ffffe9]"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="grid grid-cols-7 gap-0.5 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, ChevronDown, Layers, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, CalendarDays, ChevronDown, Layers, Plus, Trash2 } from "lucide-react";
 
 import { DatePicker } from "@/components/ui/date-picker";
 import { WeekStepper } from "@/components/week-stepper";
@@ -72,10 +72,7 @@ function PhaseEditor({
   const [open, setOpen] = useState(false);
   const count = levels.length;
   const free = unassignedRuns(ranges, count);
-  const levelOption = (i: number) => {
-    const title = levels[i]?.title ?? "";
-    return `${i + 1}. ${title.length > 28 ? `${title.slice(0, 27)}…` : title}`;
-  };
+  const levelOption = (i: number) => `${i + 1}. ${levels[i]?.title ?? ""}`;
 
   const update = (index: number, patch: Partial<PhaseRange>) => {
     const next = ranges.map((r) => ({ ...r }));
@@ -113,7 +110,7 @@ function PhaseEditor({
   };
 
   const selectClass =
-    "h-8 min-w-0 max-w-[11rem] rounded-lg border border-white/10 bg-black/30 px-2 text-xs disabled:opacity-50";
+    "h-10 w-full min-w-0 flex-1 truncate rounded-lg border border-white/10 bg-black/30 px-2.5 text-sm disabled:opacity-50";
   const phaseCount =
     ranges.length === 1 ? "1 fase" : `${ranges.length} fases`;
 
@@ -159,83 +156,87 @@ function PhaseEditor({
           Ainda sem fases. Cria uma e escolhe os níveis que ela abrange.
         </p>
       ) : (
-        <ul className="mt-3 space-y-2">
+        <ul className="mt-3 min-w-0 space-y-2">
           {ranges.map((range, index) => {
             const prev = ranges[index - 1];
             const after = ranges[index + 1];
             const fromMin = prev ? prev.from + 1 : 0;
             const toMax = after ? after.to - 1 : count - 1;
-            const span = levels.slice(range.from, range.to + 1);
-            const weeks = span.reduce((sum, l) => sum + l.weeks, 0);
-            const last = span[span.length - 1];
-            const checkpoint = last?.isPhaseCheckpoint ? last : null;
             return (
               <li
                 key={`${range.key}-${index}`}
-                className="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-xl border border-white/8 bg-black/15 px-3 py-2"
+                className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1.5 rounded-xl border border-white/8 bg-black/15 px-2.5 py-2 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
               >
-                <span
-                  aria-hidden
-                  className="size-2.5 shrink-0 rounded-full"
-                  style={{ background: phaseTone(index) }}
-                />
-                <span className="text-xs text-muted-foreground">Fase</span>
-                <input
-                  key={range.key}
-                  defaultValue={range.key}
-                  maxLength={3}
-                  disabled={disabled}
-                  aria-label={`Nome da ${phaseKeyLabel(range.key)}`}
-                  onBlur={(e) => rename(index, e.target.value, e.target)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") e.currentTarget.blur();
-                  }}
-                  className="h-8 w-11 rounded-lg border border-white/10 bg-black/30 text-center text-sm font-semibold uppercase"
-                />
-                <span className="text-xs text-muted-foreground">do</span>
-                <select
-                  aria-label={`Primeiro nível da ${phaseKeyLabel(range.key)}`}
-                  value={range.from}
-                  disabled={disabled}
-                  onChange={(e) => update(index, { from: Number(e.target.value) })}
-                  className={selectClass}
-                >
-                  {Array.from({ length: range.to - fromMin + 1 }, (_, k) => fromMin + k).map(
-                    (i) => (
-                      <option key={i} value={i}>
-                        {levelOption(i)}
-                      </option>
-                    ),
-                  )}
-                </select>
-                <span className="text-xs text-muted-foreground">ao</span>
-                <select
-                  aria-label={`Último nível da ${phaseKeyLabel(range.key)}`}
-                  value={range.to}
-                  disabled={disabled}
-                  onChange={(e) => update(index, { to: Number(e.target.value) })}
-                  className={selectClass}
-                >
-                  {Array.from({ length: toMax - range.from + 1 }, (_, k) => range.from + k).map(
-                    (i) => (
-                      <option key={i} value={i}>
-                        {levelOption(i)}
-                      </option>
-                    ),
-                  )}
-                </select>
-                <span className="text-xs tabular-nums text-muted-foreground">
-                  {span.length} {span.length === 1 ? "nível" : "níveis"} ·{" "}
-                  {weeks === 1 ? "1 semana" : `${weeks} semanas`}
-                  {checkpoint ? ` · fecha com «${checkpoint.title}»` : ""}
+                <span className="col-start-1 row-start-1 flex min-w-0 items-center gap-2">
+                  <span
+                    aria-hidden
+                    className="size-2.5 shrink-0 rounded-full"
+                    style={{ background: phaseTone(index) }}
+                  />
+                  <span className="text-[11px] font-medium text-muted-foreground">Fase</span>
+                  <input
+                    key={range.key}
+                    defaultValue={range.key}
+                    maxLength={3}
+                    disabled={disabled}
+                    aria-label={`Nome da ${phaseKeyLabel(range.key)}`}
+                    onBlur={(e) => rename(index, e.target.value, e.target)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                    }}
+                    className="h-10 w-11 shrink-0 rounded-lg border border-white/10 bg-black/30 text-center text-sm font-semibold uppercase disabled:opacity-50"
+                  />
                 </span>
+                <div className="col-span-2 row-start-2 flex min-w-0 items-center gap-2 sm:col-start-2 sm:col-end-3 sm:row-start-1">
+                  <div className="flex min-w-0 flex-1 overflow-hidden">
+                    <select
+                      aria-label={`Primeiro nível da ${phaseKeyLabel(range.key)}`}
+                      title={levelOption(range.from)}
+                      value={range.from}
+                      disabled={disabled}
+                      onChange={(e) => update(index, { from: Number(e.target.value) })}
+                      className={selectClass}
+                    >
+                      {Array.from({ length: range.to - fromMin + 1 }, (_, k) => fromMin + k).map(
+                        (i) => (
+                          <option key={i} value={i}>
+                            {levelOption(i)}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </div>
+                  <ArrowRight
+                    aria-hidden
+                    className="size-3.5 shrink-0 text-muted-foreground"
+                  />
+                  <span className="sr-only">ao</span>
+                  <div className="flex min-w-0 flex-1 overflow-hidden">
+                    <select
+                      aria-label={`Último nível da ${phaseKeyLabel(range.key)}`}
+                      title={levelOption(range.to)}
+                      value={range.to}
+                      disabled={disabled}
+                      onChange={(e) => update(index, { to: Number(e.target.value) })}
+                      className={selectClass}
+                    >
+                      {Array.from({ length: toMax - range.from + 1 }, (_, k) => range.from + k).map(
+                        (i) => (
+                          <option key={i} value={i}>
+                            {levelOption(i)}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </div>
+                </div>
                 <button
                   type="button"
                   disabled={disabled}
                   onClick={() => onChange(ranges.filter((_, i) => i !== index))}
                   aria-label={`Apagar ${phaseKeyLabel(range.key)}`}
                   title="Apagar fase (os níveis ficam sem fase)"
-                  className="ml-auto grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground disabled:opacity-40"
+                  className="col-start-2 row-start-1 ml-auto grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground disabled:opacity-40 sm:col-start-3"
                 >
                   <Trash2 className="size-3.5" />
                 </button>
@@ -559,11 +560,7 @@ export function PathCalendarPanel({
           </p>
         ) : null}
       </div>
-      {scheduleDirty ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          Guarda as alterações para aplicar a nova duração aos níveis.
-        </p>
-      ) : approximate ? (
+      {!scheduleDirty && approximate ? (
         <p className="mt-2 text-xs text-muted-foreground">
           Sem data de início, o limite de semanas ainda não é aplicado.
         </p>

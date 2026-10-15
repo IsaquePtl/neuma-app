@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { Loader2, Pencil, Plus, Upload, Link2 } from "lucide-react";
+import { Loader2, Pencil, Plus, Upload, Link2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -24,7 +24,9 @@ import {
   MAX_LIBRARY_FILE_MB,
   libraryFileTooLargeMessage,
 } from "@/lib/uploads/video-limits";
+import { LibraryAssetItemCard } from "@/components/library-asset-picker";
 import { Button } from "@/components/ui/button";
+import { libraryAssetUsageLabel } from "@/lib/labels";
 import {
   Dialog,
   DialogContent,
@@ -134,6 +136,7 @@ export function LibraryAssetDialog({
     asset?.storage_path ? mediaFileLabel(asset.url, asset.storage_path) : "",
   );
   const [mode, setMode] = useState<"link" | "upload">(() => initialMode(asset));
+  const [body, setBody] = useState(asset?.body ?? "");
   const [uploading, setUploading] = useState(false);
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -152,6 +155,20 @@ export function LibraryAssetDialog({
     void releaseUnsavedLibraryUpload(key);
   }
   const isEdit = Boolean(asset);
+  const attachedName =
+    fileLabel || (storagePath ? mediaFileLabel(url, storagePath) : "");
+  const attachedCardTitle = (asset?.title ?? "").trim() || attachedName;
+  const attachedCardMeta = [
+    libraryAssetUsageLabel[usage],
+    [
+      categories.find((c) => c.id === categoryId)?.name,
+      topics.find((t) => t.id === topicId)?.name,
+    ]
+      .filter(Boolean)
+      .join(" / "),
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const createTriggerSize =
     triggerSize ?? (triggerVariant === "outline" ? "default" : "sm");
 
@@ -178,6 +195,7 @@ export function LibraryAssetDialog({
         : "",
     );
     setMode(initialMode(nextAsset));
+    setBody(nextAsset?.body ?? "");
     setCoverUrl(nextAsset?.cover_url ?? "");
     coverKeyRef.current = "";
     savedCoverKeyRef.current = "";
@@ -344,6 +362,15 @@ export function LibraryAssetDialog({
       setUploading(false);
       setUploadPercent(null);
     }
+  }
+
+  function clearFile() {
+    const previous = storagePathRef.current;
+    storagePathRef.current = "";
+    setStoragePath("");
+    setUrl("");
+    setFileLabel("");
+    releaseIfUnsaved(previous);
   }
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -549,19 +576,19 @@ export function LibraryAssetDialog({
             </div>
           </div>
 
-          {kind === "text" ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="asset-body">Conteúdo</Label>
-              <Textarea
-                id="asset-body"
-                name="body"
-                defaultValue={asset?.body ?? ""}
-                rows={4}
-              />
-            </div>
-          ) : (
+          <div className="space-y-1.5">
+            <Label htmlFor="asset-body">Texto</Label>
+            <Textarea
+              id="asset-body"
+              name="body"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={4}
+            />
+          </div>
+
+          {kind !== "text" ? (
             <>
-              <input type="hidden" name="body" value={asset?.body ?? ""} />
               <div className="grid grid-cols-2 gap-3">
                 <Button
                   type="button"
@@ -605,7 +632,7 @@ export function LibraryAssetDialog({
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  <Label htmlFor="asset-file">Ficheiro</Label>
+                  <Label htmlFor={attachedName ? undefined : "asset-file"}>Ficheiro</Label>
                   <input
                     ref={fileRef}
                     id="asset-file"
@@ -624,26 +651,42 @@ export function LibraryAssetDialog({
                       e.currentTarget.value = "";
                     }}
                   />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-10 w-full justify-center gap-1.5"
-                    disabled={uploading}
-                    onClick={() => fileRef.current?.click()}
-                  >
-                    {uploading ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Upload className="size-4" />
-                    )}
-                    {uploading
-                      ? uploadPercent == null
-                        ? "A preparar o envio…"
-                        : `A enviar… ${uploadPercent}%`
-                      : fileLabel
-                        ? "Trocar ficheiro"
+                  {attachedName ? (
+                    <LibraryAssetItemCard
+                      kind={kind}
+                      title={attachedCardTitle}
+                      meta={attachedCardMeta}
+                    >
+                      <button
+                        type="button"
+                        aria-label="Remover ficheiro"
+                        disabled={uploading}
+                        onClick={clearFile}
+                        className="grid size-11 shrink-0 self-start place-items-center rounded-xl border border-white/10 bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-foreground disabled:opacity-50"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </LibraryAssetItemCard>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 w-full justify-center gap-1.5"
+                      disabled={uploading}
+                      onClick={() => fileRef.current?.click()}
+                    >
+                      {uploading ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Upload className="size-4" />
+                      )}
+                      {uploading
+                        ? uploadPercent == null
+                          ? "A preparar o envio…"
+                          : `A enviar… ${uploadPercent}%`
                         : "Escolher ficheiro"}
-                  </Button>
+                    </Button>
+                  )}
                   {uploading && uploadPercent != null ? (
                     <div
                       className="h-1 overflow-hidden rounded-full bg-white/10"
@@ -658,14 +701,6 @@ export function LibraryAssetDialog({
                       />
                     </div>
                   ) : null}
-                  {fileLabel && !uploading ? (
-                    <Input
-                      value={fileLabel}
-                      readOnly
-                      aria-label="Nome do ficheiro"
-                      className="bg-muted/40"
-                    />
-                  ) : null}
                   <p className="text-xs text-muted-foreground">
                     Até {MAX_LIBRARY_FILE_MB} MB
                   </p>
@@ -673,14 +708,9 @@ export function LibraryAssetDialog({
               )}
               {kind === "video" ? (
                 <div className="space-y-1.5">
-                  <Label htmlFor="asset-cover">Capa do vídeo</Label>
-                  {coverUrl ? (
-                    <img
-                      src={coverUrl}
-                      alt=""
-                      className="aspect-video w-full rounded-lg object-cover"
-                    />
-                  ) : null}
+                  <Label htmlFor={coverUrl ? undefined : "asset-cover"}>
+                    Capa do vídeo
+                  </Label>
                   <input
                     ref={coverRef}
                     id="asset-cover"
@@ -693,11 +723,55 @@ export function LibraryAssetDialog({
                       e.currentTarget.value = "";
                     }}
                   />
-                  <div className="flex gap-2">
+                  {coverUrl ? (
+                    <div
+                      tabIndex={0}
+                      className="group relative aspect-video w-full overflow-hidden rounded-lg border border-white/10 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                    >
+                      <img
+                        src={coverUrl}
+                        alt=""
+                        className="size-full object-cover"
+                      />
+                      <div
+                        className={cn(
+                          "absolute inset-0 flex items-center justify-center gap-2 bg-black/55 opacity-0 transition-opacity",
+                          "pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100",
+                          "group-focus-within:pointer-events-auto group-focus-within:opacity-100",
+                          coverUploading && "pointer-events-auto opacity-100",
+                        )}
+                      >
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          className="gap-1.5"
+                          disabled={coverUploading}
+                          onClick={() => coverRef.current?.click()}
+                        >
+                          {coverUploading ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <Upload className="size-3.5" />
+                          )}
+                          {coverUploading ? "A enviar capa…" : "Trocar capa"}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={coverUploading}
+                          onClick={() => void clearCover()}
+                        >
+                          Remover
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
                     <Button
                       type="button"
                       variant="outline"
-                      className="h-10 flex-1 gap-1.5"
+                      className="h-10 w-full justify-center gap-1.5"
                       disabled={coverUploading}
                       onClick={() => coverRef.current?.click()}
                     >
@@ -706,31 +780,16 @@ export function LibraryAssetDialog({
                       ) : (
                         <Upload className="size-4" />
                       )}
-                      {coverUploading
-                        ? "A enviar capa…"
-                        : coverUrl
-                          ? "Trocar capa"
-                          : "Adicionar capa"}
+                      {coverUploading ? "A enviar capa…" : "Adicionar capa"}
                     </Button>
-                    {coverUrl ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="h-10"
-                        disabled={coverUploading}
-                        onClick={() => void clearCover()}
-                      >
-                        Remover
-                      </Button>
-                    ) : null}
-                  </div>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     PNG, JPEG ou WebP. Até 8 MB. Aparece antes de dar play.
                   </p>
                 </div>
               ) : null}
             </>
-          )}
+          ) : null}
 
           <DialogFooter>
             <Button type="submit" disabled={pending || uploading}>

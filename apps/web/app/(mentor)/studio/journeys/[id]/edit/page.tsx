@@ -12,7 +12,7 @@ export default async function JourneyEditPage({
 }) {
   const { id } = await params;
   const { new: newParam } = await searchParams;
-  const data = await loadJourneyPathPageData(id);
+  const data = await loadJourneyPathPageData(id, { scope: "edit" });
 
   if (!data) notFound();
 

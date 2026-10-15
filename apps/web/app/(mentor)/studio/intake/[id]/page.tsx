@@ -46,7 +46,8 @@ export default async function TallySubmissionDetailPage({
     "Submissão";
 
   return (
-    <div className="space-y-6">
+    <div className="neuma-mobile-viewport neuma-mobile-scroll-fade relative flex w-full min-w-0 flex-col overflow-y-auto pb-0 desktop:h-auto desktop:min-h-0 desktop:overflow-visible desktop:pb-4">
+    <div className="w-full shrink-0 space-y-6">
       <header className="neuma-accent-top space-y-3 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
@@ -214,6 +215,11 @@ export default async function TallySubmissionDetailPage({
         <h2 className="font-semibold">Respostas</h2>
         <TallyAnswerList answers={answers} />
       </Card>
+    </div>
+      <div
+        aria-hidden
+        className="h-[calc(5.5rem+env(safe-area-inset-bottom,0px))] shrink-0 desktop:hidden"
+      />
     </div>
   );
 }

@@ -268,7 +268,7 @@ export function StudentPathMap({
                 >
                   {node.title}
                 </p>
-                {node.due_date && !isFuture && !isUpcoming ? (
+                {isActive && node.due_date ? (
                   <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                     <CalendarClock className="size-3" />
                     Até {formatDate(node.due_date)}
@@ -392,14 +392,16 @@ export function StudentPathMap({
                 >
                   {body}
                 </Link>
-              ) : (
-                <div
-                  className={cn(
-                    "min-w-0 flex-1",
-                    isUpcoming ? "cursor-default" : "cursor-not-allowed opacity-90",
-                  )}
-                  aria-disabled={isUpcoming ? true : undefined}
+              ) : isUpcoming ? (
+                <Link
+                  href={`/path/${node.id}`}
+                  prefetch={true}
+                  className="min-w-0 flex-1 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
                 >
+                  {body}
+                </Link>
+              ) : (
+                <div className="min-w-0 flex-1 cursor-not-allowed opacity-90">
                   {body}
                 </div>
               )}

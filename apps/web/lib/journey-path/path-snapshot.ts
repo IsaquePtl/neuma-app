@@ -35,6 +35,7 @@ export function buildPathSnapshot(
             n.due_date ?? "",
             (n.resource_url ?? "").trim(),
             (n.content_body ?? "").trim(),
+            (n.preview_text ?? "").trim(),
           ].join("\0"),
       )
       .join("\n"),

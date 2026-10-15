@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Flag, Link2, Unlink } from "lucide-react";
+import { AlertTriangle, Link2, Unlink } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,9 +69,6 @@ export function PhaseFields({
   const fieldId = (name: string) =>
     idPrefix ? `${idPrefix}-${name}` : `node-${name}`;
   const label = phaseKey ? `Fase ${phaseKey}` : "";
-  const othersInPhase = phase
-    ? phase.count - (nodeId && normalizePhaseKey(initialPhaseKey) === phaseKey ? 1 : 0)
-    : 0;
 
   return (
     <div className={cn("space-y-2", inline && "space-y-1.5")}>
@@ -120,19 +117,15 @@ export function PhaseFields({
                 aria-checked={closesPhase}
                 onClick={() => setLinkChoice(true)}
                 className={cn(
-                  "flex min-w-0 flex-col gap-1 rounded-xl border p-3 text-left transition-colors",
+                  "flex min-h-11 min-w-0 items-center rounded-xl border px-4 text-left transition-colors",
                   closesPhase
                     ? "border-[var(--neuma-coral)]/55 bg-[var(--neuma-coral)]/10"
                     : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]",
                 )}
               >
                 <span className="inline-flex items-center gap-1.5 text-sm font-medium">
-                  <Link2 className="size-3.5 text-[var(--neuma-coral)]" />
+                  <Link2 className="size-4 text-[var(--neuma-coral)]" />
                   Fecha a {label}
-                </span>
-                <span className="text-xs leading-snug text-muted-foreground">
-                  Fica no fim da fase. Se falhar, o aluno revê os níveis da fase e
-                  repete.
                 </span>
               </button>
               <button
@@ -141,48 +134,29 @@ export function PhaseFields({
                 aria-checked={!closesPhase}
                 onClick={() => setLinkChoice(false)}
                 className={cn(
-                  "flex min-w-0 flex-col gap-1 rounded-xl border p-3 text-left transition-colors",
+                  "flex min-h-11 min-w-0 items-center rounded-xl border px-4 text-left transition-colors",
                   !closesPhase
                     ? "border-white/25 bg-white/[0.08]"
                     : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]",
                 )}
               >
                 <span className="inline-flex items-center gap-1.5 text-sm font-medium">
-                  <Unlink className="size-3.5 text-muted-foreground" />
+                  <Unlink className="size-4 text-muted-foreground" />
                   Quiz solto
-                </span>
-                <span className="text-xs leading-snug text-muted-foreground">
-                  Só o quiz. Se falhar, repete logo.
                 </span>
               </button>
             </div>
             {closesPhase && otherCheckpoint ? (
-              <p className="flex items-start gap-2 rounded-lg border border-[var(--neuma-orange)]/30 bg-[var(--neuma-orange)]/10 px-3 py-2 text-xs leading-snug text-muted-foreground">
-                <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-[var(--neuma-orange)]" />
+              <p className="flex items-start gap-2 rounded-xl border border-[var(--neuma-orange)]/30 bg-[var(--neuma-orange)]/10 px-3 py-2 text-sm leading-snug text-muted-foreground">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--neuma-orange)]" />
                 <span>
                   Substitui «{otherCheckpoint.title}» como fecho da {label}{" "}
                   (passa a quiz solto).
                 </span>
               </p>
-            ) : closesPhase ? (
-              <p className="text-xs text-muted-foreground">
-                {othersInPhase > 0
-                  ? `Liga-se aos ${othersInPhase} ${othersInPhase === 1 ? "nível" : "níveis"} da ${label} e passa para o fim da fase.`
-                  : `Os níveis que juntares à ${label} ficam antes deste check-point.`}
-              </p>
             ) : null}
           </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            Sem fase → quiz solto. Escolhe uma fase para o ligar aos níveis
-            dela.
-          </p>
-        )
-      ) : phase?.checkpoint && phase.checkpoint.id !== nodeId ? (
-        <p className="inline-flex items-start gap-1.5 text-xs text-muted-foreground">
-          <Flag className="mt-0.5 size-3 shrink-0 text-[var(--neuma-coral)]" />
-          Entra na {label} antes de «{phase.checkpoint.title}», que fecha a fase.
-        </p>
+        ) : null
       ) : null}
     </div>
   );

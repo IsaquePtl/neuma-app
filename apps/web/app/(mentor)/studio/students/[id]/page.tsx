@@ -27,19 +27,29 @@ export default async function StudentDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const student = await loadStudentOrThrow(id);
-  const rawPath = await loadStudentPath(id);
+  const [student, rawPath] = await Promise.all([
+    loadStudentOrThrow(id),
+    loadStudentPath(id),
+  ]);
   const path = rawPath ? mapPath(rawPath) : null;
-  const counts = await loadStudentCounts(id, path?.id ?? null);
   const supabase = await createClient();
-  const { data: accessFlags } = await supabase
-    .from("profiles")
-    .select("is_one_to_one, one_to_one_access_until, billing_exempt")
-    .eq("id", id)
-    .maybeSingle();
 
-  const [{ data: nodes }, { data: checkIns }, { data: drafts }, { data: tallyRows }, { data: readyTemplatesRaw }, { data: libraryAssets }, { data: libraryCategories }, { data: libraryTopics }, { data: unassignedPaths }] =
-    await Promise.all([
+  const [
+    counts,
+    { data: accessFlags },
+    { data: nodes },
+    { data: checkIns },
+    { data: drafts },
+    { data: tallyRows },
+    { data: readyTemplatesRaw },
+    { data: unassignedPaths },
+  ] = await Promise.all([
+    loadStudentCounts(id, path?.id ?? null),
+    supabase
+      .from("profiles")
+      .select("is_one_to_one, one_to_one_access_until, billing_exempt")
+      .eq("id", id)
+      .maybeSingle(),
       path
         ? supabase
             .from("nodes")
@@ -57,8 +67,9 @@ export default async function StudentDetailPage({
         .limit(60),
       supabase
         .from("feedback_drafts")
-        .select("check_in_id, status")
-        .eq("status", "pending_review"),
+        .select("check_in_id, status, check_in:check_ins!inner(student_id)")
+        .eq("status", "pending_review")
+        .eq("check_in.student_id", id),
       supabase
         .from("tally_submissions")
         .select(
@@ -67,27 +78,15 @@ export default async function StudentDetailPage({
         .eq("student_id", id)
         .order("created_at", { ascending: false })
         .limit(40),
-      supabase
-        .from("path_templates")
-        .select(
-          "id, title, description, goal, duration_label, period_months, path_template_nodes(count)",
-        )
-        .eq("status", "ready")
-        .order("title", { ascending: true }),
-      supabase
-        .from("library_assets")
-        .select("id, title, kind, usage, topic_id, url, body, tags")
-        .eq("content_status", "ready")
-        .is("archived_at", null)
-        .order("title", { ascending: true }),
-      supabase
-        .from("library_categories")
-        .select("id, name")
-        .order("sort_index", { ascending: true }),
-      supabase
-        .from("library_topics")
-        .select("id, category_id, name")
-        .order("sort_index", { ascending: true }),
+      path
+        ? Promise.resolve({ data: [] as never[] })
+        : supabase
+            .from("path_templates")
+            .select(
+              "id, title, description, goal, duration_label, period_months, path_template_nodes(count)",
+            )
+            .eq("status", "ready")
+            .order("title", { ascending: true }),
       !path
         ? supabase
             .from("paths")
@@ -168,16 +167,6 @@ export default async function StudentDetailPage({
     (node) => node.status === "active" && node.due_date,
   );
 
-  const pickerAssets = (libraryAssets ?? []).map((a) => ({
-    id: a.id,
-    title: a.title,
-    kind: a.kind,
-    usage: a.usage,
-    topic_id: a.topic_id,
-    url: a.url,
-    tags: a.tags ?? [],
-  }));
-
   return (
     <StudentShell
       student={student}
@@ -215,9 +204,6 @@ export default async function StudentDetailPage({
         formBlocks={mergedBlocks}
         pendingCount={counts.pendingCheckIns}
         readyTemplates={readyTemplates}
-        libraryCategories={libraryCategories ?? []}
-        libraryTopics={libraryTopics ?? []}
-        libraryAssets={pickerAssets}
       />
       <RemoveStudentControl student={student} />
     </StudentShell>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import {
   ArrowRight,
   ClipboardList,
@@ -83,9 +83,6 @@ export function StudentPanorama({
   formBlocks: StudentFormBlock[];
   pendingCount: number;
   readyTemplates?: ReadyTemplate[];
-  libraryCategories?: unknown[];
-  libraryTopics?: unknown[];
-  libraryAssets?: unknown[];
 }) {
   const pending = checkIns.filter((c) => c.status === "pending");
   const onboardingBlocks = formBlocks.filter((b) => b.is_onboarding);
@@ -226,7 +223,7 @@ export function StudentPanorama({
                 </div>
                 <Button
                   render={
-                    <Link
+                    <IntentLink
                       href={`/studio/checkins/${c.id}?from=student&student=${student.id}`}
                     />
                   }
@@ -258,17 +255,17 @@ export function StudentPanorama({
         {onboardingBlocks.length === 0 ? (
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>Quando houver uma submissão Tally ligada a este aluno, aparece aqui.</p>
-            <Link
+            <IntentLink
               href="/studio/journeys/onboardings"
               className="text-[var(--neuma-coral)] underline-offset-4 hover:underline"
             >
               Abrir Onboardings
-            </Link>
+            </IntentLink>
           </div>
         ) : (
           <div className="space-y-2">
             {onboardingBlocks.map((block) => (
-              <Link
+              <IntentLink
                 key={block.id}
                 href={`/studio/intake/${block.id}`}
                 className="flex items-center gap-3 rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-white/8 transition-colors hover:bg-white/[0.05]"
@@ -281,7 +278,7 @@ export function StudentPanorama({
                     {formatDateTime(block.created_at)}
                   </p>
                 </div>
-              </Link>
+              </IntentLink>
             ))}
           </div>
         )}
@@ -314,7 +311,7 @@ export function StudentPanorama({
             </div>
           </div>
         ) : (
-          <Link
+          <IntentLink
             href={`/studio/journeys/${path.id}`}
             aria-label={`Abrir percurso ${path.title}`}
             className="group flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3.5 transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
@@ -333,7 +330,7 @@ export function StudentPanorama({
               aria-hidden
               className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-foreground"
             />
-          </Link>
+          </IntentLink>
         )}
       </Card>
     </div>

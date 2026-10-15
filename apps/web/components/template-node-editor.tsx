@@ -175,16 +175,6 @@ export function TemplateNodeEditor({
           idPrefix="tn"
         />
 
-        <div className="space-y-2">
-          <Label htmlFor="tn-code">Código</Label>
-          <Input
-            id="tn-code"
-            name="node_code"
-            defaultValue={node?.node_code ?? ""}
-            placeholder="A1"
-          />
-        </div>
-
         <LibraryAssetPicker
           nodeKind={kind}
           categories={categories}

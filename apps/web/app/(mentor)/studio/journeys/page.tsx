@@ -1,19 +1,32 @@
-import Link from "next/link";
 import { FilePenLine } from "lucide-react";
 
 import { CreatePathButton } from "@/components/create-path-button";
-import { JourneyPathRowActions } from "@/components/journey-path-row-actions";
-import { createClient } from "@/lib/supabase/server";
-import { PathStatusBadge } from "@/components/status-badges";
-import { UserAvatar } from "@/components/user-avatar";
+import {
+  JourneyPathList,
+  LiveJourneyPaths,
+  type JourneyPathListItem,
+} from "@/components/journey-path-list";
 import { Card } from "@/components/ui/card";
-import type { NodeStatus, PathStatus } from "@/lib/types/database.types";
+import { pathListSnapshot } from "@/lib/journey-path/list-snapshot";
+import { createClient } from "@/lib/supabase/server";
+import type {
+  CheckInStatus,
+  NodeKind,
+  NodePassRule,
+  NodeStatus,
+  PathStatus,
+} from "@/lib/types/database.types";
 
-const journeyTableGridClass =
-  "grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_2.5rem] desktop:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(14rem,auto)] gap-0";
-const journeyColPercurso = "min-w-0 pr-3";
-const journeyColAluno = "min-w-0 pl-3";
-const journeyColActions = "pl-3";
+type PathNode = {
+  id: string;
+  title: string;
+  status: NodeStatus;
+  due_date: string | null;
+  order_index: number;
+  week_number: number | null;
+  kind: NodeKind;
+  pass_rule: NodePassRule | null;
+};
 
 type PathRow = {
   id: string;
@@ -21,85 +34,33 @@ type PathRow = {
   status: PathStatus;
   student_id: string | null;
   placeholder_name: string | null;
+  start_date: string | null;
+  created_at: string;
   student:
     | { full_name: string | null; email: string | null; avatar_url: string | null }
     | { full_name: string | null; email: string | null; avatar_url: string | null }[]
     | null;
-  nodes: {
-    id: string;
-    title: string;
-    status: NodeStatus;
-    order_index: number;
-    due_date: string | null;
-  }[] | null;
+  nodes: PathNode[] | null;
 };
 
-function PathList({
-  paths,
-  students,
-}: {
-  paths: PathRow[];
-  students: { id: string; full_name: string | null; email: string | null }[];
-}) {
-  return (
-    <Card className="overflow-hidden p-0">
-      <div className="divide-y divide-white/[0.03]">
-        {paths.map((p) => {
-          const student = Array.isArray(p.student) ? p.student[0] : p.student;
-          const nodes = p.nodes ?? [];
-          const done = nodes.filter((n) => n.status === "completed").length;
-          const studentLabel =
-            student?.full_name ??
-            student?.email ??
-            (p.placeholder_name
-              ? `${p.placeholder_name} (sem conta)`
-              : "Sem aluno");
-          return (
-            <div
-              key={p.id}
-              className={`${journeyTableGridClass} items-center px-4 py-3 transition-colors hover:bg-white/[0.04]`}
-            >
-              <Link
-                href={`/studio/journeys/${p.id}`}
-                className={`${journeyColPercurso} transition-colors hover:text-foreground/90`}
-              >
-                <p className="truncate font-medium leading-snug">{p.title}</p>
-                <div className="mt-0.5 flex items-center gap-2">
-                  <PathStatusBadge status={p.status} />
-                  <p className="text-xs text-muted-foreground">
-                    {done}/{nodes.length} níveis
-                  </p>
-                </div>
-              </Link>
-              <div className={`flex items-center gap-2 ${journeyColAluno}`}>
-                <UserAvatar
-                  className="shrink-0"
-                  name={student?.full_name ?? p.placeholder_name}
-                  email={student?.email}
-                  avatarUrl={student?.avatar_url}
-                  size="sm"
-                  rounded="xl"
-                />
-                <p className="min-w-0 flex-1 truncate text-xs leading-tight text-muted-foreground desktop:text-sm">
-                  {studentLabel}
-                </p>
-              </div>
-              <div className={journeyColActions}>
-                <JourneyPathRowActions
-                  path={{
-                    id: p.id,
-                    title: p.title,
-                    student_id: p.student_id,
-                  }}
-                  students={students}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
+function listItem(path: PathRow, snapshot: string | null): JourneyPathListItem {
+  const student = Array.isArray(path.student)
+    ? (path.student[0] ?? null)
+    : path.student;
+  const nodes = path.nodes ?? [];
+  return {
+    id: path.id,
+    title: path.title,
+    status: path.status,
+    studentId: path.student_id,
+    studentName: student?.full_name ?? null,
+    studentEmail: student?.email ?? null,
+    avatarUrl: student?.avatar_url ?? null,
+    placeholderName: path.placeholder_name,
+    done: nodes.filter((node) => node.status === "completed").length,
+    total: nodes.length,
+    snapshot,
+  };
 }
 
 export default async function JourneysListPage() {
@@ -113,7 +74,7 @@ export default async function JourneysListPage() {
     supabase
       .from("paths")
       .select(
-        "id, title, status, student_id, placeholder_name, created_at, student:profiles!paths_student_id_fkey(full_name, email, avatar_url), nodes(id, title, status, order_index, due_date)",
+        "id, title, status, student_id, placeholder_name, start_date, created_at, student:profiles!paths_student_id_fkey(full_name, email, avatar_url), nodes(id, title, status, due_date, order_index, week_number, kind, pass_rule)",
       )
       .order("created_at", { ascending: false }),
     supabase
@@ -170,25 +131,57 @@ export default async function JourneysListPage() {
     a.title.localeCompare(b.title, "pt"),
   );
 
+  const activeNodeIds = [
+    ...new Set(
+      sortedLivePaths.flatMap((path) =>
+        (path.nodes ?? [])
+          .filter((node) => node.status === "active")
+          .map((node) => node.id),
+      ),
+    ),
+  ];
+
+  const checkInsByNode = new Map<
+    string,
+    { status: CheckInStatus; created_at: string }[]
+  >();
+  let checkInsLoaded = true;
+  if (activeNodeIds.length > 0) {
+    const { data: checkInRows, error: checkInError } = await supabase
+      .from("check_ins")
+      .select("node_id, status, created_at")
+      .in("node_id", activeNodeIds);
+    if (checkInError) {
+      console.error("[journeys] check-ins for path list", checkInError.message);
+      checkInsLoaded = false;
+    } else {
+      for (const row of checkInRows ?? []) {
+        if (!row.node_id) continue;
+        const bucket = checkInsByNode.get(row.node_id);
+        const entry = { status: row.status, created_at: row.created_at };
+        if (bucket) bucket.push(entry);
+        else checkInsByNode.set(row.node_id, [entry]);
+      }
+    }
+  }
+
+  const liveItems = sortedLivePaths.map((path) =>
+    listItem(
+      path,
+      pathListSnapshot({
+        nodes: path.nodes ?? [],
+        startDate: path.start_date,
+        createdAt: path.created_at,
+        checkInsByNode,
+        checkInsLoaded,
+      }),
+    ),
+  );
+  const draftItems = sortedDraftPaths.map((path) => listItem(path, null));
+
   return (
     <div className="space-y-10">
-      <section id="paths" className="scroll-mt-24 space-y-4">
-        <h2 className="text-lg font-semibold">
-          Percursos{" "}
-          <span className="font-normal text-muted-foreground">
-            ({sortedLivePaths.length})
-          </span>
-        </h2>
-
-        {sortedLivePaths.length === 0 ? (
-          <Card className="p-10 text-center text-sm text-muted-foreground">
-            Ainda não há percursos activos. Quando activares um rascunho, ele
-            aparece aqui.
-          </Card>
-        ) : (
-          <PathList paths={sortedLivePaths} students={studentOptions} />
-        )}
-      </section>
+      <LiveJourneyPaths paths={liveItems} students={studentOptions} />
 
       <section id="drafts" className="scroll-mt-24 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -208,7 +201,7 @@ export default async function JourneysListPage() {
             ficam nesta zona até os activares.
           </Card>
         ) : (
-          <PathList paths={sortedDraftPaths} students={studentOptions} />
+          <JourneyPathList paths={draftItems} students={studentOptions} />
         )}
       </section>
     </div>

@@ -246,7 +246,7 @@ export default async function StudentHomePage() {
     {
       key: "session",
       title: "Agendar chamada",
-      href: "/session#agendar",
+      href: "/session?agendar=1",
       tag: todoTagLabel("session"),
     },
     ...(isPathPaused
@@ -290,7 +290,7 @@ export default async function StudentHomePage() {
         </Link>
       ) : upcoming ? (
         <Link
-          href="/path"
+          href={`/path/${upcoming.node.id}`}
           prefetch
           className="neuma-enter-up neuma-enter-delay-2 relative z-[1] block min-w-0 shrink-0 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50"
         >

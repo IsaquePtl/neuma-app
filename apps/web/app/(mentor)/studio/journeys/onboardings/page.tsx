@@ -18,12 +18,12 @@ import { formatDateTime } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 
 const intakeRowCardClass =
-  "flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3";
+  "flex flex-col items-stretch gap-3 desktop:flex-row desktop:items-center desktop:justify-between";
 const intakeRowTitleClass = "font-medium break-words sm:truncate";
 const intakeRowSubtitleClass =
   "text-sm text-muted-foreground break-words leading-snug line-clamp-3 sm:line-clamp-none sm:truncate";
 const intakeRowActionsClass =
-  "flex shrink-0 items-center justify-end gap-1 sm:justify-start";
+  "flex w-full shrink-0 items-center justify-center gap-2 desktop:w-auto";
 
 export default async function JourneysOnboardingsPage() {
   const supabase = await createClient();
@@ -85,7 +85,7 @@ export default async function JourneysOnboardingsPage() {
 
   return (
     <div className="space-y-8">
-      <OnboardingInboxSection inbox={inbox} students={students} />
+      <OnboardingInboxSection inbox={inbox} />
 
       {orphanCheckins.length > 0 ? (
         <section className="space-y-3">

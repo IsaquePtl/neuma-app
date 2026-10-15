@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { ArrowRight, Search } from "lucide-react";
 
 import { PathStatusBadge } from "@/components/status-badges";
@@ -65,7 +65,7 @@ export function StudentsList({ students }: Props) {
         </div>
         <div className="divide-y divide-white/5">
           {visibleStudents.map((s) => (
-            <Link
+            <IntentLink
               key={s.id}
               href={`/studio/students/${s.id}`}
               className="flex items-center justify-between gap-3 px-4 py-3.5 transition-colors hover:bg-white/[0.03] desktop:grid desktop:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_7rem_2rem]"
@@ -108,7 +108,7 @@ export function StudentsList({ students }: Props) {
                 {s.path ? <PathStatusBadge status={s.path.status} /> : null}
               </div>
               <ArrowRight className="size-4 shrink-0 justify-self-end text-muted-foreground" />
-            </Link>
+            </IntentLink>
           ))}
         </div>
       </Card>

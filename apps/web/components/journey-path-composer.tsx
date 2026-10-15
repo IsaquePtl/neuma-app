@@ -9,17 +9,19 @@ import {
   useState,
   useTransition,
 } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   ChevronDown,
   ChevronUp,
   GripVertical,
+  MoreHorizontal,
   Pencil,
   Trash2,
 } from "lucide-react";
 
+import { loadLibraryPickerCatalog } from "@/lib/actions/library";
+import { IntentLink } from "@/components/intent-link";
 import { NodeDialog, NodeEditorForm } from "@/components/node-dialog";
 import {
   PathCalendarPanel,
@@ -33,9 +35,16 @@ import type {
 } from "@/components/library-asset-picker";
 import { initialPeriodMonths } from "@/components/path-schedule-fields";
 import { PathStatusMenu } from "@/components/path-status-menu";
+import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -45,7 +54,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  activateNode,
   deleteNode,
   moveNode,
   reorderNode,
@@ -55,6 +63,7 @@ import {
 import { useSortableList } from "@/lib/hooks/use-sortable-list";
 import { deletePath, upsertPath } from "@/lib/actions/paths";
 import { useJourneyEditDirty } from "@/lib/journey-path/edit-dirty-context";
+import { studentProfileHref } from "@/lib/journey-path/routes";
 import { formatDate, nodeKindLabel, phaseKeyLabel } from "@/lib/labels";
 import {
   normalizePhaseKey,
@@ -163,9 +172,14 @@ function stepClass() {
   return "student-path-step--active";
 }
 
+/** Same family as the journey header chip: tall, rounded, light border. */
+const levelChipClass =
+  "h-11 gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-medium text-foreground shadow-none hover:bg-white/10 dark:border-white/10 dark:bg-white/5 dark:text-foreground dark:hover:bg-white/10";
+
 export function JourneyPathComposer({
   studentId,
   studentName,
+  student = null,
   path,
   nodes: serverNodes,
   libraryCategories = [],
@@ -175,6 +189,12 @@ export function JourneyPathComposer({
 }: {
   studentId: string;
   studentName: string;
+  student?: {
+    id: string;
+    full_name: string | null;
+    email: string | null;
+    avatar_url: string | null;
+  } | null;
   path: StudentPath;
   nodes: StudentNode[];
   libraryCategories?: PickerCategory[];
@@ -183,6 +203,22 @@ export function JourneyPathComposer({
   autoFocusTitle?: boolean;
 }) {
   const router = useRouter();
+  const [catalog, setCatalog] = useState({
+    categories: libraryCategories,
+    topics: libraryTopics,
+    assets: libraryAssets,
+  });
+  const catalogRequested = useRef(libraryAssets.length > 0);
+
+  useEffect(() => {
+    if (catalogRequested.current) return;
+    catalogRequested.current = true;
+    void loadLibraryPickerCatalog()
+      .then((next) => setCatalog(next))
+      .catch(() => {
+        catalogRequested.current = false;
+      });
+  }, []);
   const { reportUnsaved, acknowledgeSaved } = useJourneyEditDirty();
   // Dropped automatically once the server sends a fresh `nodes` array.
   const [optimistic, setOptimistic] = useState<{
@@ -195,6 +231,10 @@ export function JourneyPathComposer({
   const activeId = nodes.find((n) => n.status === "active")?.id ?? null;
   const [expanded, setExpanded] = useState<string | null>(activeId);
   const [levelDirty, setLevelDirty] = useState(false);
+  const [draftWeeks, setDraftWeeks] = useState<{
+    id: string;
+    weeks: number;
+  } | null>(null);
   const levelSave = useRef<(() => Promise<boolean>) | null>(null);
   const [savingAll, setSavingAll] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -249,8 +289,9 @@ export function JourneyPathComposer({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePending, startDeleteTransition] = useTransition();
   const [title, setTitle] = useState(path.title);
-  const [description, setDescription] = useState(path.description ?? "");
-  const [goal, setGoal] = useState(path.goal ?? "");
+  const [renameOpen, setRenameOpen] = useState(autoFocusTitle);
+  const [renameDraft, setRenameDraft] = useState(path.title);
+  const [renamePending, setRenamePending] = useState(false);
   const [startDate, setStartDate] = useState(path.start_date ?? "");
   const [periodMonths, setPeriodMonths] = useState(() =>
     initialPeriodMonths(
@@ -279,11 +320,7 @@ export function JourneyPathComposer({
   );
   const scheduleDirty =
     startDate !== (path.start_date ?? "") || periodMonths !== savedPeriod;
-  const metaDirty =
-    title.trim() !== path.title ||
-    description.trim() !== (path.description ?? "").trim() ||
-    goal.trim() !== (path.goal ?? "").trim() ||
-    scheduleDirty;
+  const metaDirty = scheduleDirty;
   const hasUnsaved = metaDirty || levelDirty;
 
   const savedTotalWeeks =
@@ -366,11 +403,12 @@ export function JourneyPathComposer({
   function focusLevel(id: string) {
     if (
       expanded !== id &&
-      levelDirty &&
+      (levelDirty || draftWeeks != null) &&
       !window.confirm("Este nível tem alterações por guardar. Descartá-las?")
     ) {
       return;
     }
+    setDraftWeeks(null);
     setExpanded(id);
     requestAnimationFrame(() =>
       document
@@ -390,8 +428,6 @@ export function JourneyPathComposer({
     fd.set("id", path.id);
     fd.set("student_id", studentId);
     fd.set("title", nextTitle);
-    fd.set("description", description.trim());
-    fd.set("goal", goal.trim());
     fd.set("status", path.status);
     if (startDate) fd.set("start_date", startDate);
     if (periodMonths > 0) fd.set("period_months", String(periodMonths));
@@ -426,13 +462,37 @@ export function JourneyPathComposer({
     }
   }
 
+  async function renamePath() {
+    const nextTitle = renameDraft.trim();
+    if (!nextTitle) {
+      toast.error("O percurso precisa de um título");
+      return;
+    }
+    setRenamePending(true);
+    try {
+      const fd = new FormData();
+      fd.set("id", path.id);
+      fd.set("student_id", studentId);
+      fd.set("title", nextTitle);
+      fd.set("status", path.status);
+      await upsertPath(fd);
+      setTitle(nextTitle);
+      setRenameOpen(false);
+      toast.success("Nome atualizado");
+      router.refresh();
+    } catch {
+      toast.error("Não foi possível mudar o nome");
+    } finally {
+      setRenamePending(false);
+    }
+  }
+
   function discardAll() {
     setTitle(path.title);
-    setDescription(path.description ?? "");
-    setGoal(path.goal ?? "");
     setStartDate(path.start_date ?? "");
     setPeriodMonths(savedPeriod);
     setSnapHint(false);
+    setDraftWeeks(null);
     if (levelDirty) setExpanded(null);
   }
 
@@ -466,89 +526,109 @@ export function JourneyPathComposer({
   return (
     <div className="min-w-0 space-y-8">
       <div className="min-w-0 space-y-4">
-        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 flex-1 space-y-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <Input
-                value={title}
-                autoFocus={autoFocusTitle}
-                disabled={savingAll}
-                aria-label="Título do percurso"
-                onChange={(event) => setTitle(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    void saveAll();
-                  }
-                }}
-                className="h-auto min-w-0 flex-1 border-0 bg-transparent px-0 text-xl font-bold tracking-tight shadow-none focus-visible:ring-0 sm:text-2xl dark:bg-transparent"
-              />
-            </div>
-            <p className="break-words text-sm text-muted-foreground">
-              {studentName}
-            </p>
-            <div className="flex min-w-0 flex-wrap items-end gap-3">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <h1 className="min-w-0 flex-1 text-2xl font-bold tracking-tight sm:text-3xl">
+            {title}
+          </h1>
+          <div className="ml-auto flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+            {student ? (
+              <IntentLink
+                href={studentProfileHref(
+                  student.id,
+                  `/studio/journeys/${path.id}/edit`,
+                )}
+                aria-label={`Ver ficha de ${studentName}`}
+                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2 text-xs transition-colors hover:bg-white/10 sm:hidden"
+              >
+                <UserAvatar
+                  name={student.full_name}
+                  email={student.email}
+                  avatarUrl={student.avatar_url}
+                  size="sm"
+                  rounded="xl"
+                  className="size-6 text-[9px]"
+                />
+                <span className="max-w-[5.5rem] truncate font-medium">
+                  {studentName}
+                </span>
+              </IntentLink>
+            ) : null}
+            {student ? (
+              <IntentLink
+                href={studentProfileHref(
+                  student.id,
+                  `/studio/journeys/${path.id}/edit`,
+                )}
+                aria-label={`Ver ficha de ${studentName}`}
+                className="hidden h-10 shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-sm transition-colors hover:bg-white/10 sm:inline-flex"
+              >
+                <UserAvatar
+                  name={student.full_name}
+                  email={student.email}
+                  avatarUrl={student.avatar_url}
+                  size="sm"
+                  rounded="xl"
+                />
+                <span className="font-medium">{studentName}</span>
+              </IntentLink>
+            ) : null}
+            <div className="flex items-center gap-1.5 sm:contents">
               <PathStatusMenu
                 pathId={path.id}
                 studentId={studentId}
                 status={path.status}
+                className="h-10 w-fit min-w-0 gap-1.5 px-3"
               />
-              <Button
-                type="button"
-                size="sm"
-                variant="destructive"
-                className="mb-0.5"
-                onClick={() => setDeleteOpen(true)}
-              >
-                Eliminar
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      aria-label="Mais ações do percurso"
+                      className="size-10 rounded-xl border-white/10 bg-white/5 px-0 shadow-none hover:bg-white/10 dark:border-white/10 dark:bg-white/5"
+                    />
+                  }
+                >
+                  <MoreHorizontal className="size-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[11rem]">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setRenameDraft(title);
+                      setRenameOpen(true);
+                    }}
+                  >
+                    Mudar nome
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => setDeleteOpen(true)}
+                  >
+                    Eliminar
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-            <Textarea
-              value={description}
-              disabled={savingAll}
-              rows={2}
-              placeholder="Descrição"
-              aria-label="Descrição"
-              onChange={(event) => setDescription(event.target.value)}
-              className="min-h-0 resize-none border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:ring-0 dark:bg-transparent"
-            />
-            <Textarea
-              value={goal}
-              disabled={savingAll}
-              rows={2}
-              placeholder="Objetivo"
-              aria-label="Objetivo"
-              onChange={(event) => setGoal(event.target.value)}
-              className="min-h-0 resize-none border-0 bg-transparent px-0 py-0 text-sm text-muted-foreground shadow-none focus-visible:ring-0 dark:bg-transparent"
-            />
-          </div>
-          <div className="flex w-full min-w-0 flex-wrap gap-2 sm:w-auto sm:justify-end">
-            <Button
-              render={<Link href={`/studio/journeys/${path.id}`} />}
-              nativeButton={false}
-              variant="outline"
-              size="sm"
-              className="min-w-0 flex-1 sm:flex-none"
-            >
-              Ver percurso
-            </Button>
-            <NodeDialog
-              pathId={path.id}
-              categories={libraryCategories}
-              topics={libraryTopics}
-              assets={libraryAssets}
-              phases={phases}
-              weeksMax={budget.free ?? undefined}
-              defaultWeeks={createWeeks}
-              open={createOpen}
-              onOpenChange={(next) => {
-                setCreateOpen(next);
-                if (!next) setCreateWeeks(undefined);
-              }}
-            />
           </div>
         </div>
       </div>
+
+      <NodeDialog
+        pathId={path.id}
+        categories={catalog.categories}
+        topics={catalog.topics}
+        assets={catalog.assets}
+        phases={phases}
+        weeksMax={budget.free ?? undefined}
+        defaultWeeks={createWeeks}
+        open={createOpen}
+        onOpenChange={(next) => {
+          setCreateOpen(next);
+          if (!next) setCreateWeeks(undefined);
+        }}
+        showTrigger={false}
+      />
 
       <PathCalendarPanel
         months={periodMonths}
@@ -579,6 +659,60 @@ export function JourneyPathComposer({
         phaseRanges={phaseRanges}
         onPhaseRangesChange={changePhases}
       />
+
+      <Dialog
+        open={renameOpen}
+        onOpenChange={(next) => {
+          if (renamePending) return;
+          setRenameOpen(next);
+          if (!next) setRenameDraft(title);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Mudar nome</DialogTitle>
+            <DialogDescription>
+              Só o nome do percurso muda.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void renamePath();
+            }}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="path-rename">Nome</Label>
+              <Input
+                id="path-rename"
+                value={renameDraft}
+                autoFocus
+                required
+                disabled={renamePending}
+                aria-label="Título do percurso"
+                onChange={(event) => setRenameDraft(event.target.value)}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={renamePending}
+                onClick={() => {
+                  setRenameDraft(title);
+                  setRenameOpen(false);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={renamePending}>
+                {renamePending ? "A guardar..." : "Guardar"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="sm:max-w-md" showCloseButton={!deletePending}>
@@ -779,27 +913,6 @@ export function JourneyPathComposer({
                           {node.description}
                         </p>
                       ) : null}
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-2">
-                        <WeekStepper
-                          size="sm"
-                          label={`Semanas do nível ${levelNum}`}
-                          value={levelWeeks(node)}
-                          max={maxWeeksForLevel(budget, levelWeeks(node))}
-                          disabled={savingAll || Boolean(drag)}
-                          maxReachedHint="Sem semanas livres — tira a outro nível ou aumenta a duração"
-                          onChange={(weeks) => changeLevelWeeks(node.id, weeks)}
-                        />
-                        {node.extended_weeks ? (
-                          <span className="rounded-full bg-[color-mix(in_oklch,var(--neuma-orange)_18%,transparent)] px-2 py-0.5 text-[11px] font-medium text-[color-mix(in_oklch,var(--neuma-orange)_80%,white)]">
-                            +{node.extended_weeks} sem. prolongada{node.extended_weeks === 1 ? "" : "s"}
-                          </span>
-                        ) : null}
-                        {node.due_date ? (
-                          <span className="text-xs text-muted-foreground">
-                            até {formatDate(node.due_date)}
-                          </span>
-                        ) : null}
-                      </div>
                     </div>
                     {draggable ? (
                       <GripVertical
@@ -807,35 +920,86 @@ export function JourneyPathComposer({
                         className="mt-1.5 size-4 shrink-0 text-muted-foreground/50"
                       />
                     ) : null}
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={isOpen ? "default" : "outline"}
-                      className="shrink-0 gap-1.5"
-                      aria-label={isOpen ? "Fechar edição" : "Editar nível"}
-                      onClick={() => {
-                        if (
-                          levelDirty &&
-                          !window.confirm(
-                            "Este nível tem alterações por guardar. Descartá-las?",
-                          )
-                        ) {
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <WeekStepper
+                      size="compact"
+                      label={`Semanas do nível ${levelNum}`}
+                      value={
+                        draftWeeks?.id === node.id
+                          ? draftWeeks.weeks
+                          : levelWeeks(node)
+                      }
+                      max={maxWeeksForLevel(
+                        budget,
+                        levelWeeks(
+                          serverNodes.find((n) => n.id === node.id) ?? node,
+                        ),
+                      )}
+                      disabled={savingAll || Boolean(drag)}
+                      maxReachedHint="Sem semanas livres — tira a outro nível ou aumenta a duração"
+                      onChange={(weeks) => {
+                        if (isOpen) {
+                          setDraftWeeks({ id: node.id, weeks });
                           return;
                         }
-                        setExpanded((prev) =>
-                          prev === node.id ? null : node.id,
-                        );
+                        changeLevelWeeks(node.id, weeks);
                       }}
-                    >
-                      <Pencil className="size-3.5" />
-                      <span className="hidden sm:inline">Editar</span>
-                    </Button>
+                    />
+                    {node.extended_weeks ? (
+                      <span className="rounded-full bg-[color-mix(in_oklch,var(--neuma-orange)_18%,transparent)] px-2.5 py-1 text-xs font-medium text-[color-mix(in_oklch,var(--neuma-orange)_80%,white)]">
+                        +{node.extended_weeks} sem. prolongada{node.extended_weeks === 1 ? "" : "s"}
+                      </span>
+                    ) : null}
+                    {node.due_date || draftWeeks?.id === node.id ? (
+                      <span className="text-sm text-muted-foreground">
+                        até{" "}
+                        {formatDate(
+                          draftWeeks?.id === node.id &&
+                            path.start_date &&
+                            node.week_number
+                            ? weekFridayForPath(
+                                path.start_date,
+                                node.week_number +
+                                  draftWeeks.weeks +
+                                  Math.max(0, node.extended_weeks ?? 0) -
+                                  1,
+                              )
+                            : (node.due_date ?? ""),
+                        )}
+                      </span>
+                    ) : null}
+                    {isOpen ? null : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={cn(levelChipClass, "ml-auto")}
+                        aria-label="Editar nível"
+                        onClick={() => {
+                          if (
+                            expanded &&
+                            expanded !== node.id &&
+                            (levelDirty || draftWeeks != null) &&
+                            !window.confirm(
+                              "Este nível tem alterações por guardar. Descartá-las?",
+                            )
+                          ) {
+                            return;
+                          }
+                          setDraftWeeks(null);
+                          setExpanded(node.id);
+                        }}
+                      >
+                        <Pencil className="size-4" />
+                        Editar
+                      </Button>
+                    )}
                   </div>
 
                   {isOpen ? (
-                    <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
-                      <div className="flex flex-wrap items-center gap-1">
-                        <form action={moveNode}>
+                    <div className="mt-4 space-y-4 border-t border-white/10 pt-4">
+                      <div className="flex w-full items-center gap-2">
+                        <form action={moveNode} className="min-w-0 flex-1">
                           <input type="hidden" name="id" value={node.id} />
                           <input
                             type="hidden"
@@ -845,16 +1009,17 @@ export function JourneyPathComposer({
                           <input type="hidden" name="direction" value="up" />
                           <Button
                             type="submit"
-                            variant="ghost"
-                            size="icon"
+                            variant="outline"
+                            className={cn(levelChipClass, "h-11 w-full")}
                             disabled={!moveUp}
                             aria-label={moveLabel(moveUp, "Subir")}
                             title={moveLabel(moveUp, "Subir")}
                           >
                             <ChevronUp className="size-4" />
+                            Subir
                           </Button>
                         </form>
-                        <form action={moveNode}>
+                        <form action={moveNode} className="min-w-0 flex-1">
                           <input type="hidden" name="id" value={node.id} />
                           <input
                             type="hidden"
@@ -868,34 +1033,29 @@ export function JourneyPathComposer({
                           />
                           <Button
                             type="submit"
-                            variant="ghost"
-                            size="icon"
+                            variant="outline"
+                            className={cn(levelChipClass, "h-11 w-full")}
                             disabled={!moveDown}
                             aria-label={moveLabel(moveDown, "Descer")}
                             title={moveLabel(moveDown, "Descer")}
                           >
                             <ChevronDown className="size-4" />
+                            Descer
                           </Button>
                         </form>
-                        {isPhaseCheckpoint ? (
-                          <span className="px-1 text-xs text-muted-foreground">
-                            Fica sempre no fim da {phaseKeyLabel(key)}
-                          </span>
-                        ) : null}
-                        {node.status !== "active" ? (
-                          <form action={activateNode}>
-                            <input type="hidden" name="id" value={node.id} />
-                            <input
-                              type="hidden"
-                              name="path_id"
-                              value={path.id}
-                            />
-                            <Button type="submit" variant="outline" size="sm">
-                              Ativar nível
-                            </Button>
-                          </form>
-                        ) : null}
-                        <form action={deleteNode}>
+                        <form
+                          action={deleteNode}
+                          className="min-w-0 flex-1"
+                          onSubmit={(event) => {
+                            if (
+                              !window.confirm(
+                                "Eliminar este nível? Esta ação não pode ser desfeita.",
+                              )
+                            ) {
+                              event.preventDefault();
+                            }
+                          }}
+                        >
                           <input type="hidden" name="id" value={node.id} />
                           <input
                             type="hidden"
@@ -904,29 +1064,54 @@ export function JourneyPathComposer({
                           />
                           <Button
                             type="submit"
-                            variant="ghost"
-                            size="icon"
+                            variant="outline"
+                            className={cn(
+                              levelChipClass,
+                              "h-11 w-full text-destructive hover:bg-destructive/10 dark:text-destructive",
+                            )}
                             aria-label="Eliminar"
                           >
                             <Trash2 className="size-4" />
+                            Eliminar
                           </Button>
                         </form>
                       </div>
+                      {isPhaseCheckpoint ? (
+                        <p className="text-sm text-muted-foreground">
+                          Fica sempre no fim da {phaseKeyLabel(key)}
+                        </p>
+                      ) : null}
 
                       <NodeEditorForm
                         key={node.id}
                         pathId={path.id}
                         node={node}
-                        categories={libraryCategories}
-                        topics={libraryTopics}
-                        assets={libraryAssets}
+                        categories={catalog.categories}
+                        topics={catalog.topics}
+                        assets={catalog.assets}
                         inline
                         idPrefix={node.id}
                         phases={phases}
                         onDirtyChange={setLevelDirty}
                         saveHandleRef={levelSave}
                         hideWeeks
-                        onSuccess={() => setExpanded(null)}
+                        trackedWeeks={{
+                          current:
+                            draftWeeks?.id === node.id
+                              ? draftWeeks.weeks
+                              : levelWeeks(node),
+                          saved: levelWeeks(
+                            serverNodes.find((n) => n.id === node.id) ?? node,
+                          ),
+                        }}
+                        onCancel={() => {
+                          setDraftWeeks(null);
+                          setExpanded(null);
+                        }}
+                        onSuccess={() => {
+                          setDraftWeeks(null);
+                          setExpanded(null);
+                        }}
                       />
                     </div>
                   ) : null}

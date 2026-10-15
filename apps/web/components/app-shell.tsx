@@ -19,12 +19,12 @@ import {
   Library,
   CalendarDays,
   ChevronLeft,
-  Menu,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
 
 import { LogoutForm } from "@/components/logout-form";
+import { MenuLinesIcon } from "@/components/menu-lines-icon";
 import { MusicStaffIcon } from "@/components/music-staff-icon";
 import { NeumaLogo } from "@/components/neuma-logo";
 import { MobileMenubar, type MobileNavItem } from "@/components/mobile-menubar";
@@ -33,6 +33,7 @@ import {
   type MentorDrawerItem,
 } from "@/components/mentor-mobile-drawer";
 import { NavCountBadge } from "@/components/nav-count-badge";
+import { setDrawerNavLoading } from "@/components/route-screen-loader";
 import { ScreenLoader } from "@/components/screen-loader";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
@@ -295,6 +296,8 @@ export function AppShell({
   const [drawerOpen, setDrawerOpen] = useState(false);
   /** Destino optimista — o header muda já no clique (voltar → logo/menu). */
   const [pendingHref, setPendingHref] = useState<string | null>(null);
+  /** Sidebar: o spinner fica no item. Não mostrar o loading ao centro. */
+  const [drawerNav, setDrawerNav] = useState(false);
   const [badges, setBadges] = useState({
     checkins: badgeCounts?.checkins ?? 0,
     onboardings: 0,
@@ -471,8 +474,11 @@ export function AppShell({
   }, [pathname]);
 
   useEffect(() => {
-    if (!navPending) setPendingHref(null);
-  }, [navPending]);
+    if (navPending) return;
+    setPendingHref(null);
+    setDrawerNav(false);
+    setDrawerNavLoading(false);
+  }, [navPending, pathname]);
 
   useEffect(() => {
     const shell = getAppScrollEl();
@@ -498,7 +504,7 @@ export function AppShell({
     return () => target.removeEventListener("scroll", onScroll);
   }, []);
 
-  function onNavClick(href?: string) {
+  function onNavClick(href?: string, source?: "drawer") {
     scrollToTop();
     setNavCompact(false);
     if (!href) return;
@@ -509,6 +515,9 @@ export function AppShell({
       targetPath === pathname && targetSearch === currentSearch;
     if (samePlace) return;
 
+    const fromDrawer = source === "drawer";
+    setDrawerNav(fromDrawer);
+    setDrawerNavLoading(fromDrawer);
     setPendingHref(targetPath);
     startNavTransition(() => {
       router.push(href);
@@ -548,9 +557,9 @@ export function AppShell({
                 </span>
                 <span
                   aria-hidden
-                  className="pointer-events-none absolute top-1/2 left-1/2 grid size-12 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/5 text-foreground opacity-0 transition-opacity duration-150 ease-out group-hover/logo:opacity-100 group-active/logo:opacity-100"
+                  className="pointer-events-none absolute top-1/2 left-1/2 grid size-9 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/5 text-foreground opacity-0 transition-opacity duration-150 ease-out group-hover/logo:opacity-100 group-active/logo:opacity-100"
                 >
-                  <Menu className="size-6" />
+                  <MenuLinesIcon className="size-[18px]" />
                 </span>
               </span>
             </button>
@@ -755,7 +764,7 @@ export function AppShell({
             open={drawerOpen}
             onOpenChange={setDrawerOpen}
             items={drawerItems}
-            onNavigate={onNavClick}
+            onNavigate={(href) => onNavClick(href, "drawer")}
             pending={navPending}
             showMenuButton={isRootPage}
             homeHref={home}
@@ -794,7 +803,7 @@ export function AppShell({
         />
 
         <main className="neuma-enter neuma-enter-delay-1 neuma-tablet-top-main flex w-full min-w-0 flex-1 flex-col px-4 pt-4 pb-0 desktop:px-10 desktop:pb-14 desktop:pt-10">
-          {navPending ? (
+          {navPending && !drawerNav ? (
             <ScreenLoader />
           ) : (
             <>

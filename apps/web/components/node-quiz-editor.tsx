@@ -43,9 +43,9 @@ function emptyQuestion(): DraftQuestion {
 
 export function NodeQuizEditor({
   nodeId,
-  passRule = "mentor",
 }: {
   nodeId: string;
+  /** Kept so callers can pass the level rule; the editor no longer restates it. */
   passRule?: "mentor" | "quiz" | "check_in" | "none";
 }) {
   const [questions, setQuestions] = useState<DraftQuestion[]>([]);
@@ -132,14 +132,7 @@ export function NodeQuizEditor({
 
   return (
     <div className="space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-      <div>
-        <p className="text-sm font-medium">Quiz do check-point</p>
-        <p className="text-xs text-muted-foreground">
-          {passRule === "quiz"
-            ? "Escolha múltipla. Uma nota igual ou acima do limiar desbloqueia o nível seguinte. Abaixo disso o nível fica onde está."
-            : "Escolha múltipla com nota automática. Neste nível a nota não desbloqueia o percurso — tu validas a passagem."}
-        </p>
-      </div>
+      <p className="text-sm font-medium">Quiz do check-point</p>
 
       <div className="space-y-4">
         {questions.map((q, qi) => (
@@ -154,9 +147,8 @@ export function NodeQuizEditor({
               </Label>
               <Button
                 type="button"
-                variant="ghost"
-                size="icon"
-                className="size-8"
+                variant="outline"
+                className="size-11 rounded-xl border border-white/10 bg-white/5 px-0 hover:bg-white/10"
                 aria-label="Remover pergunta"
                 disabled={questions.length <= 1}
                 onClick={() =>
@@ -173,6 +165,7 @@ export function NodeQuizEditor({
               }
               rows={2}
               placeholder="Enunciado da pergunta…"
+              className="min-h-20 rounded-xl text-sm"
             />
             <div className="space-y-2">
               {q.options.map((opt, oi) => (
@@ -193,12 +186,12 @@ export function NodeQuizEditor({
                       updateOption(q.key, opt.id, e.target.value)
                     }
                     placeholder={`Opção ${oi + 1}`}
+                    className="h-10 rounded-xl text-sm"
                   />
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 shrink-0"
+                    variant="outline"
+                    className="size-11 shrink-0 rounded-xl border border-white/10 bg-white/5 px-0 hover:bg-white/10"
                     disabled={q.options.length <= 2}
                     aria-label="Remover opção"
                     onClick={() => {
@@ -219,9 +212,8 @@ export function NodeQuizEditor({
               {q.options.length < 6 ? (
                 <Button
                   type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="gap-1.5"
+                  variant="outline"
+                  className="h-11 gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 text-sm hover:bg-white/10"
                   onClick={() =>
                     updateQuestion(q.key, {
                       options: [...q.options, newOption()],
@@ -232,9 +224,6 @@ export function NodeQuizEditor({
                 </Button>
               ) : null}
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              O círculo seleccionado é a resposta correcta.
-            </p>
           </div>
         ))}
       </div>
@@ -242,14 +231,18 @@ export function NodeQuizEditor({
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
-          variant="secondary"
-          size="sm"
-          className="gap-1.5"
+          variant="outline"
+          className="h-11 gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 text-sm hover:bg-white/10"
           onClick={() => setQuestions((prev) => [...prev, emptyQuestion()])}
         >
-          <Plus className="size-3.5" /> Pergunta
+          <Plus className="size-4" /> Pergunta
         </Button>
-        <Button type="button" size="sm" disabled={pending} onClick={onSave}>
+        <Button
+          type="button"
+          disabled={pending}
+          onClick={onSave}
+          className="h-11 rounded-xl px-4 text-sm"
+        >
           {pending ? "A guardar…" : "Guardar quiz"}
         </Button>
       </div>

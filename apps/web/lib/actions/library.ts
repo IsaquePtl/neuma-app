@@ -110,8 +110,9 @@ function revalidateLibrary() {
 }
 
 /**
- * The library item is the object. Every level and template that uses it
- * receives the current file and text, including copies of an older file.
+ * The library file can follow the item. Level text (`nodes.content_body`) does
+ * not: it stays what the mentor saved, and the item body is only a fallback
+ * when that column is empty.
  */
 async function syncLibraryAssetToLevels(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -120,12 +121,11 @@ async function syncLibraryAssetToLevels(
   next: { url: string | null; body: string | null },
 ) {
   const url = next.url?.trim() || null;
-  const body = next.body?.trim() || null;
   const from = previousUrl?.trim() ?? "";
 
   const { error: linkedNodesError } = await supabase
     .from("nodes")
-    .update({ resource_url: url, content_body: body })
+    .update({ resource_url: url })
     .eq("library_asset_id", assetId);
   if (linkedNodesError) throw new Error(linkedNodesError.message);
 
@@ -142,7 +142,6 @@ async function syncLibraryAssetToLevels(
     .update({
       library_asset_id: assetId,
       resource_url: url,
-      content_body: body,
     })
     .eq("resource_url", from)
     .is("library_asset_id", null);
@@ -609,6 +608,47 @@ export async function deleteLibraryCategory(formData: FormData) {
     .eq("id", id);
   if (error) throw new Error(error.message);
   revalidateLibrary();
+}
+
+/** Catálogo do picker. Corre depois da página de edição abrir, para o clique não esperar pela biblioteca. */
+export async function loadLibraryPickerCatalog() {
+  const { supabase } = await requireMentor();
+  const [{ data: assets }, { data: categories }, { data: topics }] =
+    await Promise.all([
+      supabase
+        .from("library_assets")
+        .select("id, title, kind, usage, topic_id, url, body, tags")
+        .eq("content_status", "ready")
+        .is("archived_at", null)
+        .order("title", { ascending: true }),
+      supabase
+        .from("library_categories")
+        .select("id, name")
+        .order("sort_index", { ascending: true }),
+      supabase
+        .from("library_topics")
+        .select("id, category_id, name")
+        .order("sort_index", { ascending: true }),
+    ]);
+
+  return {
+    categories: (categories ?? []).map((c) => ({ id: c.id, name: c.name })),
+    topics: (topics ?? []).map((t) => ({
+      id: t.id,
+      category_id: t.category_id,
+      name: t.name,
+    })),
+    assets: (assets ?? []).map((a) => ({
+      id: a.id,
+      title: a.title,
+      kind: a.kind,
+      usage: a.usage,
+      topic_id: a.topic_id,
+      url: a.url,
+      body: a.body,
+      tags: a.tags,
+    })),
+  };
 }
 
 export async function deleteLibraryTopic(formData: FormData) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   Check,
@@ -71,29 +71,41 @@ function KindIcon({ kind, className }: { kind: string; className?: string }) {
   return <Icon className={cn("size-3.5", className)} aria-hidden />;
 }
 
-function Chip({
-  active,
-  onClick,
+const filterSelectClass =
+  "h-10 w-full min-w-0 rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-foreground";
+
+/** Selected library item inside a level: icon, title, meta. No media preview. */
+export function LibraryAssetItemCard({
+  kind,
+  title,
+  meta,
   children,
+  className,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
+  kind: string;
+  title: string;
+  meta?: string | null;
+  children?: ReactNode;
+  className?: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
+    <div
       className={cn(
-        "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-        active
-          ? "border-[var(--neuma-coral)]/60 bg-[var(--neuma-coral)]/15 text-foreground"
-          : "border-white/10 text-muted-foreground hover:text-foreground",
+        "flex min-w-0 items-center gap-3 rounded-xl border border-[var(--neuma-coral)]/35 bg-[var(--neuma-coral)]/[0.07] px-3 py-2.5",
+        className,
       )}
     >
+      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-black/30">
+        <KindIcon kind={kind} className="size-4 text-[var(--neuma-coral)]" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{title}</p>
+        {meta ? (
+          <p className="truncate text-xs text-muted-foreground">{meta}</p>
+        ) : null}
+      </div>
       {children}
-    </button>
+    </div>
   );
 }
 
@@ -110,8 +122,9 @@ export function LibraryAssetPicker({
   onChange,
   initialAssetId,
 }: Props) {
-  const [initialCleared, setInitialCleared] = useState(false);
-  const selectedId = value || (initialCleared ? "" : initialAssetId) || "";
+  // "" is a clear. Nullish coalescing keeps that; `||` used to restore the
+  // original item after Tipo changed or the mentor removed the pick.
+  const selectedId = value ?? initialAssetId ?? "";
   const selected = selectedId ? assets.find((a) => a.id === selectedId) : null;
   const [browsing, setBrowsing] = useState(!selected);
   const [search, setSearch] = useState("");
@@ -178,46 +191,33 @@ export function LibraryAssetPicker({
 
   return (
     <div className="min-w-0 space-y-3">
-      {!usageFilter ? (
-        <p className="text-xs text-muted-foreground">
-          {nodeKind === "call"
-            ? "Anexo de apoio opcional. O foco é a sessão no Meet."
-            : "Material de apoio opcional para o check-point."}
-        </p>
-      ) : null}
       {selected ? (
-        <div className="flex min-w-0 items-center gap-3 rounded-xl border border-[var(--neuma-coral)]/35 bg-[var(--neuma-coral)]/[0.07] px-3 py-2.5">
-          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-black/30">
-            <KindIcon kind={selected.kind} className="size-4 text-[var(--neuma-coral)]" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{selected.title}</p>
-            <p className="truncate text-xs text-muted-foreground">
-              {libraryAssetUsageLabel[selected.usage]} · {locationLabel(selected)}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
+        <LibraryAssetItemCard
+          kind={selected.kind}
+          title={selected.title}
+          meta={`${libraryAssetUsageLabel[selected.usage]} · ${locationLabel(selected)}`}
+        >
+          <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={() => setBrowsing((open) => !open)}
-              className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-foreground/90 hover:bg-white/10"
+              className="h-11 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-medium text-foreground hover:bg-white/10"
             >
               {browsing ? "Fechar" : "Trocar"}
             </button>
             <button
               type="button"
               onClick={() => {
-                setInitialCleared(true);
                 onChange(null);
                 setBrowsing(true);
               }}
               aria-label="Remover item"
-              className="grid size-7 place-items-center rounded-lg text-muted-foreground hover:bg-white/10 hover:text-foreground"
+              className="grid size-11 place-items-center rounded-xl border border-white/10 bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-foreground"
             >
-              <X className="size-3.5" />
+              <X className="size-4" />
             </button>
           </div>
-        </div>
+        </LibraryAssetItemCard>
       ) : selectedId ? (
         <p className="rounded-xl border border-amber-400/25 bg-amber-400/[0.06] px-3 py-2 text-xs text-muted-foreground">
           O item ligado a este nível foi arquivado ou não é compatível com o tipo
@@ -225,7 +225,7 @@ export function LibraryAssetPicker({
         </p>
       ) : null}
 
-      {browsing ? (
+      {browsing || !selected ? (
         <div className="min-w-0 space-y-2.5 rounded-xl border border-white/10 bg-black/20 p-3">
           <div className="relative">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -237,60 +237,49 @@ export function LibraryAssetPicker({
                 if (e.key === "Enter") e.preventDefault();
               }}
               placeholder={`Procurar ${itemNoun} por título, tópico ou tag…`}
-              className="pl-9"
+              className="h-10 rounded-xl pl-9 text-sm"
               aria-label="Procurar na biblioteca"
             />
           </div>
 
           {categoriesWithItems.length > 1 ? (
-            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
-              <Chip
-                active={!categoryId}
-                onClick={() => {
-                  setCategoryId("");
-                  setTopicId("");
-                }}
-              >
-                Todas
-              </Chip>
+            <select
+              aria-label="Categoria"
+              value={categoryId}
+              onChange={(e) => {
+                setCategoryId(e.target.value);
+                setTopicId("");
+              }}
+              className={filterSelectClass}
+            >
+              <option value="">Todas</option>
               {categoriesWithItems.map((c) => (
-                <Chip
-                  key={c.id}
-                  active={categoryId === c.id}
-                  onClick={() => {
-                    setCategoryId(c.id);
-                    setTopicId("");
-                  }}
-                >
+                <option key={c.id} value={c.id}>
                   {c.name}
-                </Chip>
+                </option>
               ))}
-            </div>
+            </select>
           ) : null}
 
           {topicsWithItems.length > 1 ? (
-            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
-              <Chip active={!topicId} onClick={() => setTopicId("")}>
-                Todos os tópicos
-              </Chip>
+            <select
+              aria-label="Tópico"
+              value={topicId}
+              onChange={(e) => setTopicId(e.target.value)}
+              className={filterSelectClass}
+            >
+              <option value="">Todos os tópicos</option>
               {topicsWithItems.map((t) => (
-                <Chip
-                  key={t.id}
-                  active={topicId === t.id}
-                  onClick={() => setTopicId(t.id)}
-                >
+                <option key={t.id} value={t.id}>
                   {t.name}
-                </Chip>
+                </option>
               ))}
-            </div>
+            </select>
           ) : null}
 
-          {usageFilter ? (
-            <p className="text-[11px] text-muted-foreground">
-              A mostrar só itens de {libraryAssetUsageLabel[usageFilter]} ·{" "}
-              {results.length} resultado{results.length === 1 ? "" : "s"}
-            </p>
-          ) : null}
+          <p className="text-sm text-muted-foreground">
+            {results.length} resultado{results.length === 1 ? "" : "s"}
+          </p>
 
           {results.length === 0 ? (
             <div className="rounded-lg border border-dashed border-white/10 px-3 py-4 text-center text-xs text-muted-foreground">
@@ -318,7 +307,7 @@ export function LibraryAssetPicker({
                         setBrowsing(false);
                       }}
                       className={cn(
-                        "flex w-full min-w-0 items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors",
+                        "flex min-h-11 w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
                         isSelected
                           ? "bg-[var(--neuma-coral)]/12"
                           : "hover:bg-white/[0.05]",

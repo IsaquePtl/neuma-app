@@ -58,6 +58,8 @@ export type StudentNode = {
   /** Capa do vídeo na biblioteca, quando o URL do nível coincide com o item. */
   poster_url?: string | null;
   content_body: string | null;
+  /** Copy shown only on the waiting page, before the level opens. */
+  preview_text?: string | null;
   order_index: number;
   pass_rule: NodePassRule;
   pass_score: number | null;
@@ -161,13 +163,21 @@ export async function loadStudentOrThrow(id: string): Promise<StudentProfile> {
 
   // Keep the critical select aligned with the students list (known-good columns).
   // `can_book_sessions` is optional (migration 0028) — never let it 404 the page.
-  const { data: student, error } = await supabase
-    .from("profiles")
-    .select(
-      "id, full_name, email, avatar_url, onboarding_completed, internal_notes, created_at, role",
-    )
-    .eq("id", id)
-    .maybeSingle();
+  const [{ data: student, error }, { data: bookingFlags, error: bookingErr }] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select(
+          "id, full_name, email, avatar_url, onboarding_completed, internal_notes, created_at, role",
+        )
+        .eq("id", id)
+        .maybeSingle(),
+      supabase
+        .from("profiles")
+        .select("can_book_sessions")
+        .eq("id", id)
+        .maybeSingle(),
+    ]);
 
   if (error) {
     console.error("[students] loadStudentOrThrow failed", {
@@ -186,11 +196,6 @@ export async function loadStudentOrThrow(id: string): Promise<StudentProfile> {
   if (!student || student.role !== "student") notFound();
 
   let canBookSessions = true;
-  const { data: bookingFlags, error: bookingErr } = await supabase
-    .from("profiles")
-    .select("can_book_sessions")
-    .eq("id", id)
-    .maybeSingle();
   if (bookingErr) {
     console.warn("[students] can_book_sessions unavailable", {
       id,
@@ -299,6 +304,7 @@ export function mapNode(n: {
   due_date: string | null;
   resource_url: string | null;
   content_body: string | null;
+  preview_text?: string | null;
   library_asset_id?: string | null;
   order_index: number;
   pass_rule?: NodePassRule | null;
@@ -320,6 +326,7 @@ export function mapNode(n: {
     due_date: n.due_date,
     resource_url: n.resource_url,
     content_body: n.content_body ?? null,
+    preview_text: n.preview_text ?? null,
     library_asset_id: n.library_asset_id ?? null,
     order_index: n.order_index,
     pass_rule: effectivePassRule(n.kind, n.pass_rule ?? defaultPassRule(n.kind)),
@@ -347,7 +354,7 @@ export async function loadMyPathWithNodes(studentId: string): Promise<{
   const { data: nodes } = await supabase
     .from("nodes")
     .select(
-      "id, title, description, week_number, duration_weeks, extended_weeks, kind, status, due_date, resource_url, content_body, library_asset_id, order_index, pass_rule, pass_score, check_in_kind, phase_key, node_code, is_phase_checkpoint",
+      "id, title, description, week_number, duration_weeks, extended_weeks, kind, status, due_date, resource_url, content_body, preview_text, library_asset_id, order_index, pass_rule, pass_score, check_in_kind, phase_key, node_code, is_phase_checkpoint",
     )
     .eq("path_id", pathRow.id)
     .order("order_index", { ascending: true });
@@ -379,7 +386,12 @@ type LibrarySource = {
   cover_url: string | null;
 };
 
-/** O nível mostra o item da biblioteca, não a cópia que ficou gravada. */
+/**
+ * Poster and video follow the library item. Student-facing text prefers the
+ * level's own `content_body`; the item body is only the fallback when that
+ * is empty. Pass `bodyFallback: false` for the level editor so an empty
+ * field stays empty and is not saved as a copy of the item.
+ */
 export async function attachLibraryPosters<
   T extends {
     resource_url: string | null;
@@ -389,7 +401,9 @@ export async function attachLibraryPosters<
 >(
   _supabase: Awaited<ReturnType<typeof createClient>>,
   nodes: T[],
+  options?: { bodyFallback?: boolean },
 ): Promise<Array<T & { poster_url: string | null }>> {
+  const bodyFallback = options?.bodyFallback !== false;
   const ids = [
     ...new Set(
       nodes
@@ -443,10 +457,11 @@ export async function attachLibraryPosters<
       : undefined;
     const asset = linked ?? copied;
     if (!asset) return { ...node, poster_url: null };
+    const ownText = node.content_body?.trim() ? node.content_body : null;
     return {
       ...node,
       resource_url: asset.url ?? node.resource_url,
-      content_body: linked ? asset.body : (node.content_body ?? asset.body),
+      content_body: ownText ?? (bodyFallback ? asset.body : null) ?? node.content_body ?? null,
       poster_url: asset.cover_url ?? null,
     };
   });

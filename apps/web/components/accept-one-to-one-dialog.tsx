@@ -181,7 +181,7 @@ export function AcceptOneToOneDialog({
             />
           }
         >
-          <HeartHandshake className="size-3.5" /> Aceitar 1:1
+          <HeartHandshake className="size-4" /> Aceitar 1:1
         </DialogTrigger>
       )}
       <DialogContent className="sm:max-w-md">

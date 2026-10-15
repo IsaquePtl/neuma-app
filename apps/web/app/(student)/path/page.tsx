@@ -107,9 +107,9 @@ export default async function StudentPathPage() {
         <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
           <Route className="size-3.5" /> Percurso
         </p>
-        <div className="-ml-1 flex items-center gap-1.5">
+        <div className="flex min-w-0 items-center gap-1.5">
           <CategoryThemeIcon theme={null} name={path.title} size={40} />
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+          <h1 className="min-w-0 break-words pl-0.5 text-2xl font-bold tracking-tight sm:text-3xl">
             {path.title}
           </h1>
         </div>

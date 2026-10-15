@@ -113,54 +113,36 @@ export function CalendarToolbar({
         pending && "opacity-70",
       )}
     >
-      <div
-        role="group"
-        aria-label="Vista"
-        className="inline-flex h-9 shrink-0 self-start rounded-lg border border-white/10 bg-black/20 p-0.5"
-      >
-        {(
-          [
-            ["month", "Mês"],
-            ["week", "Semana"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => push({ view: value })}
-            aria-pressed={view === value}
-            className={cn(
-              "rounded-md px-3 text-sm font-medium transition-colors",
-              view === value
-                ? "bg-white/10 text-[#ffffe9]"
-                : "text-muted-foreground hover:text-foreground",
-            )}
+      <div className="flex min-w-0 items-center gap-2 sm:contents">
+        <label className="inline-flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-sm whitespace-nowrap transition-colors hover:bg-white/[0.05] sm:order-5">
+          <input
+            type="checkbox"
+            checked={oneToOneOnly}
+            onChange={(e) => push({ oto: e.target.checked ? "1" : "" })}
+            className="size-3.5 rounded border-white/20 accent-[var(--neuma-coral)]"
+          />
+          <span className="text-muted-foreground">Neuma 1:1</span>
+        </label>
+
+        <label className="flex min-w-0 flex-1 items-center gap-2 sm:order-3 sm:max-w-[14rem]">
+          <span className="sr-only">Tipo</span>
+          <select
+            value={kind}
+            onChange={(e) => push({ kind: e.target.value })}
+            className={cn(selectClassName, "w-full")}
+            aria-label="Filtrar por tipo"
           >
-            {label}
-          </button>
-        ))}
+            <option value="">Todos os tipos</option>
+            {(Object.keys(KIND_LABEL) as CalendarEventKind[]).map((k) => (
+              <option key={k} value={k}>
+                {KIND_LABEL[k]}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
-      <div className="hidden h-5 w-px bg-white/10 sm:block" aria-hidden />
-
-      <label className="flex min-w-0 flex-1 items-center gap-2 sm:max-w-[14rem]">
-        <span className="sr-only">Tipo</span>
-        <select
-          value={kind}
-          onChange={(e) => push({ kind: e.target.value })}
-          className={cn(selectClassName, "w-full")}
-          aria-label="Filtrar por tipo"
-        >
-          <option value="">Todos os tipos</option>
-          {(Object.keys(KIND_LABEL) as CalendarEventKind[]).map((k) => (
-            <option key={k} value={k}>
-              {KIND_LABEL[k]}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <div className="relative min-w-0 flex-1 sm:max-w-[18rem]">
+      <div className="relative min-w-0 flex-1 sm:order-4 sm:max-w-[18rem]">
         <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
         <input
           type="search"
@@ -247,15 +229,6 @@ export function CalendarToolbar({
         ) : null}
       </div>
 
-      <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-sm transition-colors hover:bg-white/[0.05]">
-        <input
-          type="checkbox"
-          checked={oneToOneOnly}
-          onChange={(e) => push({ oto: e.target.checked ? "1" : "" })}
-          className="size-3.5 rounded border-white/20 accent-[var(--neuma-coral)]"
-        />
-        <span className="text-muted-foreground">Neuma 1:1</span>
-      </label>
     </div>
   );
 }

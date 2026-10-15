@@ -18,10 +18,7 @@ import type {
   JourneyLevelFeedback,
 } from "@/components/journey-path-composer";
 import type { CheckInDetail } from "@/lib/journey-path/load-level-review";
-import {
-  mentorLevelReviewHref,
-  type MentorLevelTab,
-} from "@/lib/journey-path/level-review-url";
+import { mentorLevelReviewHref } from "@/lib/journey-path/level-review-url";
 import { studentProfileHref } from "@/lib/journey-path/routes";
 import {
   checkInKindLabel,
@@ -210,49 +207,6 @@ function MentorCheckInRounds({
   );
 }
 
-const LEVEL_TABS: { id: MentorLevelTab; label: string }[] = [
-  { id: "feedback", label: "Feedback" },
-  { id: "nivel", label: "Nível" },
-];
-
-function MentorLevelTabs({
-  pathId,
-  nodeId,
-  activeTab,
-  checkin,
-}: {
-  pathId: string;
-  nodeId: string;
-  activeTab: MentorLevelTab;
-  checkin?: string | null;
-}) {
-  return (
-    <nav className="flex w-full flex-nowrap gap-0 border-b border-white/10 pb-px">
-      {LEVEL_TABS.map((tab) => {
-        const active = activeTab === tab.id;
-        return (
-          <Link
-            key={tab.id}
-            href={mentorLevelReviewHref(pathId, nodeId, {
-              checkin: checkin ?? undefined,
-              tab: tab.id,
-            })}
-            className={cn(
-              "inline-flex min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-t-lg px-3 py-3 text-sm transition-colors sm:py-3.5",
-              "desktop:min-w-0 desktop:flex-none desktop:shrink-0 desktop:justify-start desktop:px-3 desktop:py-2",
-              active
-                ? "border-b-2 border-[var(--neuma-coral)] font-medium text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {tab.label}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}
-
 function SubmissionHeader({ checkInDetail }: { checkInDetail: CheckInDetail }) {
   return (
     <div
@@ -424,6 +378,16 @@ function SubmissionSectionWithFeedback({
   );
 }
 
+/**
+ * Visto (`none`) and quiz close without a mentor review.
+ * Check-in (video, text, call) is reviewed here. Mentor gates and sessions
+ * are closed here too (concluir / prolongar).
+ */
+function levelExpectsMentorFeedback(node: StudentNode): boolean {
+  if (node.pass_rule === "none" || node.pass_rule === "quiz") return false;
+  return true;
+}
+
 function passRuleNote(node: StudentNode): string {
   if (node.kind === "call") {
     return "A sessão não tem passagem automática. Depois da chamada, concluis o nível aqui. Não há check-in.";
@@ -572,7 +536,6 @@ export function MentorLevelReviewView({
   bestQuizScore,
   checkInDetail,
   selectedCheckInId,
-  activeTab,
   emailFailed = false,
 }: {
   pathId: string;
@@ -586,12 +549,10 @@ export function MentorLevelReviewView({
   bestQuizScore: number | null;
   checkInDetail: CheckInDetail | null;
   selectedCheckInId: string | null;
-  activeTab: MentorLevelTab;
   emailFailed?: boolean;
 }) {
   const returnTo = mentorLevelReviewHref(pathId, node.id, {
     checkin: selectedCheckInId ?? undefined,
-    tab: activeTab,
   });
 
   const feedbackPanelProps: MentorFeedbackPanelProps = {
@@ -606,6 +567,8 @@ export function MentorLevelReviewView({
     returnTo,
     bestQuizScore,
   };
+
+  const showMentorFeedback = levelExpectsMentorFeedback(node);
 
   return (
     <div className="space-y-8">
@@ -652,51 +615,43 @@ export function MentorLevelReviewView({
         </p>
       </header>
 
-      <MentorLevelTabs
-        pathId={pathId}
-        nodeId={node.id}
-        activeTab={activeTab}
-        checkin={selectedCheckInId}
-      />
-
-      {activeTab === "nivel" ? (
-        <div className="w-full space-y-5 py-2 desktop:space-y-6 desktop:py-0">
-          <div className="flex justify-end">
-            <Link
-              href={`/studio/journeys/${pathId}/edit`}
-              aria-label="Editar percurso"
-              className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 text-sm transition-colors hover:bg-white/10"
-            >
-              <Pencil className="size-3.5" />
-              Editar
-            </Link>
-          </div>
-          <StudentNodePlayer
-            node={node}
-            levelNumber={levelNumber}
-            preview
-            pathId={pathId}
-          />
+      <div className="w-full space-y-5 py-2 desktop:space-y-6 desktop:py-0">
+        <div className="flex justify-end">
+          <Link
+            href={`/studio/journeys/${pathId}/edit`}
+            aria-label="Editar percurso"
+            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 text-sm transition-colors hover:bg-white/10"
+          >
+            <Pencil className="size-3.5" />
+            Editar
+          </Link>
         </div>
-      ) : (
-        <>
-          <SubmissionSection
-            pathId={pathId}
-            nodeId={node.id}
-            node={node}
-            studentName={studentName}
-            nodeCheckIns={nodeCheckIns}
-            nodeFeedbacks={nodeFeedbacks}
-            checkInDetail={checkInDetail}
-            selectedCheckInId={selectedCheckInId}
-            feedbackPanelProps={checkInDetail ? feedbackPanelProps : undefined}
-          />
+        <StudentNodePlayer
+          node={node}
+          levelNumber={levelNumber}
+          preview
+          pathId={pathId}
+        />
 
-          {node.pass_rule !== "check_in" || !checkInDetail ? (
-            <MentorFeedbackPanel {...feedbackPanelProps} />
-          ) : null}
-        </>
-      )}
+        <SubmissionSection
+          pathId={pathId}
+          nodeId={node.id}
+          node={node}
+          studentName={studentName}
+          nodeCheckIns={nodeCheckIns}
+          nodeFeedbacks={nodeFeedbacks}
+          checkInDetail={checkInDetail}
+          selectedCheckInId={selectedCheckInId}
+          feedbackPanelProps={
+            showMentorFeedback && checkInDetail ? feedbackPanelProps : undefined
+          }
+        />
+
+        {showMentorFeedback &&
+        (node.pass_rule !== "check_in" || !checkInDetail) ? (
+          <MentorFeedbackPanel {...feedbackPanelProps} />
+        ) : null}
+      </div>
     </div>
   );
 }

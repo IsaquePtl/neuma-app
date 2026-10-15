@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import {
   ChevronRight,
   History,
@@ -22,11 +22,6 @@ import {
   loadStudentUnviewedFeedback,
 } from "@/lib/feedbacks/student";
 import { formatDate } from "@/lib/labels";
-import {
-  calendarStart,
-  findUpcomingLevel,
-  levelAvailableLabel,
-} from "@/lib/nodes/level-open";
 import {
   effectivePassRule,
   nodeRequiresCheckIn,
@@ -100,15 +95,6 @@ export default async function StudentSessionPage({
   const { path: studentPath, nodes } = pathBundle;
   const activePath = studentPath?.status === "active" ? studentPath : null;
   const activeNode = nodes.find((node) => node.status === "active") ?? null;
-  const upcoming = findUpcomingLevel(
-    nodes,
-    calendarStart(studentPath?.start_date, studentPath?.created_at),
-  );
-  const idleCheckInLabel = upcoming
-    ? levelAvailableLabel(upcoming.opensOn)
-    : !hasPath
-      ? "O check-in fica disponível quando o percurso estiver ativo."
-      : null;
 
   const calUser =
     mentor?.cal_username ||
@@ -132,25 +118,29 @@ export default async function StudentSessionPage({
     ? `/checkins/new?node=${activeNode.id}`
     : "/checkins/new";
 
-  const checkInAllowance =
+  const [checkInAllowance, unviewedFeedback] = await Promise.all([
     activeNode && needsCheckIn
-      ? await getCheckInAllowance(supabase, activeNode.id, user!.id)
-      : null;
+      ? getCheckInAllowance(supabase, activeNode.id, user!.id)
+      : Promise.resolve(null),
+    nodes.length
+      ? loadStudentUnviewedFeedback(supabase, user!.id, nodes)
+      : Promise.resolve({
+          count: 0,
+          items: [],
+          unviewedByNodeId: new Map<string, number>(),
+        }),
+  ]);
   const canSubmitCheckIn = checkInAllowance?.allowed ?? true;
   const checkInBlocked = checkInAllowance
     ? checkInBlockedMessage(checkInAllowance)
     : null;
-
-  const unviewedFeedback = nodes.length
-    ? await loadStudentUnviewedFeedback(supabase, user!.id, nodes)
-    : { count: 0, items: [], unviewedByNodeId: new Map<string, number>() };
   const unviewedCount = unviewedFeedback.count;
 
   return (
     <div className={SESSION_VIEWPORT}>
       <header className="shrink-0">
         {mentor ? (
-          <Link
+          <IntentLink
             href="/session/mentor"
             className={cn(
               "group flex items-center gap-3 rounded-2xl outline-none",
@@ -190,7 +180,7 @@ export default async function StudentSessionPage({
               className="size-5 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground"
               aria-hidden
             />
-          </Link>
+          </IntentLink>
         ) : (
           <div className="flex items-center gap-3">
             <UserAvatar name={null} email={null} avatarUrl={null} size="lg" />
@@ -212,10 +202,10 @@ export default async function StudentSessionPage({
         </p>
       ) : null}
 
-      <section id="agendar" className="grid shrink-0 gap-2.5">
+      <section className="grid shrink-0 gap-2.5">
         {needsCheckIn && hasPath && canSubmitCheckIn ? (
           <Button
-            render={<Link href={checkInHref} />}
+            render={<IntentLink href={checkInHref} />}
             nativeButton={false}
             size="lg"
             className="h-[3.5rem] w-full gap-2 text-base font-semibold"
@@ -247,7 +237,7 @@ export default async function StudentSessionPage({
           </div>
         ) : activeNode ? (
           <Button
-            render={<Link href={`/path/${activeNode.id}`} />}
+            render={<IntentLink href={`/path/${activeNode.id}`} />}
             nativeButton={false}
             size="lg"
             className="h-[3.5rem] w-full gap-2 text-base font-semibold"
@@ -258,19 +248,15 @@ export default async function StudentSessionPage({
           <Button
             size="lg"
             disabled
-            className="h-[3.5rem] w-full gap-2 whitespace-normal! px-4 text-center text-sm font-semibold leading-tight sm:text-base"
+            className="h-[3.5rem] w-full text-base font-semibold"
           >
-            {idleCheckInLabel ?? (
-              <>
-                <Video className="size-5" /> Fazer check-in
-              </>
-            )}
+            Sem check-in
           </Button>
         )}
 
         {unviewedCount > 0 ? (
           <Button
-            render={<Link href="/session/feedback" />}
+            render={<IntentLink href="/session/feedback" />}
             nativeButton={false}
             size="lg"
             variant="ghost"
@@ -303,6 +289,7 @@ export default async function StudentSessionPage({
             label="Agendar sessão"
             size="lg"
             className="[&_button]:h-[3.5rem]"
+            openIfRequested
           />
         ) : (
           <div className="grid gap-1.5">
@@ -320,7 +307,7 @@ export default async function StudentSessionPage({
         )}
 
         <Button
-          render={<Link href="/checkins" />}
+          render={<IntentLink href="/checkins" />}
           nativeButton={false}
           size="lg"
           variant="secondary"
@@ -349,7 +336,7 @@ export default async function StudentSessionPage({
         </Button>
 
         <Button
-          render={<Link href="/session/review" />}
+          render={<IntentLink href="/session/review" />}
           nativeButton={false}
           size="lg"
           variant="secondary"

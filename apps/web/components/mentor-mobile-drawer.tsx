@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Loader2, LogOut, Menu, X, type LucideIcon } from "lucide-react";
+import { Loader2, LogOut, X, type LucideIcon } from "lucide-react";
 
+import { MenuLinesIcon } from "@/components/menu-lines-icon";
 import { LogoutForm } from "@/components/logout-form";
 import { cn } from "@/lib/utils";
 import { NeumaLogo } from "@/components/neuma-logo";
@@ -119,7 +120,7 @@ export function MentorMobileDrawer({
             "desktop:hidden",
           )}
         >
-          <Menu className="size-6" />
+          <MenuLinesIcon className="size-6" />
         </button>
       ) : null}
 

@@ -1,11 +1,29 @@
 "use client";
 
+import { useRef, useState } from "react";
+import { flushSync } from "react-dom";
+
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { passRuleLabel } from "@/lib/labels";
 import { DEFAULT_QUIZ_PASS_SCORE } from "@/lib/nodes/pass-rule";
 import type { NodeKind, NodePassRule } from "@/lib/types/database.types";
 import { cn } from "@/lib/utils";
+
+function initialCheckInKind(value?: string | null): "video" | "text" | "call" {
+  if (value === "text" || value === "call") return value;
+  return "video";
+}
+
+const PASS_RULE_CHOICES: { value: NodePassRule; label: string }[] = [
+  { value: "mentor", label: passRuleLabel.mentor },
+  { value: "none", label: passRuleLabel.none },
+  { value: "check_in", label: passRuleLabel.check_in },
+  { value: "quiz", label: passRuleLabel.quiz },
+];
+
+const passRuleSelectedClass =
+  "border-white/55 bg-white/20 font-medium text-foreground";
 
 export function NodeGateFields({
   kind,
@@ -27,57 +45,83 @@ export function NodeGateFields({
   idPrefix?: string;
 }) {
   const fid = (name: string) => (idPrefix ? `${idPrefix}-${name}` : name);
+  const passRuleInputRef = useRef<HTMLInputElement>(null);
+  const [checkInKindValue, setCheckInKindValue] = useState(() =>
+    initialCheckInKind(checkInKind),
+  );
+  const [score, setScore] = useState(
+    passScore != null ? String(passScore) : String(DEFAULT_QUIZ_PASS_SCORE),
+  );
 
   if (kind === "call") {
     return (
-      <div className="space-y-1.5">
+      <div className="hidden">
         <input type="hidden" name="pass_rule" value="mentor" />
         <input type="hidden" name="check_in_kind" value="none" />
-        <p className="text-xs text-muted-foreground">
-          A sessão não tem regra de passagem. O mentor marca o nível como
-          concluído.
-        </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      <div className="space-y-1.5">
-        <Label htmlFor={fid("pass_rule")}>Regra de passagem</Label>
-        <select
-          id={fid("pass_rule")}
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label id={fid("pass_rule-label")}>Regra de passagem</Label>
+        <input
+          ref={passRuleInputRef}
+          type="hidden"
           name="pass_rule"
           value={passRule}
-          onChange={(e) => onPassRuleChange(e.target.value as NodePassRule)}
-          className={selectClass}
+        />
+        <div
+          id={fid("pass_rule")}
+          role="radiogroup"
+          aria-labelledby={fid("pass_rule-label")}
+          className="flex gap-2"
         >
-          <option value="mentor">{passRuleLabel.mentor} — só o mentor avança</option>
-          <option value="none">{passRuleLabel.none} — aluno marca visto</option>
-          <option value="check_in">{passRuleLabel.check_in} — mentor aprova o envio</option>
-          <option value="quiz">{passRuleLabel.quiz} — nota ≥ limiar avança</option>
-        </select>
-        <p className="text-xs text-muted-foreground">
-          Independente do tipo de nível. Quiz avança com a nota mínima.
-          Check-in avança com um envio aprovado.
-        </p>
+          {PASS_RULE_CHOICES.map((choice) => {
+            const selected = passRule === choice.value;
+            return (
+              <button
+                key={choice.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => {
+                  flushSync(() => {
+                    onPassRuleChange(choice.value);
+                  });
+                  passRuleInputRef.current?.dispatchEvent(
+                    new Event("change", { bubbles: true }),
+                  );
+                }}
+                className={cn(
+                  "h-10 min-w-0 flex-1 rounded-xl border px-2 text-sm whitespace-nowrap",
+                  selected
+                    ? passRuleSelectedClass
+                    : "border-white/10 bg-white/5 text-muted-foreground hover:bg-white/10",
+                )}
+              >
+                {choice.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {passRule === "check_in" ? (
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           <Label htmlFor={fid("check_in_kind")}>Tipo de check-in</Label>
           <select
             id={fid("check_in_kind")}
             name="check_in_kind"
-            defaultValue={
-              checkInKind === "text" || checkInKind === "call"
-                ? checkInKind
-                : "video"
+            value={checkInKindValue}
+            onChange={(e) =>
+              setCheckInKindValue(e.target.value as "video" | "text" | "call")
             }
             className={selectClass}
           >
-            <option value="video">Vídeo (quando é para tocar)</option>
-            <option value="text">Texto (escuta / sem tocar)</option>
+            <option value="video">Vídeo</option>
+            <option value="text">Texto</option>
             <option value="call">Chamada</option>
           </select>
         </div>
@@ -86,17 +130,17 @@ export function NodeGateFields({
       )}
 
       {passRule === "quiz" ? (
-        <div className="space-y-1.5">
-          <Label htmlFor={fid("pass_score")}>
-            Nota mínima ({DEFAULT_QUIZ_PASS_SCORE}% se vazio)
-          </Label>
+        <div className="space-y-2">
+          <Label htmlFor={fid("pass_score")}>Nota mínima</Label>
           <Input
             id={fid("pass_score")}
             name="pass_score"
             type="number"
             min={0}
             max={100}
-            defaultValue={passScore ?? DEFAULT_QUIZ_PASS_SCORE}
+            value={score}
+            onChange={(e) => setScore(e.target.value)}
+            placeholder={String(DEFAULT_QUIZ_PASS_SCORE)}
             className={cn(inputClass)}
           />
         </div>

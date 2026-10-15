@@ -369,20 +369,6 @@ export function LibraryHub({ categories, topics, items, categoryId }: Props) {
                                   </span>
                                   <span aria-hidden>·</span>
                                   <span>{libraryAssetKindLabel[a.kind]}</span>
-                                  {a.duration_label ? (
-                                    <>
-                                      <span aria-hidden>·</span>
-                                      <span>{a.duration_label}</span>
-                                    </>
-                                  ) : null}
-                                  {a.tags.slice(0, 3).map((tag) => (
-                                    <span
-                                      key={tag}
-                                      className="rounded-full bg-white/[0.06] px-1.5 py-px text-[10px]"
-                                    >
-                                      #{tag}
-                                    </span>
-                                  ))}
                                 </p>
                               </div>
                               <div className="flex shrink-0 items-center">

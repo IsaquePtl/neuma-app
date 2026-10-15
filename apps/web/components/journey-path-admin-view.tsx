@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import {
   Lock,
   Pencil,
@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { CategoryThemeIcon } from "@/components/category-theme-icon";
+import { inferCategoryTheme } from "@/lib/brand-themes";
 import type { JourneyCheckIn } from "@/components/journey-path-composer";
 import { PathStatusMenu } from "@/components/path-status-menu";
 import { UserAvatar } from "@/components/user-avatar";
@@ -79,6 +80,7 @@ export function JourneyPathAdminView({
   const total = nodes.length;
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
+  const pathTheme = inferCategoryTheme({ name: path.title });
   const pendingByNode = new Map<string, number>();
   for (const c of checkIns) {
     if (c.status === "pending") {
@@ -88,55 +90,55 @@ export function JourneyPathAdminView({
 
   return (
     <div className="space-y-8">
-      <div className="space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 space-y-2">
-            <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
-              <CategoryThemeIcon theme={null} name={path.title} size={18} />
-              <Route className="size-3.5" /> Percurso
-            </p>
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+      <div className="space-y-2">
+        <div className="space-y-1">
+          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+            {pathTheme ? (
+              <CategoryThemeIcon theme={pathTheme} size={22} />
+            ) : (
+              <Route className="size-3.5" />
+            )}
+            Percurso
+          </p>
+          <div className="flex items-center gap-2">
+            <h1 className="min-w-0 flex-1 text-2xl font-bold tracking-tight sm:text-3xl">
               {path.title}
             </h1>
-            <p className="text-sm text-muted-foreground">
-              {displayName}
-              {path.start_date ? ` · início ${formatDate(path.start_date)}` : ""}
-            </p>
-            <PathStatusMenu
-              pathId={pathId}
-              studentId={student?.id ?? ""}
-              status={path.status}
-            />
+            <div className="flex shrink-0 items-center gap-1.5">
+              {student ? (
+                <IntentLink
+                  href={studentProfileHref(
+                    student.id,
+                    `/studio/journeys/${pathId}`,
+                  )}
+                  aria-label={`Ver ficha de ${displayName}`}
+                  className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted hover:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50"
+                >
+                  <UserAvatar
+                    name={student.full_name}
+                    email={student.email}
+                    avatarUrl={student.avatar_url}
+                    size="sm"
+                    rounded="xl"
+                    className="size-6 text-[9px] sm:size-8 sm:text-[10px]"
+                  />
+                  <span className="max-w-[5.5rem] truncate font-medium sm:max-w-[9rem]">
+                    {displayName}
+                  </span>
+                </IntentLink>
+              ) : null}
+              <PathStatusMenu
+                pathId={pathId}
+                studentId={student?.id ?? ""}
+                status={path.status}
+                className="h-10 w-fit min-w-0 gap-1.5 px-3"
+              />
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {student ? (
-              <Link
-                href={studentProfileHref(
-                  student.id,
-                  `/studio/journeys/${pathId}`,
-                )}
-                aria-label={`Ver ficha de ${displayName}`}
-                className="hidden h-10 shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-sm transition-colors hover:bg-white/10 sm:inline-flex"
-              >
-                <UserAvatar
-                  name={student.full_name}
-                  email={student.email}
-                  avatarUrl={student.avatar_url}
-                  size="sm"
-                  rounded="xl"
-                />
-                <span className="font-medium">{displayName}</span>
-              </Link>
-            ) : null}
-            <Link
-              href={`/studio/journeys/${pathId}/edit`}
-              aria-label="Editar percurso"
-              className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 text-sm transition-colors hover:bg-white/10"
-            >
-              <Pencil className="size-3.5" />
-              Editar
-            </Link>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            {displayName}
+            {path.start_date ? ` · início ${formatDate(path.start_date)}` : ""}
+          </p>
         </div>
         {path.goal ? (
           <p className="flex items-start gap-2 text-sm text-muted-foreground">
@@ -144,23 +146,7 @@ export function JourneyPathAdminView({
             {path.goal}
           </p>
         ) : null}
-        {student ? (
-          <Link
-            href={studentProfileHref(student.id, `/studio/journeys/${pathId}`)}
-            aria-label={`Ver ficha de ${displayName}`}
-            className="inline-flex h-10 w-fit shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-sm transition-colors hover:bg-white/10 sm:hidden"
-          >
-            <UserAvatar
-              name={student.full_name}
-              email={student.email}
-              avatarUrl={student.avatar_url}
-              size="sm"
-              rounded="xl"
-            />
-            <span className="font-medium">{displayName}</span>
-          </Link>
-        ) : null}
-        <div className="flex w-full items-center gap-3 pt-1">
+        <div className="flex w-full items-center gap-3">
           <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-white/10">
             <div
               className="h-full bg-[var(--neuma-coral)] transition-all"
@@ -171,17 +157,25 @@ export function JourneyPathAdminView({
             {completed}/{total}
           </span>
         </div>
+        <IntentLink
+          href={`/studio/journeys/${pathId}/edit`}
+          aria-label="Editar percurso"
+          className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 text-sm transition-colors hover:bg-white/10"
+        >
+          <Pencil className="size-3.5" />
+          Editar
+        </IntentLink>
       </div>
 
       {nodes.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           Ainda sem níveis neste percurso.{" "}
-          <Link
+          <IntentLink
             href={`/studio/journeys/${pathId}/edit`}
             className="text-[var(--neuma-coral)] underline-offset-4 hover:underline"
           >
             Adicionar níveis
-          </Link>
+          </IntentLink>
         </p>
       ) : (
         <ol className="student-path-journey relative w-full list-none pl-0">
@@ -371,16 +365,15 @@ export function JourneyPathAdminView({
                   </span>
                 </div>
 
-                <Link
+                <IntentLink
                   href={levelHref}
-                  prefetch
                   className={cn(
                     "min-w-0 flex-1 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuma-coral)]/50",
                     isFuture && "hover:opacity-90",
                   )}
                 >
                   {step}
-                </Link>
+                </IntentLink>
               </li>
             );
           })}
