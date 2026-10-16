@@ -45,6 +45,7 @@ async function fetchCalBookingsPage(
       "cal-api-version": CAL_API_VERSION,
     },
     cache: "no-store",
+    signal: AbortSignal.timeout(8_000),
   });
 
   if (!res.ok) {
