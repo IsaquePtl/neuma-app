@@ -8,6 +8,7 @@ import {
 } from "@/lib/calendar/path-panorama-model";
 import { todayIsoDate } from "@/lib/nodes/level-open";
 import { createClient } from "@/lib/supabase/server";
+import { isPlayableVideoUrl } from "@/components/video-embed";
 import type {
   CheckInKind,
   NodeKind,
@@ -32,6 +33,11 @@ type NodeRow = {
   order_index: number;
   pass_rule: NodePassRule | null;
   check_in_kind: CheckInKind | null;
+};
+
+type AssetMedia = {
+  url: string | null;
+  storage_path: string | null;
 };
 
 type PathRow = {
@@ -62,6 +68,16 @@ function one<T>(value: T | T[] | null | undefined): T | null {
 
 const NODE_SELECT =
   "id, path_id, title, status, week_number, duration_weeks, extended_weeks, kind, due_date, resource_url, content_body, library_asset_id, order_index, pass_rule, check_in_kind";
+
+const VIDEO_FILE = /\.(mp4|webm|mov|m4v|ogg|ogv)(\?|#|$)/i;
+
+function levelHasVideo(node: NodeRow, asset: AssetMedia | undefined): boolean {
+  if (isPlayableVideoUrl(node.resource_url)) return true;
+  if (!asset) return false;
+  if (isPlayableVideoUrl(asset.url)) return true;
+  const path = asset.storage_path?.trim() ?? "";
+  return path.length > 0 && VIDEO_FILE.test(path);
+}
 
 export async function loadPathPanorama(): Promise<PathPanoramaModel> {
   const supabase = await createClient();
@@ -110,6 +126,22 @@ export async function loadPathPanorama(): Promise<PathPanoramaModel> {
     if (!data || data.length < 1000) break;
   }
 
+  const assetIds = [
+    ...new Set(nodes.map((node) => node.library_asset_id).filter((id): id is string => Boolean(id))),
+  ];
+  const assetById = new Map<string, AssetMedia>();
+  for (let index = 0; index < assetIds.length; index += 80) {
+    const chunk = assetIds.slice(index, index + 80);
+    const { data, error } = await supabase
+      .from("library_assets")
+      .select("id, url, storage_path")
+      .in("id", chunk);
+    if (error) throw new Error(error.message);
+    for (const asset of data ?? []) {
+      assetById.set(asset.id, { url: asset.url, storage_path: asset.storage_path });
+    }
+  }
+
   const nodesByPath = new Map<string, PanoramaNodeInput[]>();
   for (const node of nodes) {
     const list = nodesByPath.get(node.path_id) ?? [];
@@ -129,6 +161,10 @@ export async function loadPathPanorama(): Promise<PathPanoramaModel> {
       passRule: node.pass_rule,
       checkInKind: node.check_in_kind,
       pendingCheckInId: pendingByNode.get(node.id) ?? null,
+      hasVideo: levelHasVideo(
+        node,
+        node.library_asset_id ? assetById.get(node.library_asset_id) : undefined,
+      ),
     });
     nodesByPath.set(node.path_id, list);
   }

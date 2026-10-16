@@ -124,6 +124,73 @@ export async function setNodeWeeks(input: {
   return { ok: true };
 }
 
+/** Empty video lesson inserted directly under `afterId`, in that position's phase. */
+export async function insertLessonBelow(input: {
+  pathId: string;
+  afterId: string;
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  try {
+    const supabase = await mentorClient();
+    const weeks = 1;
+    const budget = await loadPathWeekBudget(supabase, input.pathId);
+    const fit = checkWeeksFit(budget, null, weeks);
+    if (fit) return { ok: false, error: fit };
+
+    const { data: siblings, error } = await supabase
+      .from("nodes")
+      .select("id, kind, phase_key, is_phase_checkpoint, order_index")
+      .eq("path_id", input.pathId)
+      .order("order_index", { ascending: true });
+    if (error) return { ok: false, error: error.message };
+    const nodes = siblings ?? [];
+    const afterIndex = nodes.findIndex((node) => node.id === input.afterId);
+    if (afterIndex < 0) return { ok: false, error: "Nível não encontrado." };
+
+    const at = afterIndex + 1;
+    const phaseKey = phaseKeyForPlacement(nodes, at);
+    const orderIndex = (nodes.at(-1)?.order_index ?? -1) + 1;
+    const { data: created, error: insertError } = await supabase
+      .from("nodes")
+      .insert({
+        path_id: input.pathId,
+        title: "Sem título",
+        duration_weeks: weeks,
+        kind: "lesson",
+        pass_rule: "none",
+        phase_key: phaseKey,
+        is_phase_checkpoint: false,
+        order_index: orderIndex,
+        status: "locked",
+      })
+      .select("id")
+      .single();
+    if (insertError || !created) {
+      return {
+        ok: false,
+        error: insertError?.message ?? "Não foi possível criar o nível",
+      };
+    }
+
+    const orderedIds = nodes.map((node) => node.id);
+    orderedIds.splice(at, 0, created.id);
+    await reorderPathNodes(
+      supabase,
+      input.pathId,
+      [...nodes, { id: created.id, order_index: orderIndex }],
+      orderedIds,
+    );
+    await applyPathPhaseLayout(supabase, input.pathId);
+    await resegmentPathLevels(supabase, input.pathId);
+    await revalidateAfterNodeChange(supabase, input.pathId);
+    return { ok: true, id: created.id };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Não foi possível criar o nível",
+    };
+  }
+}
+
 export async function createNode(formData: FormData) {
   const supabase = await mentorClient();
   const pathId = formData.get("path_id") as string;
@@ -163,7 +230,6 @@ export async function createNode(formData: FormData) {
     .insert({
     path_id: pathId,
     title: (formData.get("title") as string)?.trim() || "Novo bloco",
-    description: ((formData.get("description") as string) || "").trim() || null,
     duration_weeks: durationWeeks,
     kind,
     resource_url: ((formData.get("resource_url") as string) || "").trim() || null,

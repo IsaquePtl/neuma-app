@@ -17,6 +17,7 @@ import {
   GripVertical,
   MoreHorizontal,
   Pencil,
+  Plus,
   Trash2,
 } from "lucide-react";
 
@@ -55,6 +56,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   deleteNode,
+  insertLessonBelow,
   moveNode,
   reorderNode,
   setNodeWeeks,
@@ -272,6 +274,27 @@ export function JourneyPathComposer({
     onDrop: dropLevel,
     disabled: reordering || savingAll,
   });
+  const [addingBelow, startAddBelow] = useTransition();
+
+  const addLevelBelow = (afterId: string) => {
+    if (
+      (levelDirty || draftWeeks != null) &&
+      !window.confirm("Este nível tem alterações por guardar. Descartá-las?")
+    ) {
+      return;
+    }
+    startAddBelow(async () => {
+      const result = await insertLessonBelow({ pathId: path.id, afterId });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      setDraftWeeks(null);
+      setExpanded(null);
+      router.refresh();
+    });
+  };
+
   const dropPreview = useMemo(() => {
     if (!drag) return null;
     const move = planPhaseAwareDrop(nodes, drag.id, drag.toIndex);
@@ -912,11 +935,6 @@ export function JourneyPathComposer({
                       <p className="break-words text-base font-bold tracking-tight sm:text-lg">
                         {node.title}
                       </p>
-                      {node.description ? (
-                        <p className="line-clamp-2 text-sm text-muted-foreground">
-                          {node.description}
-                        </p>
-                      ) : null}
                     </div>
                     {draggable ? (
                       <GripVertical
@@ -973,31 +991,71 @@ export function JourneyPathComposer({
                         )}
                       </span>
                     ) : null}
-                    {isOpen ? null : (
+                    <div className="ml-auto flex items-center gap-1.5">
                       <Button
                         type="button"
                         variant="outline"
-                        className={cn(levelChipClass, "ml-auto")}
-                        aria-label="Editar nível"
-                        onClick={() => {
+                        className={levelChipClass}
+                        aria-label="Adicionar nível abaixo"
+                        disabled={addingBelow}
+                        onClick={() => addLevelBelow(node.id)}
+                      >
+                        <Plus className="size-4" />
+                        Adicionar nível
+                      </Button>
+                      {isOpen ? null : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={levelChipClass}
+                          aria-label="Editar nível"
+                          onClick={() => {
+                            if (
+                              expanded &&
+                              expanded !== node.id &&
+                              (levelDirty || draftWeeks != null) &&
+                              !window.confirm(
+                                "Este nível tem alterações por guardar. Descartá-las?",
+                              )
+                            ) {
+                              return;
+                            }
+                            setDraftWeeks(null);
+                            setExpanded(node.id);
+                          }}
+                        >
+                          <Pencil className="size-4" />
+                          Editar
+                        </Button>
+                      )}
+                      <form
+                        action={deleteNode}
+                        onSubmit={(event) => {
                           if (
-                            expanded &&
-                            expanded !== node.id &&
-                            (levelDirty || draftWeeks != null) &&
                             !window.confirm(
-                              "Este nível tem alterações por guardar. Descartá-las?",
+                              `Apagar «${node.title}»? Esta ação não pode ser desfeita.`,
                             )
                           ) {
-                            return;
+                            event.preventDefault();
                           }
-                          setDraftWeeks(null);
-                          setExpanded(node.id);
                         }}
                       >
-                        <Pencil className="size-4" />
-                        Editar
-                      </Button>
-                    )}
+                        <input type="hidden" name="id" value={node.id} />
+                        <input type="hidden" name="path_id" value={path.id} />
+                        <Button
+                          type="submit"
+                          variant="outline"
+                          className={cn(
+                            levelChipClass,
+                            "text-destructive hover:bg-destructive/10 dark:text-destructive",
+                          )}
+                          aria-label="Apagar nível"
+                        >
+                          <Trash2 className="size-4" />
+                          Apagar
+                        </Button>
+                      </form>
+                    </div>
                   </div>
 
                   {isOpen ? (

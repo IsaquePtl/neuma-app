@@ -30,6 +30,8 @@ type Session = {
   lastY: number;
   startScroll: number;
   active: boolean;
+  /** Touch hold finished without a drag. Movement after this starts the drag. */
+  armed: boolean;
   holdTimer: number | null;
   scroller: HTMLElement;
   /** Document-space (scroller content) geometry captured on activation. */
@@ -249,6 +251,7 @@ export function useSortableList({
         lastY: e.clientY,
         startScroll: 0,
         active: false,
+        armed: false,
         holdTimer: null,
         scroller: scrollParent(el),
         rest: [],
@@ -262,7 +265,11 @@ export function useSortableList({
       session.current = s;
 
       const isMouse = e.pointerType === "mouse";
-      if (!isMouse) s.holdTimer = window.setTimeout(activate, TOUCH_HOLD_MS);
+      if (!isMouse) {
+        s.holdTimer = window.setTimeout(() => {
+          if (session.current === s) s.armed = true;
+        }, TOUCH_HOLD_MS);
+      }
 
       const onMove = (ev: PointerEvent) => {
         if (ev.pointerId !== s.pointerId) return;
@@ -270,8 +277,11 @@ export function useSortableList({
         if (!s.active) {
           if (isMouse && dist > MOUSE_THRESHOLD) activate();
           else if (!isMouse && dist > TOUCH_SLOP) {
-            finish(false);
-            return;
+            if (!s.armed) {
+              finish(false);
+              return;
+            }
+            activate();
           }
           if (!s.active) return;
         }

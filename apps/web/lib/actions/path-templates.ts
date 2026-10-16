@@ -512,7 +512,6 @@ export async function applyPathTemplate(formData: FormData) {
       return {
         path_id: path.id,
         title: n.title,
-        description: n.description,
         kind: n.kind,
         week_number,
         duration_weeks,

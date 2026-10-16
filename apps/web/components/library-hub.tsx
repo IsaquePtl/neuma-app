@@ -26,13 +26,12 @@ import {
 } from "@/components/library-taxonomy-dialogs";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { libraryAssetKindLabel, libraryAssetUsageLabel } from "@/lib/labels";
 import {
-  CATEGORY_THEMES,
-  categoryThemeWash,
-  inferCategoryTheme,
-  isCategoryTheme,
-} from "@/lib/brand-themes";
+  LIBRARY_FORMAT_LABEL,
+  libraryAssetFormat,
+} from "@/lib/library/asset-format";
+import { libraryAssetUsageLabel } from "@/lib/labels";
+import { categoryCardWash, isCategoryTheme } from "@/lib/brand-themes";
 import { LIBRARY_PATH } from "@/lib/library-routes";
 import type {
   LibraryAssetKind,
@@ -113,7 +112,7 @@ function itemMatchesSearch(item: LibraryItemRow, query: string) {
     (item.summary?.toLowerCase().includes(q) ?? false) ||
     item.tags.some((t) => t.toLowerCase().includes(q)) ||
     libraryAssetUsageLabel[item.usage].toLowerCase().includes(q) ||
-    libraryAssetKindLabel[item.kind].toLowerCase().includes(q)
+    LIBRARY_FORMAT_LABEL[libraryAssetFormat(item.kind)].toLowerCase().includes(q)
   );
 }
 
@@ -150,10 +149,7 @@ export function LibraryHub({ categories, topics, items, categoryId }: Props) {
   }
 
   if (activeCategory) {
-    const theme = inferCategoryTheme(activeCategory);
-    const wash = theme
-      ? categoryThemeWash(CATEGORY_THEMES[theme].color)
-      : "linear-gradient(155deg, #1f1f1f 0%, #161616 100%)";
+    const wash = categoryCardWash(activeCategory);
 
     return (
       <div className="space-y-4">
@@ -368,7 +364,9 @@ export function LibraryHub({ categories, topics, items, categoryId }: Props) {
                                     {libraryAssetUsageLabel[a.usage]}
                                   </span>
                                   <span aria-hidden>·</span>
-                                  <span>{libraryAssetKindLabel[a.kind]}</span>
+                                  <span>
+                                    {LIBRARY_FORMAT_LABEL[libraryAssetFormat(a.kind)]}
+                                  </span>
                                 </p>
                               </div>
                               <div className="flex shrink-0 items-center">
@@ -377,7 +375,19 @@ export function LibraryHub({ categories, topics, items, categoryId }: Props) {
                                   categories={categories}
                                   topics={topics}
                                 />
-                                <LibraryItemMenu assetId={a.id} title={a.title} />
+                                <LibraryItemMenu
+                                  assetId={a.id}
+                                  title={a.title}
+                                  topicId={topic.id}
+                                  topics={categoryTopics}
+                                  onMoved={(nextTopicId) =>
+                                    setOpenTopics((current) => {
+                                      const next = new Set(current);
+                                      next.add(nextTopicId);
+                                      return next;
+                                    })
+                                  }
+                                />
                               </div>
                             </li>
                           ))}
@@ -417,10 +427,7 @@ export function LibraryHub({ categories, topics, items, categoryId }: Props) {
         const catItems = items.filter((a) =>
           catTopics.some((t) => t.id === a.topic_id),
         );
-        const theme = inferCategoryTheme(cat);
-        const wash = theme
-          ? categoryThemeWash(CATEGORY_THEMES[theme].color)
-          : "linear-gradient(155deg, #1f1f1f 0%, #161616 100%)";
+        const wash = categoryCardWash(cat);
 
         return (
           <Card

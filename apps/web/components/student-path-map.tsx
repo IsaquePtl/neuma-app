@@ -274,11 +274,6 @@ export function StudentPathMap({
                     Até {formatDate(node.due_date)}
                   </p>
                 ) : null}
-                {isActive && node.description ? (
-                  <p className="line-clamp-2 pt-0.5 text-sm text-muted-foreground">
-                    {node.description}
-                  </p>
-                ) : null}
               </div>
               {isActive ? (
                 <ActiveLevelFeedbackCta

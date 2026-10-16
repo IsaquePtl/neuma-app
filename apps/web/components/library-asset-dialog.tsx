@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { Loader2, Pencil, Plus, Upload, Link2, X } from "lucide-react";
+import { Loader2, Pencil, Plus, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -26,6 +26,12 @@ import {
 } from "@/lib/uploads/video-limits";
 import { LibraryAssetItemCard } from "@/components/library-asset-picker";
 import { Button } from "@/components/ui/button";
+import {
+  LIBRARY_FORMAT_LABEL,
+  formatsForUsage,
+  libraryAssetFormat,
+  type LibraryAssetFormat,
+} from "@/lib/library/asset-format";
 import { libraryAssetUsageLabel } from "@/lib/labels";
 import {
   Dialog,
@@ -62,13 +68,12 @@ export type LibraryAssetData = {
 type Category = { id: string; name: string };
 type Topic = { id: string; category_id: string; name: string };
 
-const KIND_OPTIONS: { value: LibraryAssetKind; label: string }[] = [
-  { value: "video", label: "Vídeo" },
-  { value: "text", label: "Texto" },
-  { value: "image", label: "Imagem" },
-  { value: "file", label: "Ficheiro" },
-  { value: "link", label: "Link" },
-];
+const choiceClass =
+  "h-10 min-w-0 flex-1 rounded-xl border px-2 text-sm whitespace-nowrap";
+const choiceSelectedClass =
+  "border-white/55 bg-white/20 font-medium text-foreground";
+const choiceIdleClass =
+  "border-white/10 bg-white/5 text-muted-foreground hover:bg-white/10";
 
 /** Basename from a storage key or public URL (e.g. `video.mov`). */
 function mediaFileLabel(url: string | null | undefined, storagePath: string | null | undefined) {
@@ -83,10 +88,6 @@ function mediaFileLabel(url: string | null | undefined, storagePath: string | nu
     /* ignore malformed URL */
   }
   return raw.split("/").filter(Boolean).pop() ?? "";
-}
-
-function initialMode(asset?: LibraryAssetData): "link" | "upload" {
-  return asset?.storage_path ? "upload" : "link";
 }
 
 export function LibraryAssetDialog({
@@ -105,7 +106,7 @@ export function LibraryAssetDialog({
   triggerLabel?: string;
   triggerVariant?: "default" | "outline" | "ghost";
   triggerSize?: "default" | "sm";
-  /** Short labelled create trigger below `sm`; full label from `sm` up. */
+  /** Plus only, on a larger button, below `sm`. Full label from `sm` up. */
   compactOnMobile?: boolean;
   defaultUsage?: LibraryAssetUsage;
   defaultCategoryId?: string;
@@ -135,7 +136,6 @@ export function LibraryAssetDialog({
   const [fileLabel, setFileLabel] = useState(() =>
     asset?.storage_path ? mediaFileLabel(asset.url, asset.storage_path) : "",
   );
-  const [mode, setMode] = useState<"link" | "upload">(() => initialMode(asset));
   const [body, setBody] = useState(asset?.body ?? "");
   const [uploading, setUploading] = useState(false);
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
@@ -176,6 +176,25 @@ export function LibraryAssetDialog({
     () => topics.filter((t) => t.category_id === categoryId),
     [topics, categoryId],
   );
+  const format = libraryAssetFormat(kind);
+  const formatChoices = formatsForUsage(usage);
+
+  function chooseUsage(next: LibraryAssetUsage) {
+    setUsage(next);
+    if (!formatsForUsage(next).includes(libraryAssetFormat(kind))) {
+      setKind("video");
+    }
+  }
+
+  function chooseFormat(next: LibraryAssetFormat) {
+    setKind(next);
+    if (next !== "link") return;
+    const previous = storagePathRef.current;
+    storagePathRef.current = "";
+    setStoragePath("");
+    setFileLabel("");
+    releaseIfUnsaved(previous);
+  }
 
   function resetFormState(nextAsset?: LibraryAssetData) {
     setKind(nextAsset?.kind ?? "video");
@@ -194,7 +213,6 @@ export function LibraryAssetDialog({
         ? mediaFileLabel(nextAsset.url, nextAsset.storage_path)
         : "",
     );
-    setMode(initialMode(nextAsset));
     setBody(nextAsset?.body ?? "");
     setCoverUrl(nextAsset?.cover_url ?? "");
     coverKeyRef.current = "";
@@ -287,6 +305,18 @@ export function LibraryAssetDialog({
 
   async function onFile(file: File | null) {
     if (!file) return;
+    const uploadFormat = libraryAssetFormat(kind) === "file" ? "file" : "video";
+    const looksLikeVideo =
+      file.type.startsWith("video/") ||
+      /\.(mp4|mov|m4v|webm|mkv)$/i.test(file.name);
+    if (uploadFormat === "video" && file.type && !looksLikeVideo) {
+      toast.error("Escolhe um ficheiro de vídeo (MP4, MOV, etc.).");
+      return;
+    }
+    if (uploadFormat === "file" && looksLikeVideo) {
+      toast.error("Um vídeo usa o formato Vídeo.");
+      return;
+    }
     if (file.size > MAX_LIBRARY_FILE_BYTES) {
       toast.error(libraryFileTooLargeMessage());
       return;
@@ -300,6 +330,7 @@ export function LibraryAssetDialog({
         contentType: file.type || "application/octet-stream",
         size: file.size,
         categoryId,
+        format: uploadFormat,
       });
       if (!presigned.ok) {
         toast.error(presigned.error);
@@ -347,7 +378,6 @@ export function LibraryAssetDialog({
       setStoragePath(presigned.key);
       releaseIfUnsaved(replacedUnsaved);
       setFileLabel(file.name);
-      setMode("upload");
       toast.success(
         asset?.id
           ? "Ficheiro guardado no item"
@@ -448,25 +478,27 @@ export function LibraryAssetDialog({
             <Button
               variant={triggerVariant}
               size={createTriggerSize}
-              aria-label={triggerLabel ?? "Novo item"}
+              aria-label={
+                compactOnMobile ? "Adicionar item" : (triggerLabel ?? "Novo item")
+              }
               className={cn(
                 "gap-1.5",
                 compactOnMobile &&
-                  "h-7 shrink-0 px-2.5 sm:w-auto sm:px-2.5",
+                  "size-10 rounded-xl bg-white/10 px-0 hover:bg-white/15 sm:h-7 sm:w-auto sm:rounded-[min(var(--radius-md),12px)] sm:bg-transparent sm:px-2.5 sm:hover:bg-muted",
               )}
             />
           }
         >
           <Plus
-            className={createTriggerSize === "sm" ? "size-3.5" : "size-4"}
+            className={cn(
+              createTriggerSize === "sm" ? "size-3.5" : "size-4",
+              compactOnMobile && "size-5 sm:size-3.5",
+            )}
           />
           {compactOnMobile ? (
-            <>
-              <span className="sm:hidden">Adicionar</span>
-              <span className="hidden sm:inline">
-                {triggerLabel ?? "Novo item"}
-              </span>
-            </>
+            <span className="hidden sm:inline">
+              {triggerLabel ?? "Novo item"}
+            </span>
           ) : (
             <span>{triggerLabel ?? "Novo item"}</span>
           )}
@@ -505,33 +537,64 @@ export function LibraryAssetDialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="asset-usage">Tipo de item</Label>
-              <select
-                id="asset-usage"
-                value={usage}
-                onChange={(e) => setUsage(e.target.value as LibraryAssetUsage)}
-                className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
-              >
-                <option value="lesson">Aula</option>
-                <option value="practice">Prática</option>
-              </select>
+          <div className="space-y-2">
+            <Label id="asset-usage-label">Tipo</Label>
+            <div
+              role="radiogroup"
+              aria-labelledby="asset-usage-label"
+              className="flex gap-2"
+            >
+              {(
+                [
+                  ["lesson", "Aula"],
+                  ["practice", "Prática"],
+                ] as const
+              ).map(([value, label]) => {
+                const selected = usage === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => chooseUsage(value)}
+                    className={cn(
+                      choiceClass,
+                      selected ? choiceSelectedClass : choiceIdleClass,
+                    )}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="asset-kind">Formato</Label>
-              <select
-                id="asset-kind"
-                value={kind}
-                onChange={(e) => setKind(e.target.value as LibraryAssetKind)}
-                className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
-              >
-                {KIND_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
+          </div>
+
+          <div className="space-y-2">
+            <Label id="asset-format-label">Formato</Label>
+            <div
+              role="radiogroup"
+              aria-labelledby="asset-format-label"
+              className="flex gap-2"
+            >
+              {formatChoices.map((value) => {
+                const selected = format === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => chooseFormat(value)}
+                    className={cn(
+                      choiceClass,
+                      selected ? choiceSelectedClass : choiceIdleClass,
+                    )}
+                  >
+                    {LIBRARY_FORMAT_LABEL[value]}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -587,31 +650,7 @@ export function LibraryAssetDialog({
             />
           </div>
 
-          {kind !== "text" ? (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={mode === "link" ? "secondary" : "outline"}
-                  className="w-full gap-1.5"
-                  disabled={uploading}
-                  onClick={() => setMode("link")}
-                >
-                  <Link2 className="size-3.5" /> Link
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={mode === "upload" ? "secondary" : "outline"}
-                  className="w-full gap-1.5"
-                  disabled={uploading}
-                  onClick={() => setMode("upload")}
-                >
-                  <Upload className="size-3.5" /> Upload
-                </Button>
-              </div>
-              {mode === "link" ? (
+          {format === "link" ? (
                 <div className="space-y-1.5">
                   <Label htmlFor="asset-url">URL</Label>
                   <Input
@@ -632,20 +671,16 @@ export function LibraryAssetDialog({
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  <Label htmlFor={attachedName ? undefined : "asset-file"}>Ficheiro</Label>
+                  <Label htmlFor={attachedName ? undefined : "asset-file"}>
+                    {format === "video" ? "Vídeo" : "Ficheiro"}
+                  </Label>
                   <input
                     ref={fileRef}
                     id="asset-file"
                     type="file"
                     className="sr-only"
                     disabled={uploading}
-                    accept={
-                      kind === "video"
-                        ? "video/*"
-                        : kind === "image"
-                          ? "image/*"
-                          : undefined
-                    }
+                    accept={format === "video" ? "video/*" : undefined}
                     onChange={(e) => {
                       void onFile(e.currentTarget.files?.[0] ?? null);
                       e.currentTarget.value = "";
@@ -684,7 +719,9 @@ export function LibraryAssetDialog({
                         ? uploadPercent == null
                           ? "A preparar o envio…"
                           : `A enviar… ${uploadPercent}%`
-                        : "Escolher ficheiro"}
+                        : format === "video"
+                          ? "Escolher vídeo"
+                          : "Escolher ficheiro"}
                     </Button>
                   )}
                   {uploading && uploadPercent != null ? (
@@ -706,7 +743,7 @@ export function LibraryAssetDialog({
                   </p>
                 </div>
               )}
-              {kind === "video" ? (
+              {format === "video" ? (
                 <div className="space-y-1.5">
                   <Label htmlFor={coverUrl ? undefined : "asset-cover"}>
                     Capa do vídeo
@@ -788,8 +825,6 @@ export function LibraryAssetDialog({
                   </p>
                 </div>
               ) : null}
-            </>
-          ) : null}
 
           <DialogFooter>
             <Button type="submit" disabled={pending || uploading}>

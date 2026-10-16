@@ -140,7 +140,6 @@ export async function approveProposal(proposalId: string) {
           id: String(i),
           path_id: path.id,
           title: n.title,
-          description: n.description ?? null,
           kind: (["lesson", "practice", "call", "milestone"].includes(n.kind ?? "")
             ? n.kind
             : "practice") as "lesson" | "practice" | "call" | "milestone",

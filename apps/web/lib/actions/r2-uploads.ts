@@ -239,15 +239,29 @@ export async function getLibraryCoverUploadUrl(meta: {
   }
 }
 
-/** Presigned upload for library assets (video, image, file). */
+function isVideoUpload(meta: UploadMeta): boolean {
+  if (meta.contentType.startsWith("video/")) return true;
+  return /\.(mp4|mov|m4v|webm|mkv)$/i.test(meta.filename);
+}
+
+/** Presigned upload for library assets. Video and file are separate formats. */
 export async function getLibraryAssetUploadUrl(
-  meta: UploadMetaOpts & { categoryId?: string | null },
+  meta: UploadMetaOpts & {
+    categoryId?: string | null;
+    format?: "video" | "file";
+  },
 ): Promise<PresignedUploadOutcome> {
   const user = await requireMentor();
   if (!user.ok) return user;
 
   const invalid = validateLibraryFileMeta(meta);
   if (invalid) return { ok: false, error: invalid };
+  if (meta.format === "video" && !isVideoUpload(meta)) {
+    return { ok: false, error: "Escolhe um ficheiro de vídeo (MP4, MOV, etc.)." };
+  }
+  if (meta.format === "file" && isVideoUpload(meta)) {
+    return { ok: false, error: "Um vídeo usa o formato Vídeo." };
+  }
 
   const key = buildLibraryKey(meta.categoryId ?? "", user.id, meta.filename);
   try {

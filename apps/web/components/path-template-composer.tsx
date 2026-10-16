@@ -392,11 +392,6 @@ export function PathTemplateComposer({
                       <p className="text-lg font-bold tracking-tight">
                         {node.title}
                       </p>
-                      {node.description ? (
-                        <p className="line-clamp-2 text-sm text-muted-foreground">
-                          {node.description}
-                        </p>
-                      ) : null}
                       {node.asset_title ? (
                         <p className="text-xs text-muted-foreground">
                           Biblioteca: {node.asset_title}

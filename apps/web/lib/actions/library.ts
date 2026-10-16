@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { libraryFormatError } from "@/lib/library/asset-format";
 import { createClient } from "@/lib/supabase/server";
 import { deleteR2Object, getPublicUrl, keyFromPublicUrl } from "@/lib/storage/r2";
 import type {
@@ -160,17 +161,20 @@ export async function upsertLibraryAsset(formData: FormData) {
   const id = (formData.get("id") as string) || null;
   const now = new Date().toISOString();
   const usage = ((formData.get("usage") as LibraryAssetUsage) || "lesson");
+  const kind = ((formData.get("kind") as LibraryAssetKind) || "video");
   const topicId = ((formData.get("topic_id") as string) || "").trim() || null;
 
   if (!topicId) {
     throw new Error("Escolhe categoria e tópico");
   }
+  const formatError = libraryFormatError(usage, kind);
+  if (formatError) throw new Error(formatError);
 
   // Mentor save = confirmação → entra na Biblioteca como ready.
   const payload = {
     title: (formData.get("title") as string)?.trim() || "Sem título",
     summary: ((formData.get("summary") as string) || "").trim() || null,
-    kind: ((formData.get("kind") as LibraryAssetKind) || "link"),
+    kind,
     usage,
     topic_id: topicId,
     body: ((formData.get("body") as string) || "").trim() || null,
@@ -232,6 +236,31 @@ export async function upsertLibraryAsset(formData: FormData) {
     });
     if (error) throw new Error(error.message);
   }
+
+  revalidateLibrary();
+}
+
+export async function moveLibraryAsset(formData: FormData) {
+  const { supabase } = await requireMentor();
+  const id = ((formData.get("id") as string) || "").trim();
+  const topicId = ((formData.get("topic_id") as string) || "").trim();
+  if (!id || !topicId) throw new Error("Escolhe uma pasta");
+
+  const { data: topic } = await supabase
+    .from("library_topics")
+    .select("id")
+    .eq("id", topicId)
+    .maybeSingle();
+  if (!topic) throw new Error("Pasta não encontrada");
+
+  const { error } = await supabase
+    .from("library_assets")
+    .update({
+      topic_id: topicId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
 
   revalidateLibrary();
 }

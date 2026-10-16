@@ -6,6 +6,7 @@ import {
   Archive,
   ArrowDown,
   ArrowUp,
+  FolderInput,
   FolderPlus,
   MoreHorizontal,
   Pencil,
@@ -20,6 +21,7 @@ import {
   deleteLibraryAsset,
   deleteLibraryTopic,
   deleteLibraryCategory,
+  moveLibraryAsset,
   moveLibraryTopic,
   renameLibraryCategory,
   updateLibraryTopic,
@@ -40,6 +42,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -445,12 +450,19 @@ export function LibraryTopicActions({
 export function LibraryItemMenu({
   assetId,
   title,
+  topicId,
+  topics,
+  onMoved,
 }: {
   assetId: string;
   title: string;
+  topicId: string | null;
+  topics: { id: string; name: string }[];
+  onMoved?: (topicId: string) => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const destinations = topics.filter((topic) => topic.id !== topicId);
 
   function run(
     action: (fd: FormData) => Promise<void | { fileRemoved: boolean | null }>,
@@ -482,6 +494,41 @@ export function LibraryItemMenu({
         <MoreHorizontal className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-40">
+        {destinations.length > 0 ? (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <FolderInput className="size-4" />
+              Mover para
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent side="left" className="min-w-44">
+              {destinations.map((topic) => (
+                <DropdownMenuItem
+                  key={topic.id}
+                  disabled={pending}
+                  onClick={() => {
+                    const fd = new FormData();
+                    fd.set("id", assetId);
+                    fd.set("topic_id", topic.id);
+                    startTransition(async () => {
+                      try {
+                        await moveLibraryAsset(fd);
+                        toast.success(`Movido para ${topic.name}`);
+                        onMoved?.(topic.id);
+                        router.refresh();
+                      } catch (err) {
+                        toast.error(
+                          err instanceof Error ? err.message : "Falha",
+                        );
+                      }
+                    });
+                  }}
+                >
+                  {topic.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        ) : null}
         <DropdownMenuItem
           onClick={() => run(archiveLibraryAsset, "Item arquivado")}
         >

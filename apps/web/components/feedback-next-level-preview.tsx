@@ -96,11 +96,6 @@ export function FeedbackNextLevelPreview({
       <p className="break-words font-heading text-lg font-bold leading-snug tracking-tight">
         {nextLevel.title}
       </p>
-      {nextLevel.description && !waiting ? (
-        <p className="line-clamp-2 pt-0.5 text-sm text-muted-foreground">
-          {nextLevel.description}
-        </p>
-      ) : null}
     </div>
   );
 
@@ -155,11 +150,6 @@ export function FeedbackNextLevelPreview({
               <p className="break-words font-heading text-lg font-bold leading-snug tracking-tight">
                 {nextLevel.title}
               </p>
-              {nextLevel.description ? (
-                <p className="line-clamp-2 pt-0.5 text-sm text-muted-foreground">
-                  {nextLevel.description}
-                </p>
-              ) : null}
             </div>
             <span className="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/10 text-xs font-medium text-white sm:size-auto sm:px-3 sm:py-1.5">
               <Play className="size-3.5 fill-current" aria-hidden />

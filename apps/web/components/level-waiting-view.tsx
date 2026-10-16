@@ -58,11 +58,6 @@ export function LevelWaitingView({
             <h1 className="break-words font-heading text-2xl font-bold leading-tight tracking-tight sm:text-3xl">
               {node.title}
             </h1>
-            {node.description ? (
-              <p className="mt-1.5 break-words pr-6 text-sm leading-relaxed text-foreground sm:pr-10">
-                {node.description}
-              </p>
-            ) : null}
             <p className="mt-1.5 text-left text-sm font-medium leading-snug text-[color-mix(in_oklch,var(--neuma-coral)_62%,white)]">
               {levelAvailableLabel(opensOn)}
             </p>

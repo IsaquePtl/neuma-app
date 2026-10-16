@@ -42,7 +42,7 @@ function formatTime(seconds: number): string {
 }
 
 const volumeRangeClass =
-  "h-1 w-14 shrink-0 cursor-pointer appearance-none rounded-full bg-white/20 accent-[var(--neuma-coral)] sm:w-16 [&::-webkit-slider-thumb]:size-2.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--neuma-coral)] [&::-moz-range-thumb]:size-2.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-[var(--neuma-coral)]";
+  "block h-3 w-14 shrink-0 cursor-pointer appearance-none bg-transparent accent-[var(--neuma-coral)] sm:w-16 [&::-webkit-slider-runnable-track]:h-0.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-white/25 [&::-webkit-slider-thumb]:-mt-[3px] [&::-webkit-slider-thumb]:box-border [&::-webkit-slider-thumb]:size-2 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:bg-[var(--neuma-coral)] [&::-moz-range-track]:h-0.5 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:border-0 [&::-moz-range-track]:bg-white/25 [&::-moz-range-thumb]:size-2 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-[var(--neuma-coral)]";
 
 const chromeBtnClass =
   "grid size-8 shrink-0 place-items-center rounded-lg text-white outline-none hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/40";
@@ -1054,7 +1054,7 @@ function NativeVideoPlayer({
             <div
               role="group"
               aria-label="Controlo de volume"
-              className="group/volume hidden shrink-0 items-center gap-1 rounded-lg hover:bg-white/10 focus-within:bg-white/10 sm:flex"
+              className="group/volume hidden h-8 shrink-0 items-center rounded-lg hover:bg-white/5 focus-within:bg-white/5 sm:flex"
             >
               <button
                 type="button"
@@ -1071,7 +1071,7 @@ function NativeVideoPlayer({
                   <Volume2 className="size-4" />
                 )}
               </button>
-              <div className="max-w-0 overflow-hidden opacity-0 group-hover/volume:max-w-16 group-hover/volume:opacity-100 group-focus-within/volume:max-w-16 group-focus-within/volume:opacity-100">
+              <div className="flex h-8 max-w-0 items-center overflow-hidden px-1.5 opacity-0 transition-[max-width,opacity] duration-200 ease-out group-hover/volume:max-w-[4.75rem] group-hover/volume:opacity-100 group-focus-within/volume:max-w-[4.75rem] group-focus-within/volume:opacity-100">
                 <input
                   type="range"
                   min={0}

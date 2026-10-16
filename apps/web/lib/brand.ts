@@ -46,4 +46,5 @@ export const brandAssets = {
   iconPiano: "/brand/icon-piano.png",
   iconGuitar: "/brand/icon-guitar.png",
   iconElectric: "/brand/icon-electric.png",
+  iconTheory: "/brand/icon-theory.png",
 } as const;

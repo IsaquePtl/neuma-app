@@ -192,11 +192,6 @@ export function PathTemplateEditor({
                   <NodeKindBadge kind={n.kind} />
                 </div>
                 <p className="font-medium">{n.title}</p>
-                {n.description ? (
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {n.description}
-                  </p>
-                ) : null}
                 {n.asset_title ? (
                   <p className="text-xs text-muted-foreground">
                     Biblioteca: {n.asset_title}

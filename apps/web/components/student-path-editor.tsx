@@ -253,11 +253,6 @@ export function StudentPathEditor({
                             </span>
                           ) : null}
                         </div>
-                        {node.description ? (
-                          <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                            {node.description}
-                          </p>
-                        ) : null}
                         <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
                           {node.due_date ? (
                             <span>Limite {formatDate(node.due_date)}</span>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 import { IntentLink } from "@/components/intent-link";
 import { JourneyPathRowActions } from "@/components/journey-path-row-actions";
@@ -19,6 +19,7 @@ const journeyTableGridClass =
 const journeyColPercurso = "min-w-0 pr-3";
 const journeyColAluno = "min-w-0 pl-3";
 const journeyColActions = "pl-3";
+const PATHS_PER_PAGE = 7;
 
 export type JourneyPathListItem = {
   id: string;
@@ -167,10 +168,22 @@ function PathRows({
   paths: JourneyPathListItem[];
   students: StudentOption[];
 }) {
+  const listKey = paths.map((path) => path.id).join("\n");
+  const [page, setPage] = useState(0);
+  const [pageListKey, setPageListKey] = useState(listKey);
+  if (pageListKey !== listKey) {
+    setPageListKey(listKey);
+    setPage(0);
+  }
+  const pageCount = Math.max(1, Math.ceil(paths.length / PATHS_PER_PAGE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const start = currentPage * PATHS_PER_PAGE;
+  const pagePaths = paths.slice(start, start + PATHS_PER_PAGE);
+
   return (
     <Card className="overflow-hidden p-0">
       <div className="divide-y divide-white/[0.03]">
-        {paths.map((path) => {
+        {pagePaths.map((path) => {
           const cells = (
             <>
               <IntentLink
@@ -235,6 +248,31 @@ function PathRows({
           );
         })}
       </div>
+      {pageCount > 1 ? (
+        <div className="flex items-center justify-center gap-3 border-t border-white/[0.08] px-4 py-2.5">
+          <button
+            type="button"
+            aria-label="Página anterior"
+            disabled={currentPage === 0}
+            onClick={() => setPage(currentPage - 1)}
+            className="grid size-9 place-items-center rounded-full text-foreground hover:bg-white/10 disabled:pointer-events-none disabled:opacity-30"
+          >
+            <ChevronLeft className="size-5" />
+          </button>
+          <span className="min-w-10 text-center text-xs tabular-nums text-muted-foreground">
+            {currentPage + 1} / {pageCount}
+          </span>
+          <button
+            type="button"
+            aria-label="Página seguinte"
+            disabled={currentPage >= pageCount - 1}
+            onClick={() => setPage(currentPage + 1)}
+            className="grid size-9 place-items-center rounded-full text-foreground hover:bg-white/10 disabled:pointer-events-none disabled:opacity-30"
+          >
+            <ChevronRight className="size-5" />
+          </button>
+        </div>
+      ) : null}
     </Card>
   );
 }

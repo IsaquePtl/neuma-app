@@ -269,11 +269,6 @@ export function JourneyPathAdminView({
                         O aluno entra na {formatWeekdayDatePt(upcoming.opensOn)}
                       </p>
                     ) : null}
-                    {isActive && node.description ? (
-                      <p className="line-clamp-2 pt-0.5 text-sm text-muted-foreground">
-                        {node.description}
-                      </p>
-                    ) : null}
                     {pendingCount > 0 ? (
                       <p className="pt-0.5 text-xs text-[var(--neuma-coral)]/85">
                         {pendingCount}{" "}

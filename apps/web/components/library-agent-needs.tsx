@@ -99,7 +99,12 @@ export function LibraryAgentNeedsYou({
                   <div className="min-w-0">
                     <p className="truncate font-medium">{a.title}</p>
                     <p className="text-xs text-muted-foreground">
-                      [{a.usage}/{a.kind}]
+                      {a.usage === "practice" ? "Prática" : "Aula"} ·{" "}
+                      {a.kind === "link"
+                        ? "Link"
+                        : a.kind === "video"
+                          ? "Vídeo"
+                          : "Ficheiro"}
                     </p>
                   </div>
                   <LibraryAssetDialog
